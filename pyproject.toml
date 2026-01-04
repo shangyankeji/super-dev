@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "super-dev"
-version = "1.0.0"
+version = "1.0.1"
 description = "顶级 AI 开发战队 - God-Tier Development Team"
 readme = "README.md"
 requires-python = ">=3.10"

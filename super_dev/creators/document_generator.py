@@ -6,6 +6,7 @@
 功能：专家级文档生成
 作用：生成专业、细致、完整的项目文档
 创建时间：2025-12-30
+最后修改：2025-01-04
 """
 
 from typing import Optional, List
@@ -39,6 +40,54 @@ class DocumentGenerator:
         self.style_solution = style_solution
         self.state_management = state_management or []
         self.testing_frameworks = testing_frameworks or []
+
+    def _analyze_project_for_design(self) -> dict:
+        """分析项目特征用于设计推荐"""
+        # 从描述中提取特征
+        description_lower = self.description.lower()
+
+        # 产品类型
+        product_type = "general"
+        if any(word in description_lower for word in ["saas", "软件服务", "platform", "平台"]):
+            product_type = "saas"
+        elif any(word in description_lower for word in ["电商", "商城", "shop", "store", "mall"]):
+            product_type = "ecommerce"
+        elif any(word in description_lower for word in ["landing", "落地页", "营销页"]):
+            product_type = "landing"
+        elif any(word in description_lower for word in ["admin", "管理", "dashboard", "仪表盘", "后台"]):
+            product_type = "dashboard"
+        elif any(word in description_lower for word in ["blog", "博客", "内容", "cms"]):
+            product_type = "content"
+
+        # 行业
+        industry = "general"
+        if any(word in description_lower for word in ["医疗", "健康", "health", "medical", "care"]):
+            industry = "healthcare"
+        elif any(word in description_lower for word in ["金融", "支付", "fintech", "金融科技", "banking"]):
+            industry = "fintech"
+        elif any(word in description_lower for word in ["教育", "培训", "education", "learning"]):
+            industry = "education"
+
+        # 风格倾向
+        style = "modern"
+        if any(word in description_lower for word in ["极简", "minimal", "简约"]):
+            style = "minimal"
+        elif any(word in description_lower for word in ["专业", "商务", "business", "professional"]):
+            style = "professional"
+        elif any(word in description_lower for word in ["活泼", "fun", "playful", "活力"]):
+            style = "playful"
+        elif any(word in description_lower for word in ["奢华", "luxury", "高端", "premium"]):
+            style = "luxury"
+
+        return {
+            "product_type": product_type,
+            "industry": industry,
+            "style": style,
+            "domain": self.domain,
+            "platform": self.platform,
+            "frontend": self.frontend,
+        }
+
 
     def generate_prd(self) -> str:
         """生成高质量 PRD 文档"""
@@ -610,13 +659,57 @@ jobs:
 """
 
     def generate_uiux(self) -> str:
-        """生成 UI/UX 设计文档"""
-        return f"""# {self.name} - UI/UX 设计文档
+        """生成智能 UI/UX 设计文档（基于设计引擎推荐）"""
+        # 获取智能设计推荐
+        recommendations = self._get_design_recommendations()
+        analysis = self._analyze_project_for_design()
+
+        # 构建文档
+        doc_parts = []
+
+        # 文档头部
+        doc_parts.append(f"""# {self.name} - UI/UX 设计文档
 
 > **生成时间**: {datetime.now().strftime('%Y-%m-%d %H:%M')}
 > **版本**: v1.0.0
 > **设计师**: Super Dev UI/UX 专家
 
+---
+
+## 0. 设计分析
+
+### 0.1 项目特征
+
+基于需求描述，AI 分析出以下项目特征：
+
+| 特征 | 分析结果 | 说明 |
+|:---|:---|:---|
+| **产品类型** | {analysis['product_type'].title()} | {self._get_product_type_desc(analysis['product_type'])} |
+| **行业领域** | {analysis['industry'].title()} | {self._get_industry_desc(analysis['industry'])} |
+| **风格倾向** | {analysis['style'].title()} | {self._get_style_desc(analysis['style'])} |
+| **技术栈** | {self.frontend.upper()} | 前端框架 |
+
+### 0.2 设计推荐摘要
+
+AI 基于项目特征，从设计数据库中为您推荐：
+
+""")
+
+        # 添加推荐摘要
+        if recommendations.get('styles'):
+            doc_parts.append(f"""**推荐风格**: {', '.join([s.get('name', s.get('Style Category', 'Unknown')) for s in recommendations['styles'][:2]])}
+""")
+
+        if recommendations.get('colors'):
+            color = recommendations['colors']
+            doc_parts.append(f"""**推荐配色**: {color.get('name', color.get('Palette Name', 'Standard'))}
+""")
+
+        if recommendations.get('fonts'):
+            doc_parts.append(f"""**推荐字体**: {', '.join([f.get('Font Pairing Name', 'Professional') for f in recommendations['fonts'][:2]])}
+""")
+
+        doc_parts.append("""
 ---
 
 ## 1. 设计概述
@@ -641,7 +734,46 @@ jobs:
 
 ### 2.1 色彩规范
 
-#### 主色调
+""")
+
+        # 智能配色推荐
+        if recommendations.get('colors'):
+            color = recommendations['colors']
+            doc_parts.append(f"""#### 推荐配色方案: {color.get('name', 'Professional Palette')}
+
+**推荐理由**: 基于 {analysis['industry']} {analysis['product_type']} 产品的最佳实践
+
+| 颜色 | 用途 | Hex | 备注 |
+|:---|:---|:---|:---|
+| **Primary** | 主要操作、强调 | {color.get('Primary (Hex)', '#2563EB')} | 主色调 |
+| **Secondary** | 次要操作 | {color.get('Secondary (Hex)', '#64748B')} | 辅助色 |
+| **CTA** | 行动号召 | {color.get('CTA (Hex)', '#2563EB')} | 转化按钮 |
+| **Background** | 页面背景 | {color.get('Background (Hex)', '#F9FAFB')} | 背景色 |
+| **Text** | 正文文本 | {color.get('Text (Hex)', '#111827')} | 文本色 |
+| **Border** | 边框线条 | {color.get('Border (Hex)', '#E5E7EB')} | 分割线 |
+
+**Tailwind 配置**:
+```javascript
+// tailwind.config.js
+module.exports = {{
+  theme: {{
+    extend: {{
+      colors: {{
+        primary: '{color.get('Primary (Hex)', '#2563EB')}',
+        secondary: '{color.get('Secondary (Hex)', '#64748B')}',
+        cta: '{color.get('CTA (Hex)', '#2563EB')}',
+      }}
+    }}
+  }}
+}}
+```
+
+---
+
+""")
+        else:
+            # 默认配色
+            doc_parts.append("""#### 主色调
 
 | 颜色 | 用途 | Hex | RGB |
 |:---|:---|:---|:---|
@@ -651,19 +783,33 @@ jobs:
 | **Warning** | 警告状态 | #F59E0B | rgb(245, 158, 11) |
 | **Error** | 错误状态 | #EF4444 | rgb(239, 68, 68) |
 
-#### 中性色
+---
 
-| 颜色 | 用途 | Hex |
-|:---|:---|:---|
-| **Gray 50** | 标题 | #F9FAFB |
-| **Gray 100** | 背景 | #F3F4F6 |
-| **Gray 200** | 边框 | #E5E7EB |
-| **Gray 500** | 正文 | #6B7280 |
-| **Gray 900** | 强调 | #111827 |
+""")
 
-### 2.2 字体规范
+        # 智能字体推荐
+        doc_parts.append("""### 2.2 字体规范
+""")
 
-#### 字体家族
+        if recommendations.get('fonts'):
+            doc_parts.append("""#### 推荐字体组合
+
+""")
+            for font in recommendations['fonts'][:2]:
+                doc_parts.append(f"""**{font.get('Font Pairing Name', 'Professional')}**
+- **Heading**: {font.get('Heading Font', 'Inter')}
+- **Body**: {font.get('Body Font', 'Roboto')}
+- **风格**: {font.get('Mood/Style Keywords', 'Professional')}
+- **适用**: {font.get('Best For', 'General purpose')}
+
+**Google Fonts 导入**:
+```html
+{font.get('CSS Import', '<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Roboto:wght@400;500&display=swap" rel="stylesheet">')}
+```
+
+""")
+        else:
+            doc_parts.append("""#### 字体家族
 
 ```css
 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
@@ -680,7 +826,12 @@ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica
 | **Caption** | 14px | 400 | 1.4 |
 | **Button** | 16px | 600 | 1 |
 
-### 2.3 间距规范
+---
+
+""")
+
+        # 间距和圆角规范保持不变
+        doc_parts.append("""### 2.3 间距规范
 
 使用 8px 基础单位:
 - **xs**: 4px
@@ -704,7 +855,31 @@ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica
 ## 3. 页面结构
 
 ### 3.1 整体布局
+""")
 
+        # 如果有 Landing 页面推荐，添加它
+        if recommendations.get('landing'):
+            landing = recommendations['landing']
+            doc_parts.append(f"""
+#### 推荐页面布局: {landing.get('name', 'Standard Layout')}
+
+**布局类型**: {landing.get('category', 'classic').title()}
+
+**页面结构**:
+{landing.get('sections', '')}
+
+**CTA 策略**: {landing.get('cta_strategy', {})}
+
+**转化优化**:
+{chr(10).join(f"- {tip}" for tip in landing.get('conversion_tips', [])[:5])}
+
+**适用场景**: {', '.join(landing.get('best_for', [])[:3])}
+
+---
+
+""")
+        else:
+            doc_parts.append("""
 ```
 ┌─────────────────────────────────────────────────┐
 │  Header (Logo, Nav, User)                       │
@@ -719,7 +894,12 @@ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica
 └─────────────────────────────────────────────────┘
 ```
 
-### 3.2 导航结构
+---
+
+""")
+
+        # 添加其他部分（保持原有的内容结构）
+        doc_parts.append(f"""### 3.2 导航结构
 
 {self._generate_navigation_structure()}
 
@@ -836,31 +1016,11 @@ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica
 
 ## 10. 设计交付物
 
-### 10.1 设计稿
+### A. 设计资产
 
-- **Figma**: [链接]
-- **原型**: [链接]
-
-### 10.2 切图标注
-
-- **图标**: SVG 格式
-- **图片**: 2x/3x 倍图
-- **标注**: Zeplin / Avocode
-
-### 10.3 动效规范
-
-- **缓动函数**: ease-in-out
-- **动画时长**: 200ms - 300ms
-- **帧率**: 60fps
-
----
-
-## 附录
-
-### A. 图标库
-
-- [Heroicons](https://heroicons.com/)
-- [Lucide](https://lucide.dev/)
+- Figma 设计稿链接
+- 图标库 (Heroicons / Lucide)
+- 图片资源 (Unsplash / Pexels)
 
 ### B. 插件资源
 
@@ -872,10 +1032,69 @@ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica
 - [Dribbble](https://dribbble.com/)
 - [Behance](https://www.behance.net/)
 - [Mobbin](https://mobbin.com/)
-"""
+""")
 
-    # ============ 辅助方法 ============
+        # 添加 UX 最佳实践部分
+        if recommendations.get('ux_tips'):
+            doc_parts.append("""
 
+---
+
+## 11. UX 最佳实践
+
+基于项目特征，AI 为您推荐以下 UX 最佳实践：
+
+""")
+            for i, tip in enumerate(recommendations['ux_tips'][:5], 1):
+                guideline = tip.get('guideline', tip)
+                doc_parts.append(f"""### {i}. {guideline.get('topic', 'Best Practice')} ({guideline.get('domain', 'UX').value()})
+
+**最佳实践**:
+{guideline.get('best_practice', 'Follow industry standards')}
+
+**避免**:
+{guideline.get('anti_pattern', 'Common mistakes to avoid')}
+
+**影响**: {guideline.get('impact', 'Improved user experience')}
+
+**实施难度**: {guideline.get('complexity', 'medium').title()}
+
+""")
+
+        return "\n".join(doc_parts)
+
+    def _get_product_type_desc(self, product_type: str) -> str:
+        """获取产品类型描述"""
+        descs = {
+            'saas': 'SaaS 软件服务，需要专业可信的设计',
+            'ecommerce': '电商平台，注重转化和购买体验',
+            'landing': '营销落地页，强调 CTA 和转化',
+            'dashboard': '管理后台，注重数据展示和操作效率',
+            'content': '内容平台，注重阅读体验',
+            'general': '通用产品'
+        }
+        return descs.get(product_type, '常规产品')
+
+    def _get_industry_desc(self, industry: str) -> str:
+        """获取行业描述"""
+        descs = {
+            'healthcare': '医疗健康行业，需要传递安全、专业感',
+            'fintech': '金融科技，需要信任、安全的设计语言',
+            'education': '教育行业，需要亲和力、专业性',
+            'general': '通用行业'
+        }
+        return descs.get(industry, '常规行业')
+
+    def _get_style_desc(self, style: str) -> str:
+        """获取风格描述"""
+        descs = {
+            'minimal': '极简风格，去除冗余，突出核心',
+            'professional': '专业风格，商务、正式',
+            'playful': '活泼风格，有趣、生动',
+            'luxury': '奢华风格，高端、精致',
+            'modern': '现代风格，时尚、前沿'
+        }
+        return descs.get(style, '现代风格')
     def _get_state_management(self) -> str:
         """获取状态管理方案"""
         mapping = {
@@ -1804,6 +2023,78 @@ spec:
 - 错误提示清晰
 - 加载状态明确
 """
+
+    def _get_design_recommendations(self) -> dict:
+        """获取智能设计推荐"""
+        try:
+            # 导入设计引擎
+            import sys
+            from pathlib import Path
+
+            # 添加项目根目录到 Python 路径
+            project_root = Path(__file__).parent.parent.parent
+            if str(project_root) not in sys.path:
+                sys.path.insert(0, str(project_root))
+
+            from super_dev.design import (
+                DesignIntelligenceEngine,
+                get_landing_generator,
+                get_ux_guide
+            )
+
+            # 分析项目特征
+            analysis = self._analyze_project_for_design()
+
+            # 初始化引擎
+            design_engine = DesignIntelligenceEngine()
+            landing_gen = get_landing_generator()
+            ux_guide = get_ux_guide()
+
+            # 获取推荐
+            recommendations = {}
+
+            # 1. 风格推荐
+            style_query = f"{analysis['style']} {analysis['product_type']} {analysis['industry']}"
+            style_results = design_engine.search(style_query, category="style", max_results=3)
+            recommendations['styles'] = style_results[:3] if style_results else []
+
+            # 2. 配色推荐
+            color_query = f"{analysis['industry']} {analysis['product_type']}" if analysis['industry'] != 'general' else analysis['product_type']
+            color_results = design_engine.search(color_query, category="color", max_results=1)
+            recommendations['colors'] = color_results[0] if color_results else None
+
+            # 3. 字体推荐
+            font_query = f"{analysis['style']} professional"
+            font_results = design_engine.search(font_query, category="typography", max_results=2)
+            recommendations['fonts'] = font_results[:2] if font_results else []
+
+            # 4. Landing 页面推荐（如果适用）
+            if analysis['product_type'] in ['landing', 'saas', 'ecommerce']:
+                landing_pattern = landing_gen.recommend(
+                    product_type=analysis['product_type'],
+                    goal='signup',
+                    audience='B2C' if analysis['industry'] == 'general' else 'B2B'
+                )
+                recommendations['landing'] = landing_pattern
+            else:
+                recommendations['landing'] = None
+
+            # 5. UX 最佳实践
+            ux_quick_wins = ux_guide.get_quick_wins(max_results=5)
+            recommendations['ux_tips'] = ux_quick_wins
+
+            return recommendations
+
+        except Exception as e:
+            # 如果设计引擎失败，返回空推荐
+            print(f"Warning: Design engine failed: {e}")
+            return {
+                'styles': [],
+                'colors': None,
+                'fonts': [],
+                'landing': None,
+                'ux_tips': []
+            }
 
     def extract_requirements(self) -> list:
         """从描述提取需求列表"""
