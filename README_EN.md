@@ -216,6 +216,20 @@ Super Dev includes an OpenSpec-like spec-driven development workflow:
 
 ### Installation (3 Steps)
 
+**Method 1: Using uv (Recommended)** ⚡
+
+```bash
+# 1. Install Super Dev (10-100x faster!)
+uv pip install super-dev
+
+# 2. Verify installation
+super-dev --version
+
+# 3. Done!
+```
+
+**Method 2: Using pip**
+
 ```bash
 # 1. Install Super Dev
 pip install super-dev
@@ -230,6 +244,8 @@ super-dev --version
 ```
 Super Dev v1.0.1
 ```
+
+> 💡 **Tip**: uv is a next-generation Python package installer, 10-100x faster than pip. Both methods install the exact same package - choose either one!
 
 ### Core Usage: From Idea to Deployment
 

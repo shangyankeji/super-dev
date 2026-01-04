@@ -32,11 +32,26 @@ python3 --version
 
 ### 步骤 2：安装 Super Dev
 
+**方式 1：使用 uv（推荐）** ⚡
+
+```bash
+# 安装 uv（如果还没安装）
+pip install uv
+
+# 使用 uv 安装 Super Dev（快 10-100 倍！）
+uv pip install super-dev
+
+# 验证安装
+super-dev --version
+```
+
+**方式 2：使用 pip（传统方式）**
+
 ```bash
 # 使用 pip 安装
 pip install super-dev
 
-# 或使用 pip 安装（用户模式）
+# 或用户模式安装（不需要 sudo）
 pip install --user super-dev
 
 # 验证安装
@@ -47,6 +62,18 @@ super-dev --version
 ```
 Super Dev v1.0.1
 ```
+
+### uv vs pip：为什么推荐 uv？
+
+| 特性 | pip | uv |
+|:---|:---|:---|
+| **安装速度** | 基准 | **10-100x 更快** ⚡ |
+| **依赖解析** | 较慢 | **极快（Rust 实现）** |
+| **磁盘使用** | 较高 | **更低** |
+| **兼容性** | 完全兼容 | 完全兼容 pip |
+| **推荐场景** | 任何环境 | **新项目、CI/CD** |
+
+**提示**：如果你已经有 pip，也可以直接使用 `pip install super-dev`，两种方式安装的包完全一样！
 
 ### 步骤 3：初始化项目（可选）
 

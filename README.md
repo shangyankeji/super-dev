@@ -336,6 +336,20 @@ super-dev design tokens \
 
 ### 安装（3 步完成）
 
+**方式 1：使用 uv（推荐）** ⚡
+
+```bash
+# 1. 安装 Super Dev（快 10-100 倍！）
+uv pip install super-dev
+
+# 2. 验证安装
+super-dev --version
+
+# 3. 完成！
+```
+
+**方式 2：使用 pip**
+
 ```bash
 # 1. 安装 Super Dev
 pip install super-dev
@@ -350,6 +364,8 @@ super-dev --version
 ```
 Super Dev v1.0.1
 ```
+
+> 💡 **提示**：uv 是新一代 Python 包安装器，比 pip 快 10-100 倍。两种方式安装的包完全一样，任选其一即可！
 
 ### 核心使用：从想法到部署
 
