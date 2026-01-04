@@ -16,7 +16,7 @@
 
 English | [简体中文](README.md)
 
-[Features](#-features) • [Quick Start](#-quick-start) • [Command Reference](#-command-reference) • [Documentation](#-documentation) • [Examples](#-examples)
+[Features](#-features) • [Quick Start](#-quick-start) • [Complete Tutorial](#-complete-tutorial) • [Command Reference](#-command-reference) • [Documentation](#--documentation) • [Examples](#-examples)
 
 </div>
 
@@ -277,6 +277,51 @@ super-dev workflow
 # Use in Claude Code
 Just tell Claude: "Help me analyze this project with Super Dev"
 ```
+
+---
+
+## Complete Tutorial
+
+### 📚 [Super Dev Workflow Guide](docs/WORKFLOW_GUIDE.md)
+
+**Detailed tutorial includes**:
+
+#### 0-1 Scenario: Building from Scratch
+- Project initialization
+- Generate complete project assets (8-stage pipeline)
+- AI-assisted implementation with prompts
+- Quality checks and iterative optimization
+
+#### 1-N+1 Scenario: Iterating on Existing Projects
+- Analyze existing projects
+- Create change proposals (Spec-Driven Development)
+- Add detailed requirements
+- Generate change documentation
+- AI-assisted implementation
+- Archive changes
+
+#### 8-Stage Pipeline Deep Dive
+1. Documentation Generation (PRD + Architecture + UI/UX)
+2. Spec Creation (OpenSpec format)
+3. Red Team Review (Security + Performance + Architecture)
+4. Quality Gate (Auto-scoring 80+)
+5. Code Review Guidelines
+6. AI Prompt Generation
+7. CI/CD Configuration
+8. Database Migration
+
+#### Best Practices
+- 0-1 project best practices
+- 1-N+1 project best practices
+- Team collaboration best practices
+
+#### FAQ
+- Does Super Dev generate code?
+- How to ensure AI-generated code quality?
+- Can it be used on existing projects?
+- More...
+
+**[Click to view complete tutorial →](docs/WORKFLOW_GUIDE.md)**
 
 ---
 
