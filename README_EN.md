@@ -30,10 +30,25 @@ English | [简体中文](README.md)
 Idea → Docs → Spec → Review → AI Implementation → Deployment
 ```
 
+### Dual Architecture
+
+**Super Dev** adopts a **CLI Tool + Agent Skills** dual architecture:
+
+| Form | Purpose | Trigger Method |
+|:---|:---|:---|
+| **CLI Tool** | Generate PRD, Architecture, UI/UX docs | Terminal `super-dev` |
+| **Agent Skills** | Enhance Claude Code development capabilities | Auto-detect or manual trigger |
+
+**Agent Skills Workflow**:
+- When you describe related tasks in Claude Code, Claude automatically detects and loads Super Dev Skill
+- Example: "Help me design an e-commerce platform architecture" → Automatically activates Architect Expert
+- Example: "Help me review the security of this code" → Automatically activates Security Expert
+
 ### Core Value
 
 | Capability | Description |
 |:---|:-----|
+| **Dual Architecture** | CLI Tool + Claude Code Agent Skills, flexible adaptation to different workflows |
 | **Spec-Driven Development** | OpenSpec-like workflow, align on specs before coding |
 | **8-Stage Pipeline** | Docs → Spec → Red Team → Quality Gate → Code Review → AI Prompt → CI/CD → Migration |
 | **10 Expert System** | PM/Architect/UI/UX/Security/Code/DBA/QA/DevOps/RCA collaboration |
