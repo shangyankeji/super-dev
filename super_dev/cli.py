@@ -770,6 +770,11 @@ class SuperDevCLI:
             help="跳过红队审查"
         )
         pipeline_parser.add_argument(
+            "--skip-quality-gate",
+            action="store_true",
+            help="跳过质量门禁检查"
+        )
+        pipeline_parser.add_argument(
             "--quality-threshold",
             type=int,
             default=80,
@@ -1820,39 +1825,44 @@ class SuperDevCLI:
                 self.console.print("")
 
             # ========== 第 4 阶段: 质量门禁 ==========
-            self.console.print("[cyan]第 4 阶段: 质量门禁检查...[/cyan]")
-            from .reviewers import QualityGateChecker
+            if not args.skip_quality_gate:
+                self.console.print("[cyan]第 4 阶段: 质量门禁检查...[/cyan]")
+                from .reviewers import QualityGateChecker
 
-            gate_checker = QualityGateChecker(
-                project_dir=project_dir,
-                name=project_name,
-                tech_stack=tech_stack
-            )
+                gate_checker = QualityGateChecker(
+                    project_dir=project_dir,
+                    name=project_name,
+                    tech_stack=tech_stack
+                )
 
-            gate_result = gate_checker.check(redteam_report)
+                gate_result = gate_checker.check(redteam_report)
 
-            # 显示场景信息
-            scenario_label = "0-1 新建项目" if gate_result.scenario == "0-1" else "1-N+1 增量开发"
-            if gate_result.scenario == "0-1":
-                self.console.print(f"  [dim]场景: {scenario_label} (使用放宽标准)[/dim]")
+                # 显示场景信息
+                scenario_label = "0-1 新建项目" if gate_result.scenario == "0-1" else "1-N+1 增量开发"
+                if gate_result.scenario == "0-1":
+                    self.console.print(f"  [dim]场景: {scenario_label} (使用放宽标准)[/dim]")
 
-            # 保存质量门禁报告
-            gate_file = project_dir / "output" / f"{project_name}-quality-gate.md"
-            gate_file.parent.mkdir(parents=True, exist_ok=True)
-            gate_file.write_text(gate_result.to_markdown(), encoding="utf-8")
+                # 保存质量门禁报告
+                gate_file = project_dir / "output" / f"{project_name}-quality-gate.md"
+                gate_file.parent.mkdir(parents=True, exist_ok=True)
+                gate_file.write_text(gate_result.to_markdown(), encoding="utf-8")
 
-            status = "[green]通过[/green]" if gate_result.passed else "[red]未通过[/red]"
-            self.console.print(f"  {status} 总分: {gate_result.total_score}/100")
-            self.console.print(f"  [green]✓[/green] 报告: {gate_file}")
-            self.console.print("")
+                status = "[green]通过[/green]" if gate_result.passed else "[red]未通过[/red]"
+                self.console.print(f"  {status} 总分: {gate_result.total_score}/100")
+                self.console.print(f"  [green]✓[/green] 报告: {gate_file}")
+                self.console.print("")
 
-            # 质量门禁未通过，停止流水线
-            if not gate_result.passed:
-                self.console.print("[red]质量门禁未通过，流水线终止[/red]")
-                self.console.print("[cyan]请修复以下问题后重新运行:[/cyan]")
-                for failure in gate_result.critical_failures:
-                    self.console.print(f"  - {failure}")
-                return 1
+                # 质量门禁未通过，停止流水线
+                if not gate_result.passed:
+                    self.console.print("[red]质量门禁未通过，流水线终止[/red]")
+                    self.console.print("[cyan]请修复以下问题后重新运行:[/cyan]")
+                    for failure in gate_result.critical_failures:
+                        self.console.print(f"  - {failure}")
+                    return 1
+            else:
+                self.console.print("[yellow]第 4 阶段: 质量门禁检查 (跳过)[/yellow]")
+                self.console.print("[dim]提示: 使用 --skip-quality-gate 跳过了质量门禁检查，建议后续补充测试和质量检查[/dim]")
+                self.console.print("")
 
             # ========== 第 5 阶段: 代码审查指南 ==========
             self.console.print("[cyan]第 5 阶段: 生成代码审查指南...[/cyan]")
