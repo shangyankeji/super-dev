@@ -42,6 +42,7 @@ class QualityGateResult:
     checks: list[QualityCheck] = field(default_factory=list)
     critical_failures: list[str] = field(default_factory=list)
     recommendations: list[str] = field(default_factory=list)
+    scenario: str = "1-N+1"  # 场景类型: "0-1" 或 "1-N+1"
 
     @property
     def passed_checks(self) -> list[QualityCheck]:
@@ -63,6 +64,7 @@ class QualityGateResult:
         lines = [
             "# 质量门禁报告",
             "",
+            f"**场景**: {self.scenario} ({'0-1 新建项目' if self.scenario == '0-1' else '1-N+1 增量开发'})",
             f"**状态**: <span style='color:{status_color}'>{status_icon}</span>",
             f"**总分**: {self.total_score}/100",
             f"**加权分**: {self.weighted_score:.1f}/100",
@@ -76,6 +78,14 @@ class QualityGateResult:
             f"- 失败: {len(self.failed_checks)} 项",
             "",
         ]
+
+        # 如果是 0-1 场景，添加说明
+        if self.scenario == "0-1":
+            lines.extend([
+                "**注意**: 当前为 0-1 场景（新建项目），质量门禁已自动放宽标准。",
+                "在后续迭代中，随着代码和测试的完善，标准将逐步提高。",
+                "",
+            ])
 
         if self.critical_failures:
             lines.extend([
@@ -164,6 +174,8 @@ class QualityGateChecker:
     # 质量门禁阈值
     PASS_THRESHOLD = 80
     WARNING_THRESHOLD = 60
+    # 0-1 场景（空项目）的宽松阈值
+    PASS_THRESHOLD_ZERO_TO_ONE = 50
 
     # 检查项配置
     CHECKS_CONFIG = {
@@ -193,6 +205,45 @@ class QualityGateChecker:
         self.project_dir = Path(project_dir).resolve()
         self.name = name
         self.tech_stack = tech_stack
+        self.is_zero_to_one = self._detect_zero_to_one_scenario()
+
+    def _detect_zero_to_one_scenario(self) -> bool:
+        """
+        检测是否为 0-1 场景（空项目/新建项目）
+
+        0-1 场景特征：
+        - 没有源代码目录（src/, lib/, app/, server/, client/ 等）
+        - 没有配置文件（package.json, requirements.txt, go.mod 等）
+        - 只有 output/ 目录（刚生成的文档）
+
+        Returns:
+            bool: True 表示 0-1 场景，False 表示 1-N+1 场景
+        """
+        # 检查常见的源代码目录
+        source_dirs = [
+            "src", "lib", "app", "server", "client",
+            "backend", "frontend", "api", "handlers",
+            "models", "views", "controllers", "services"
+        ]
+
+        has_source_code = any(
+            (self.project_dir / d).exists()
+            for d in source_dirs
+        )
+
+        # 检查是否有项目配置文件（表明这不是空项目）
+        config_files = [
+            "package.json", "requirements.txt", "go.mod",
+            "Cargo.toml", "pom.xml", "build.gradle"
+        ]
+
+        has_project_config = any(
+            (self.project_dir / f).exists()
+            for f in config_files
+        )
+
+        # 如果有源代码或有项目配置，说明不是 0-1 场景
+        return not (has_source_code or has_project_config)
 
     def check(self, redteam_report: Optional["RedTeamReport"] = None) -> QualityGateResult:
         """执行质量门禁检查"""
@@ -218,8 +269,11 @@ class QualityGateChecker:
         total_score = self._calculate_total_score(checks)
         weighted_score = self._calculate_weighted_score(checks)
 
+        # 根据场景选择阈值
+        threshold = self.PASS_THRESHOLD_ZERO_TO_ONE if self.is_zero_to_one else self.PASS_THRESHOLD
+
         # 检查是否通过
-        passed = total_score >= self.PASS_THRESHOLD
+        passed = total_score >= threshold
 
         # 收集关键失败项
         critical_failures = []
@@ -231,6 +285,9 @@ class QualityGateChecker:
         # 生成改进建议
         recommendations = self._generate_recommendations(checks)
 
+        # 确定场景类型
+        scenario = "0-1" if self.is_zero_to_one else "1-N+1"
+
         return QualityGateResult(
             passed=passed,
             total_score=total_score,
@@ -238,6 +295,7 @@ class QualityGateChecker:
             checks=checks,
             critical_failures=critical_failures,
             recommendations=recommendations,
+            scenario=scenario,
         )
 
     def _check_documentation(self) -> list[QualityCheck]:

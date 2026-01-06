@@ -1831,6 +1831,11 @@ class SuperDevCLI:
 
             gate_result = gate_checker.check(redteam_report)
 
+            # 显示场景信息
+            scenario_label = "0-1 新建项目" if gate_result.scenario == "0-1" else "1-N+1 增量开发"
+            if gate_result.scenario == "0-1":
+                self.console.print(f"  [dim]场景: {scenario_label} (使用放宽标准)[/dim]")
+
             # 保存质量门禁报告
             gate_file = project_dir / "output" / f"{project_name}-quality-gate.md"
             gate_file.parent.mkdir(parents=True, exist_ok=True)
