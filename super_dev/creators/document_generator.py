@@ -1351,6 +1351,7 @@ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica
             if keywords["ai_frameworks"] or keywords["agent_tools"] or "Multi-Agent System" in keywords["other_keywords"]:
                 business_features += """
    - 多 Agent 智能求职助手：
+     * **简历匹配 Agent**: JD 与简历匹配度分析，识别技能差距，提供优化建议
      * **简历优化 Agent**: 自动优化简历内容，提高匹配度
      * **职位推荐 Agent**: 基于用户画像智能推荐职位
      * **面试准备 Agent**: 模拟面试，提供问题预测和回答建议
