@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- Background Gradient: Smooth deep space dark -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#111827"/>
+      <stop offset="100%" stop-color="#0F172A"/>
+    </linearGradient>
+
+    <!-- Super Dev Text Gradient (From user image: #4A90E2 to #7EC8F8 roughly) -->
+    <!-- Let's map it across the main bot base -->
+    <linearGradient id="primaryGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4F8AF1"/>
+      <stop offset="100%" stop-color="#73C6F7"/>
+    </linearGradient>
+    
+    <!-- Secondary Blue-Purple for depth glow -->
+    <linearGradient id="glowGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3B82F6" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#60A5FA" stop-opacity="0.5"/>
+    </linearGradient>
+
+    <filter id="shadow" x="-5%" y="0%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="12" stdDeviation="10" flood-color="#000" flood-opacity="0.25"/>
+    </filter>
+    
+    <!-- Mask to punch out the face -->
+    <mask id="faceMask">
+      <!-- Total White (Opaque) -->
+      <rect width="512" height="512" fill="white"/>
+      <!-- Face cutout -->
+      <g transform="translate(256, 276) rotate(-12)">
+        <rect x="-124" y="-70" width="248" height="140" rx="60" fill="black"/>
+      </g>
+    </mask>
+
+  </defs>
+
+  <!-- Big App Icon Background Squircle -->
+  <!-- Users love the smooth Apple-like rx="115" -->
+  <rect width="512" height="512" rx="115" fill="url(#bgGrad)"/>
+  
+  <!-- Outer glowing aura for the robot head -->
+  <!-- Gives it that beautiful modern tech app feel -->
+  <circle cx="256" cy="276" r="160" fill="url(#glowGrad)" filter="blur(40px)"/>
+
+  <!-- Main Head using the specific user Gradient -->
+  <g mask="url(#faceMask)" filter="url(#shadow)">
+    <g transform="translate(256, 276) rotate(-12)">
+      <!-- Smooth, plump, earless robot head base -->
+      <!-- Cleaned up, removed all sharp corners or animal-like features -->
+      <rect x="-160" y="-120" width="320" height="240" rx="100" fill="url(#primaryGrad)"/>
+    </g>
+  </g>
+
+  <!-- Facial Layer Cutout Background (Dark to give depth) -->
+  <g transform="translate(256, 276) rotate(-12)">
+    <!-- Eye Right (Winking/Smiling curve) -->
+    <path d="M 30, 25 Q 50, -10 70, 25" fill="none" stroke="url(#primaryGrad)" stroke-width="24" stroke-linecap="round"/>
+    
+    <!-- Eye Left (Standard Pill/Blinking Pill) -->
+    <rect x="-65" y="-15" width="28" height="60" rx="14" fill="url(#primaryGrad)"/>
+    <rect x="-65" y="-15" width="28" height="60" rx="14" fill="#FFFFFF" opacity="0.6"/>
+
+    <!-- The right eye needs a white overlay as well to match the gradient blend -->
+    <path d="M 30, 25 Q 50, -10 70, 25" fill="none" stroke="#FFFFFF" stroke-opacity="0.6" stroke-width="24" stroke-linecap="round"/>
+    
+    <!-- Cute coding mouth (Underscore cursor `_`) -->
+    <rect x="-15" y="60" width="30" height="12" rx="6" fill="#FFFFFF" fill-opacity="0.8"/>
+  </g>
+
+</svg>
