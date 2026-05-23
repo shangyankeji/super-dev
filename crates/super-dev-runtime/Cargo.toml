@@ -1,0 +1,17 @@
+[package]
+name = "super-dev-runtime"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Super Dev runtime trait — the contract host drivers implement. No HTTP, no LLM client."
+
+[dependencies]
+super-dev-spec = { workspace = true }
+
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }

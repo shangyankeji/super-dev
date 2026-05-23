@@ -1,0 +1,32 @@
+[package]
+name = "super-dev"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Super Dev — a coach for AI coding hosts. One spec, one binary, three SDK runtimes."
+
+[[bin]]
+name = "super-dev"
+path = "src/main.rs"
+
+[dependencies]
+super-dev-spec = { workspace = true }
+super-dev-governance = { workspace = true }
+super-dev-agent = { workspace = true }
+super-dev-runtime = { workspace = true }
+super-dev-host = { workspace = true }
+super-dev-tui = { workspace = true }
+
+clap = { workspace = true }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"

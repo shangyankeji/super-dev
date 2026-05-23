@@ -1,0 +1,21 @@
+[package]
+name = "super-dev-host"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Super Dev host drivers — drive already-logged-in Claude Code / Codex CLIs as subprocesses."
+
+[dependencies]
+super-dev-runtime = { workspace = true }
+super-dev-spec = { workspace = true }
+
+async-trait = { workspace = true }
+tokio = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"

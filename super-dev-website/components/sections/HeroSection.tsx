@@ -16,21 +16,21 @@ const TerminalWindow = dynamic(
 const COPY = {
   zh: {
     openSource: 'MIT 开源',
-    title: 'AI 能写代码，Super Dev 把宿主带成交付团队。',
-    body: '终端只负责接入和升级，真正的 research、三文档、确认门、Spec、实现和交付都留在宿主里。Super Dev 不是另一个代码生成器，它把宿主拉回一条能研究、能审查、能交付的商业开发主路径。',
-    points: ['终端只记住 super-dev / super-dev update / super-dev uninstall', '安装后复制宿主第一句，回宿主里直接开工', '第一轮先 research，再写三文档并等你确认'],
+    title: 'AI 能写代码。Super Dev 是宿主的教练，让宿主流水线式交付完整商业项目。',
+    body: 'Super Dev 本身不写代码、不是 IDE、不是 agent——它是 AI 编码宿主的教练，交给宿主一份完整的商业项目交付规范（SUPER_DEV_HOST_SPEC_V1）：先研究什么、产出哪些工件、何时暂停等确认、什么不许写、留下什么证据。宿主已有的模型 + 工具去执行；教练定的规范，决定了产物是不是商业级。',
+    points: ['一份规范本体，9 个阶段、4 层强制约束（代码权重 / 流程契约 / 交付产物 / 证据链）', '同一份规范注入到 20+ 宿主原生面：Claude Code / Cursor / Codex / Cline / Windsurf / Droid / Kiro …', '装上即生效，零配置；产出可直接对接 SOC2 / ISO27001 合规证据链'],
     docs: '查看文档',
     installNote: '首页默认只讲 uv 安装和 super-dev 引导。安装器会直接告诉你推荐宿主、标准流第一句、比赛流第一句和接入后先验；终端到这里就该退场，日常开发回宿主里的 /super-dev、$super-dev 或 super-dev:。',
-    releaseNote: 'v2.4.0: 统一宿主矩阵、项目优先接入、宿主首句与恢复剧本、双模式准备度，以及更严格的 UI 视觉门都已经前推到安装器和交付链。',
+    releaseNote: 'v2.4.1: 当前修复重点已经切到 backend-only 交付口径、原生测试命令识别、轻量恢复上下文、文档生命周期索引，以及用户级接入面一致性。',
   },
   en: {
     openSource: 'MIT Open Source',
-    title: 'AI can write code. Super Dev turns hosts into delivery teams.',
-    body: 'The terminal only handles onboarding and upgrade. The real research, the three core docs, approval gates, spec, implementation, and delivery stay inside the host. Super Dev is not another code generator. It pushes the host back onto a commercial path that can be researched, reviewed, and shipped.',
-    points: ['Only remember super-dev, super-dev update, and super-dev uninstall', 'After install, copy the host first prompt and go back into the host', 'The first pass is research first, then the three core docs, then approval'],
+    title: 'AI can write code. Super Dev coaches your host through a standardized pipeline that ships complete commercial projects.',
+    body: 'Super Dev is not a code generator, not an IDE, not an agent — it is a coach for AI coding hosts. It hands the host a complete commercial-project delivery specification (SUPER_DEV_HOST_SPEC_V1): what to research first, what artifacts to ship, when to pause for sign-off, what to refuse to write, what evidence to leave behind. The host’s existing model + tools execute; the coach’s standard is what makes the result commercial-grade.',
+    points: ['One specification, 9 phases, 4 enforced layers (code rules / flow contract / artifacts / evidence chain)', 'The same spec is injected into 20+ host native surfaces: Claude Code / Cursor / Codex / Cline / Windsurf / Droid / Kiro …', 'Install once, zero config; outputs map directly to SOC 2 / ISO 27001 compliance evidence'],
     docs: 'Read Docs',
     installNote: 'The homepage now teaches uv install and the super-dev onboarding path. The installer prints the recommended host, the standard-flow first prompt, the competition-flow first prompt, and the post-onboard self-check. After that, the terminal should get out of the way and daily work moves back into /super-dev, $super-dev, or super-dev: inside the host.',
-    releaseNote: 'v2.4.0 brings the unified host matrix, project-first onboarding, host-specific first prompts and resume playbooks, dual-mode readiness, and a stricter screenshot-grade UI gate forward into onboarding and delivery.',
+    releaseNote: 'v2.4.1 focuses on backend-only delivery closure, native test-command detection, lightweight resume context, document lifecycle indexing, and user-surface onboarding consistency.',
   },
 } as const;
 
@@ -48,7 +48,7 @@ export function HeroSection({ locale = 'zh' }: { locale?: SiteLocale }) {
       <div className="relative mx-auto flex w-full max-w-7xl flex-col gap-14 px-4 pb-20 sm:px-6 lg:grid lg:grid-cols-[minmax(0,1fr)_520px] lg:items-center lg:gap-16 lg:pb-24">
         <div className="flex flex-col gap-7">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="version">v2.4.0</Badge>
+            <Badge variant="version">v2.4.1</Badge>
             <Badge variant="certified">{copy.openSource}</Badge>
             <a
               href={GITHUB_REPO_URL}

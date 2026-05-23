@@ -1,0 +1,23 @@
+[package]
+name = "super-dev-governance"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Super Dev governance kernel — pre-write rules, audit logs, evidence chain."
+
+[dependencies]
+super-dev-spec = { workspace = true }
+
+serde = { workspace = true }
+serde_json = { workspace = true }
+regex = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
+tempfile = "3"

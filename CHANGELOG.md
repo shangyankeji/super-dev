@@ -2,6 +2,219 @@
 
 本文件记录 Super Dev 的所有重要变更。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [4.4.0] - 2026-05-23
+
+### 主题
+
+**Claude Code 同款 chat-style TUI**。`super-dev` 一行进入对话界面,首次启动选 worker(claude-code / codex / offline)写入 `~/.super-dev/config.toml`,之后直接进对话。所有操作走对话框 + 斜杠命令,不再有"Welcome → 流水线进度条"这种割裂屏幕。
+
+### 破坏性变更
+
+- **`super-dev tui` 子命令删除** —— 直接 `super-dev` 即可。CLI verbs(`run` / `continue` / `revise` / ...)保留给脚本用。
+- **TUI 内部状态机重写**:`Welcome` + `Running` → `Picker` + `Chat`。welcome 屏 / 9-phase 进度面板 / 事件日志面板全部下线;chat 模式用滚动消息历史承载所有 pipeline 事件。
+- **`super-dev_tui::LaunchOptions` 字段精简**:删 `requirement` / `backend`,现在只剩 `project_root` / `slug` / `model`(用户选择从 config 读)。
+
+### 新增
+
+- **`crates/super-dev-tui/src/config.rs`** —— `~/.super-dev/config.toml` 读写。Fail-soft:文件不存在 / 解析失败 / IO 错误都退化为"无偏好,显示 picker"。
+  - 字段:`backend = "claude-code" | "codex" | "offline"`、`model = "..."`。
+  - 路径:`$XDG_CONFIG_HOME/super-dev/config.toml` 优先,否则 `$HOME/.super-dev/config.toml`。
+- **首次启动 Picker** —— 三选项(claude-code / codex / offline)+ 实时 probe 标签。↑↓ 导航,Enter 写盘 + 进 Chat。不可用宿主拒绝(显示提示)。
+- **Chat 主屏**:
+  - 顶栏 status:版本 + workspace + ● backend + 当前 phase + ⏸ gate。
+  - 滚动消息历史:`you` / `super-dev` / `worker` / `gate` / `system` 5 种角色标签(各自颜色)。
+  - 输入框:5 行高度,光标 ▌,/ 前缀自动列出候选命令。
+  - 底部 footer hint。
+- **斜杠命令路由器**:
+  - `/claude` `/codex` `/offline` —— 切 worker(写 config + 系统消息)
+  - `/continue` —— 批准 gate
+  - `/revise <文字>` —— 提修订
+  - `/help` `/?` `/commands` —— 帮助浮层
+  - `/clear` —— 清屏 history
+  - `/quit` `/q` `/exit` —— 退出
+  - `/diff` `/spec` `/verify` `/doctor` `/history` —— 暂时给提示(浮层渲染留 M14b)
+- **非斜杠输入路由**:无 run 在跑 → 当新需求;gate 打开 → 当修订;delivery 完成 → 当下一个新需求(自动 reset)。
+
+### 测试 +28(共 ~225 总数,因为删了一批旧 Welcome/Running 测试)
+
+- `config.rs` 7:round-trip / 缺失文件 / 损坏文件 / 创建父目录 / XDG_CONFIG_HOME。
+- `app.rs` 21:Picker 导航/拒绝不可用/probe 刷新/转 Chat;Chat 普通文本提交/空回车 noop/斜杠 help quit clear claude continue revise/未知命令/gate 时文本当修订/delivery 后文本当新 run/host 输出/history 上限/F1 / spinner。
+- `ui.rs` 8:Picker 三选项 + 选中标记/Chat 问候 + 输入框 + 光标 + slash typeahead/gate 角色/worker 角色/help overlay 模式相关。
+
+### 变更
+
+- 版本 4.3.0 → 4.4.0。
+- 命令面 11 → 10(删 `tui` 子命令)。
+- README / README_EN / CLAUDE.md / guide.txt 全部同步新心智模型。
+
+## [4.3.0] - 2026-05-23
+
+### 主题
+
+大厂级用户交互打磨 + 流式输出 + 知识库智能注入 + CI 自动发 npm。
+
+### 新增
+
+- **`super-dev examples`** —— 一行打印完整 cheat-sheet:首次用法 / CI 用法 / 迭代 / 切 backend / TUI 键位 / 斜杠命令 / 环境变量。
+- **`super-dev guide`** —— 60 秒走读:产品定位 / 9 阶段图 / 用户角色 / 9 命令 / 工件清单 / 治理规则。
+- **每个命令富 `long_about` + `EXAMPLES:` 块** —— `super-dev <cmd> --help` 给真实示例,不再干瘪。
+- **typo 容错** —— `super-dev rin` → `tip: some similar subcommands exist: 'init', 'run'`(clap 默认开,文案有效)。
+- **`EngineEvent::HostOutput`** —— host CLI 的每行输出按行 emit 出来,TUI 实时滚动显示 host 在干啥(buffered-at-end,真 wire 流式留给 M9b)。
+- **TUI App `HostOutput` 处理** —— 每行带 `    [phase]` 前缀进事件日志,长行 200 字符截断。
+- **知识库智能注入** —— `summarise_knowledge_dir` 升级为 `smart_knowledge_digest`:按需求关键词排名 → 挑 top-6 → 每个真摘 600 字符塞进 prompt;无关键词匹配时 lex 排序兜底。
+- **CI release.yml 接 npm publish** —— tag `v*` push 时,build 阶段同时把每平台 binary stage 进 `npm/cli-<plat>/`,publish-npm job 拉回来一键发 6 包(需配 `NPM_TOKEN` secret)。
+- **`aarch64-unknown-linux-gnu` 平台** —— 用 `cross` 在 ubuntu-latest 上交叉编译,补全 Linux ARM 支持。
+
+### 变更
+
+- 版本 4.2.0 → 4.3.0。
+- 命令面 9 → 11(新增 examples / guide)。
+
+### 测试 +11 → **203 tests pass**
+
+- `extract_keywords_filters_short_and_stopwords`
+- `score_path_counts_keyword_hits`
+- `smart_digest_picks_keyword_matches_top`
+- `smart_digest_falls_back_to_lex_when_no_keyword_match`
+- `smart_digest_handles_missing_dir`
+- `host_output_lines_land_in_log`
+- `host_output_truncates_very_long_lines`
+- `examples_command_prints_cheatsheet`
+- `guide_command_prints_walkthrough`
+- `run_help_includes_examples`
+- `unknown_subcommand_suggests_a_correction`
+
+## [4.2.0] - 2026-05-23
+
+### 主题
+
+外挂式产品形态彻底落地:**删干净 plugin 注入式架构,主推 `npm install -g super-dev` 一行装机**。
+
+### 破坏性变更
+
+- **`super-dev install` / `uninstall` / `hook` 三个命令删除** —— 它们对应"把 SKILL.md/AGENTS.md/hook 配置注入宿主目录"的旧模型,和新定位(外挂项目经理,只调度不嵌入)矛盾。
+- **`plugin/` 目录整体删除**(3 家宿主的 SKILL.md / AGENTS.md / plugin.json / hook config × 11 文件 + `crates/super-dev/src/install.rs` 约 400 行实现)。
+- **`super-dev verify` 不再输出 `## Installed plugins` 节**。
+- **`super-dev doctor` 不再做插件相关检查**(check_embedded_plugins、check_installed_plugins、版本错配检测——这些都依赖 plugin 概念)。
+
+### 新增
+
+- **`npm/` 多平台分发** —— 主包 `super-dev` + 5 个平台子包 `@super-dev/cli-{darwin-arm64,darwin-x64,linux-x64,linux-arm64,win32-x64}`,esbuild / biome / swc 同款模式。
+  - **JS shim** `npm/super-dev/bin/cli.js`:`require.resolve` 找到匹配平台的预编译 Rust 二进制,`spawnSync(..., {stdio: 'inherit'})` 透传 stdio,TUI 直接可用。
+  - **`stage.sh`** 把 prebuilt binary 摆进对应平台子包。
+  - **`smoke.sh`** 本地端到端验证(本机已实测通过)。
+  - **`publish.sh`** 一行发布 6 包(5 平台 + 主包)。
+
+### 变更
+
+- 版本 4.1.0 → 4.2.0。
+- 命令面从 12 个瘦身到 9 个(删 install/uninstall/hook)。
+- `super-dev init` 输出的"next steps"提示从"super-dev install claude-code"改成"super-dev"启动 TUI。
+- `super-dev-governance` crate **保留**(pipeline 内部仍用 audit / context / compliance),只是没有 CLI 出口。
+
+### 测试 +0 / 192 总数
+
+(删测试和加测试相抵:删 1 个 `hook_check_emoji_returns_block_decision_for_tsx` e2e,删 doctor 的若干 plugin 检测测试,删 install.rs 的 7 个内部测试;保留所有 pipeline / verify loop / TUI / spec / runtime 相关测试。)
+
+## [4.1.0] - 2026-05-23
+
+### 主题
+
+定位钉死:**Super Dev 是 AI 编码的项目经理(确定性外挂编排 Agent),不是 LLM 客户端**。彻底删掉所有"直调 LLM API"的代码与外宣口径。
+
+### 破坏性变更
+
+- **`super-dev-runtime` 的 `anthropic` / `openai` / `antigravity` 三个 HTTP 客户端模块删除**——`super-dev` 二进制不再含直调 Provider API 的能力。
+- **CLI `--api` flag + `--runtime` flag 移除**——run/tui 现在只有两种"大脑":`--backend claude-code|codex`(默认推荐)或离线模板。
+- **`super-dev-runtime` 不再依赖 `reqwest` / `eventsource-stream` / `tokio::process` / `anyhow` / `tracing`**——降为纯 trait crate(`Runtime` + `OfflineRuntime`),依赖只剩 `async-trait` / `serde` / `serde_json` / `thiserror`。
+- `RuntimeError::Transport` / `RuntimeError::Provider` 两个 HTTP 变体删除。
+
+### 新增
+
+- **`super-dev` 无参数直接进 TUI** —— 像 `claude` / `codex` 那样,敲一个词就开干。
+- **TUI Welcome 屏** —— 自动并发探测 `claude` / `codex`,自动选第一个 ready 的;用户在 TUI 内文本框输入需求,`Tab` 切换工作者,`Enter` 提交进入 Running。
+- TUI `LaunchOptions` 替代旧 `(RunOptions, Option<String>)` 参数对。
+- `Action::Submit` 事件 —— 从 Welcome 提交后,event loop 自动 build `RunOptions` + spawn pipeline + 切到 Running 模式。
+- `App::cycle_backend()` —— `Tab` 在 `[offline, ...ready_backends]` 之间循环。
+- `App::enter_running()` —— 显式状态机翻页。
+
+### 变更
+
+- 版本 4.0.0 → 4.1.0。
+- 主标语:"a coach for AI coding hosts" → "**AI 编码的项目经理 — drives your logged-in Claude Code / Codex through a 9-phase commercial delivery pipeline. No API key needed.**"
+- README / README_EN / spec §9 全部清掉"three SDK runtimes"线,统一"项目经理 + host driver"口径。
+- `apply_key(char)` → `apply_key(KeyCode)`,模型层处理 Backspace / Enter / Tab / Esc 等专用键。
+
+## [4.0.0] - 2026-05-22
+
+### 主题
+
+从"装进宿主的插件"演进为"驱动宿主的编排器"：Super Dev 现在是一个 TUI 应用，把用户**已登录的** Claude Code / Codex CLI 当作按需调用的执行后端——零 API key，零额外登录。
+
+### 破坏性变更
+
+- **`super-dev run` 的 `--offline` 标志移除**：执行模式改为三选一——`--backend claude-code|codex`（驱动已登录的宿主 CLI）、`--api`（直调 Provider API，需 key）、或默认离线确定性模板。
+
+### 新增
+
+- **`crates/super-dev-host`** —— 宿主驱动层。`ClaudeCodeDriver` 包 `claude --print`、`CodexDriver` 包 `codex exec`，都实现 `Runtime` trait 让现有 `AgentRunner` 直接驱动。子进程走 `tokio::process` + `.args()`（不走 shell）、`kill_on_drop`、超时保护。`probe_all()` 并发探测宿主可用性。
+- **`crates/super-dev-tui`** —— ratatui 终端应用。`super-dev tui "<需求>"` 启动：9 阶段进度面板 + 实时事件日志 + gate 键盘交互（`c` 过 gate / `q` 退出）+ `b` 宿主探测浮层。
+- **引擎事件流**（`super-dev-agent::events`）：`EngineEvent` + `EventSink`（`NullSink` / `ChannelSink` / `RecordingSink`）。`AgentRunner` 在 phase 起止、artifact 写入、gate 打开时 emit 事件;TUI 订阅 `ChannelSink` 渲染实时进度。
+- **`super-dev init`** —— 写出 `super-dev.yaml` spec manifest（落地 SD-META-001）;`super-dev run` 也会自动补写。
+- **`super-dev doctor`** —— 自检命令:binary 完整性、嵌入 plugin/规范、workspace 可写、已装 plugin 版本错配。
+- **`super-dev uninstall`** —— 移除宿主插件，保留 `.super-dev/` 用户数据。
+- **`super-dev tui`** —— 进入交互式 TUI。
+
+### 变更
+
+- 版本 3.0.0 → 4.0.0。
+- spec §7 主机映射表对齐到三家官方 SDK 家族，明确其余宿主 out-of-scope。
+- `OfflineRuntime` 从二进制提到 `super-dev-runtime`，CLI 与 TUI 共用;新增 `Box<dyn Runtime>` impl。
+- CONTRIBUTING.md 改写为 Rust workspace 贡献指南。
+
+### crate 总览（7 个）
+
+`super-dev` · `super-dev-spec` · `super-dev-governance` · `super-dev-agent` · `super-dev-runtime` · `super-dev-host` · `super-dev-tui`
+
+## [3.0.0] - 2026-05-20
+
+### 主题
+
+彻底重构：Python → Rust，从工具 → 规范产品，从 30 个浅适配宿主 → 3 个深度兼容宿主家族。
+
+### 破坏性变更
+
+- **语言切换**：整个项目从 Python 改写为 Rust workspace。所有 `super_dev/` Python 代码、`pyproject.toml`、`uv.lock`、`requirements.lock`、Python 测试套件全部移除。
+- **CLI 全面重构**：50+ 子命令收紧为 4 条（`run` / `spec` / `hook` / `verify`）。Python 时代的 `init / migrate / setup / detect / doctor / quality / review / release / enforce / spec / config / hooks / experts / memory / compact / pipeline / clean / completion / feedback / ...` 等命令全部删除。
+- **宿主适配从 30 个收紧到 3 个**：只保留有官方 Agent SDK 的家族——Anthropic（Claude Code / Claude Desktop）、OpenAI（Codex CLI / Codex Desktop）、Google（Antigravity CLI / Antigravity Desktop）。Cursor、Windsurf、Cline、Roo、Continue、Trae、Qoder、CodeBuddy、WorkBuddy、Kiro、Droid、Gemini CLI、Kimi、Qwen 等 27 个浅适配宿主全部移除。
+- **MCP server 退场**：纯 Rust 直调 Provider API，不再需要 MCP 中转。
+- **SKILL.md / hook 安装器退场**：Python 时代的 `.claude-plugin/`、`plugins/`、宿主 hook 注入器全部移除；规范由 agent 直接驱动，而非由各家宿主的 hook 实现。
+
+### 新增
+
+- **Rust workspace**（5 个 crate）：
+  - `super-dev` — 主二进制
+  - `super-dev-spec` — 规范的 Rust 数据表达（25 条 clause × 4 层 + 9 阶段 + 2 gate）
+  - `super-dev-governance` — 治理核心（`rules` / `audit` / `context` / `compliance`），fail-open
+  - `super-dev-agent` — 9 阶段流水线 runner + gate 语义 + workflow state
+  - `super-dev-runtime` — Anthropic / OpenAI / Antigravity 三家 HTTP 适配（直调 Provider API）
+- **`SUPER_DEV_HOST_SPEC_V1` 规范本体**进入 `spec/` 顶层目录，与代码 1:1 对齐
+- **单二进制分发**：`cargo build --release` 出一个静态二进制，零运行时依赖
+- **`super-dev hook`** 子命令把所有治理判定收敛到一条入口：宿主配置只写 `super-dev hook check-emoji` 等命令，无需 Python 解释器
+- **多 runtime 选择**：`super-dev run "..." --runtime anthropic|openai|antigravity`
+
+### 保留
+
+- `spec/SUPER_DEV_HOST_SPEC_V1.md` — 规范本体
+- `knowledge/` — 治理知识库
+- `super-dev-website/` — Next.js 官网（独立工程）
+- `docs/assets/` — README 图片
+- `output/`、`.super-dev/` — 用户项目数据（gitignore）
+
+### 迁移
+
+- 没有 from-2.4 的迁移路径。3.0 是从零重启；旧 Python 用户保留旧版本即可。
+
 ## [2.3.4] - 2026-04-10
 
 ### 主题

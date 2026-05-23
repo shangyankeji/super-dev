@@ -1,0 +1,21 @@
+{
+  "name": "@super-dev/cli-linux-x64",
+  "version": "4.4.0",
+  "description": "super-dev prebuilt binary for Linux (x86_64 / gnu).",
+  "homepage": "https://github.com/shangyankeji/super-dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shangyankeji/super-dev.git"
+  },
+  "license": "MIT",
+  "files": [
+    "bin/"
+  ],
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "preferUnplugged": true
+}

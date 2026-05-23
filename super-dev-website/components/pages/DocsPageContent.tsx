@@ -99,7 +99,7 @@ const zhContent: Content = {
     { label: '确认门', value: '2 个' },
   ],
   sections: [
-    { id: 'highlights', label: 'v2.4.0 强化重点', icon: Zap },
+    { id: 'highlights', label: 'v2.4.1 当前修复重点', icon: Zap },
     { id: 'governance', label: '核心路径', icon: BookOpen },
     { id: 'install', label: '安装方式', icon: Package },
     { id: 'first-minutes', label: '安装后 5 分钟', icon: Sparkles },
@@ -323,12 +323,14 @@ const zhContent: Content = {
     '先用 smoke 触发语句。',
     '如果宿主直接开始开发，优先判断当前会话没有重新加载规则。',
   ],
-  highlightsTitle: 'v2.4.0 当前强化重点',
-  highlightsBody: '2.4.0 继续把产品拉回“宿主内交付工具”这个核心：默认项目优先接入、统一宿主矩阵、标准流 / SEEAI 双模式准备度、宿主首句与恢复剧本、以及更清晰的安装后先验；同时把 UI 设计合同升级成更少 AI 味、更强调视觉方向和工艺审查的系统。',
+  highlightsTitle: 'v2.4.1 当前修复重点',
+  highlightsBody: '2.4.1 先把影响真实交付判断的几条链收正：backend-only 项目的质量与交付口径、release readiness 的原生测试命令识别、轻量 resume 上下文、文档生命周期索引，以及 --with-user-surfaces 的接入一致性；首页、Docs 和安装入口也一起切到新版本。',
   highlightsCards: [
     { title: '项目优先接入默认化', body: 'onboard / setup / install / start 默认只写项目级协议面；用户级 / 系统级 surface 改成显式 opt-in，不再默认污染全局 AGENTS。' },
     { title: '统一宿主矩阵', body: 'CLI、IDE 和桌面助手都已并入统一矩阵；Claude / Claude Code、Codex / Codex CLI、Trae 系列都拆成了独立条目。' },
     { title: '宿主首句与恢复剧本', body: '每个宿主现在都明确给出标准流第一句、比赛流第一句、恢复方式和修复优先级，不再只有泛化触发词。' },
+    { title: '轻量恢复上下文', body: 'resume / continue 默认只让宿主先读 SESSION_BRIEF、workflow-state、当前 active change 和阶段必需文档，不再默认吞掉全量历史、proof-pack 或旧截图。' },
+    { title: '文档生命周期索引', body: 'super-dev docs lifecycle 会生成 DOCS_INDEX，明确当前事实、active change、spec 与只读 archive，防止多轮迭代后误改旧文档。' },
     { title: '标准流 / SEEAI 双模式准备度', body: '宿主报告会明确区分“标准流可直接开工”和“SEEAI 比赛模式可直接开工”，不再把文件已写入误判成宿主已跑通。' },
     { title: '当前项目焦点', body: '安装器和 smoke guide 会直接告诉用户当前项目更该先看哪类页面、哪类预览和哪类交付证据。' },
     { title: '安装后先验', body: '安装器会直接显示接入后应该先确认什么，避免用户一装完就误以为已经可以稳定开工。' },
@@ -352,7 +354,7 @@ const enContent: Content = {
     { label: 'Approval gates', value: '2' },
   ],
   sections: [
-    { id: 'highlights', label: 'v2.4.0 Highlights', icon: Zap },
+    { id: 'highlights', label: 'v2.4.1 Current Fix Focus', icon: Zap },
     { id: 'governance', label: 'Core path', icon: BookOpen },
     { id: 'install', label: 'Installation', icon: Package },
     { id: 'first-minutes', label: 'First 5 Minutes', icon: Sparkles },
@@ -576,12 +578,14 @@ const enContent: Content = {
     'Use a smoke prompt before trying the real requirement.',
     'If the host starts coding immediately, assume the current session did not reload the rules.',
   ],
-  highlightsTitle: 'v2.4.0 Current Focus',
-  highlightsBody: 'Version 2.4.0 keeps pushing Super Dev back toward its core product shape: project-first onboarding, a unified host matrix, standard-flow vs. SEEAI readiness, host-specific first prompts and resume guidance, clearer post-install verification, and a stronger UI contract that pushes design quality away from generic AI-looking output.',
+  highlightsTitle: 'v2.4.1 Current Fix Focus',
+  highlightsBody: 'Version 2.4.1 first tightens the parts that directly affect release correctness: backend-only delivery closure, native test-command detection, lightweight resume context, document lifecycle indexing, and consistent --with-user-surfaces onboarding. The homepage, docs, and installer entry are aligned to the new version at the same time.',
   highlightsCards: [
     { title: 'Project-First Onboarding', body: 'onboard / setup / install / start now write project-level protocol surfaces by default. User/global surfaces are explicit opt-ins instead of silent defaults.' },
     { title: 'Unified 26-Host Matrix', body: 'CLI 12, IDE 9, and desktop assistants 5 now sit inside the same current host matrix. Claude / Claude Code, Codex / Codex CLI, and the Trae family are all split into separate entries.' },
     { title: 'Host-Specific First Prompts', body: 'Each host now exposes a standard-flow first prompt, competition-flow first prompt, resume guidance, and repair priority instead of one generic trigger script.' },
+    { title: 'Lightweight Resume Context', body: 'resume / continue now asks hosts to read SESSION_BRIEF, workflow-state, the active change, and stage-required docs first instead of full history, proof packs, and old screenshots.' },
+    { title: 'Document Lifecycle Index', body: 'super-dev docs lifecycle generates DOCS_INDEX so current truth, active changes, specs, and read-only archives stay separated across iterations.' },
     { title: 'Standard vs. SEEAI Readiness', body: 'Host reports now explicitly distinguish "ready for standard flow" from "ready for SEEAI competition flow" rather than treating written files as equivalent to a working host runtime.' },
     { title: 'Current project focus', body: 'The installer and smoke guide now tell users which pages, previews, and delivery signals matter first for the current project.' },
     { title: 'Post-Onboard Self-Check', body: 'The installer now tells users what to verify first so onboarding is not mistaken for real readiness.' },
@@ -639,7 +643,7 @@ export function DocsPageContent({ locale = 'zh' }: { locale?: SiteLocale }) {
             <div className="max-w-[860px]">
               <div className="mb-5 flex flex-wrap items-center gap-2">
                 <Badge variant="version">{content.heroKicker}</Badge>
-                <Badge variant="certified">v2.4.0</Badge>
+                <Badge variant="certified">v2.4.1</Badge>
                 <Badge variant="compatible">{locale === 'en' ? 'Bilingual' : '中英双语'}</Badge>
               </div>
               <h1 className="max-w-[900px] text-4xl font-bold leading-[1.08] tracking-tight text-text-primary sm:text-5xl lg:text-[3.5rem]">

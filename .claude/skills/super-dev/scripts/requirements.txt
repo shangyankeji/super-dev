@@ -1,9 +1,0 @@
-# requirements.txt
-# Super Dev Python 工具依赖
-
-duckduckgo-search>=4.0.0
-rich>=13.0.0
-requests>=2.31.0
-beautifulsoup4>=4.12.0
-openai>=1.0.0
-tenacity>=8.2.0

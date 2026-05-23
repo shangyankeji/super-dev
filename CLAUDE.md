@@ -1,271 +1,80 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working
+with code in this repository.
 
-## Project Overview
+## What this project is
 
-Super Dev is a Python CLI tool (v2.4.0) that orchestrates AI-driven development pipelines inside host environments (e.g., Claude Code). It provides governance, quality gates, and audit artifacts for commercial-grade software delivery. It is NOT an independent AI agent — it's a governance layer that runs inside a host's coding environment.
+Super Dev is a Rust workspace that ships a **single binary** (`super-dev`)
+acting as a coach + orchestrator for AI coding hosts. It embeds
+`SUPER_DEV_HOST_SPEC_V1` (see `spec/`).
 
-## Build & Development Commands
+As of 4.0 the **primary execution mode drives an already-logged-in host
+CLI** (`claude --print`, `codex exec`) as a subprocess — no API key, the
+user's existing host session is the brain. The binary has three modes:
+
+- `--backend claude-code|codex` — drive a logged-in host CLI (no key)
+- `--api` — direct provider HTTP (Anthropic / OpenAI / Antigravity; needs a key)
+- default — offline deterministic templates
+
+Just typing `super-dev` (no subcommand) launches a Claude Code-style chat
+TUI over the same engine — first launch shows a backend picker that writes
+`~/.super-dev/config.toml`; later launches drop straight into the
+conversation. Slash commands (`/claude` `/codex` `/offline` `/continue`
+`/revise` `/help` `/clear` `/quit`) live inside the chat.
+
+3.0+ is a complete rebuild from a previous Python implementation; do not
+look for `super_dev/` or `pyproject.toml` — they are intentionally gone.
+
+## Build & test
 
 ```bash
-# Install in development mode (requires Python 3.10+)
-pip install -e ".[dev]"
-
-# Run the CLI
-super-dev
-
-# Linting & formatting
-ruff check super_dev/              # lint
-ruff check --fix super_dev/        # auto-fix lint issues
-black super_dev/ --check           # check formatting
-black super_dev/                   # apply formatting
-
-# Type checking
-mypy super_dev/
-
-# Run all tests
-pytest
-
-# Run a single test file
-pytest tests/unit/test_workflow.py
-
-# Run a specific test
-pytest tests/unit/test_workflow.py::test_function_name -v
-
-# Run with coverage
-pytest --cov=super_dev
+cargo build --workspace
+cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings
+cargo fmt --all
 ```
 
-## Code Style
+## Workspace layout
 
-- Line length: 100 (configured in both ruff and black)
-- Target Python: 3.10+
-- Ruff rules: E, F, I, N, W, UP (E501 ignored)
-- All imports must be sorted (ruff `I` rule)
+| Crate | Purpose |
+|---|---|
+| `crates/super-dev` | The `super-dev` binary (clap CLI: `init` / `run` / `tui` / `continue` / `revise` / `spec` / `hook` / `verify` / `report` / `install` / `uninstall` / `doctor`) |
+| `crates/super-dev-spec` | `SUPER_DEV_HOST_SPEC_V1` as Rust data — clauses, phases, gates, runtime kinds |
+| `crates/super-dev-governance` | `rules` (block emoji / hardcoded colors), `audit` (API + tool-call JSONL), `context` (session injection), `compliance` (SD-EVID-004 mapping) |
+| `crates/super-dev-agent` | 9-phase pipeline runner, gate semantics, workflow state, `events` stream, `manifest` (SD-META-001) |
+| `crates/super-dev-runtime` | `Runtime` trait + Anthropic / OpenAI / Antigravity HTTP adapters + `OfflineRuntime` |
+| `crates/super-dev-host` | `HostDriver` trait — drives a logged-in `claude` / `codex` CLI as a subprocess |
+| `crates/super-dev-tui` | ratatui terminal app over the engine event stream |
 
-## Architecture
+## Conventions
 
-### Core Pipeline (`super_dev/`)
+- All `pub` items have docstrings.
+- Every governance function is **fail-open**: an error path returns `Decision::pass()` or an empty record. The host MUST NEVER be blocked by a bug in the governor.
+- Every clause in `super-dev-spec::CLAUSES` is tagged with its `SD-LAYER-NNN` id (e.g. `SD-CODE-001`). When you write or modify a governance rule, reference the clause id in the docstring.
+- Tests live next to code (`mod tests { ... }` at the bottom of each `.rs`).
 
-The CLI entry point is `super_dev/cli.py` (~6k lines), built as a large class composed via mixins:
-- `cli_parser_mixin.py` — argparse command definitions
-- `cli_analysis_mixin.py` — analysis subcommands
-- `cli_governance_mixin.py` — governance/enforcement subcommands
-- `cli_host_ops_mixin.py` — host tool operations
-- `cli_experience_mixin.py` — UX enhancements
-- `cli_deploy_runtime_mixin.py` — deployment/runtime commands
-- `cli_release_quality_mixin.py` — release & quality commands
-- `cli_spec_mixin.py` — spec management commands
+## Spec sync contract
 
-### Pipeline Orchestration (`super_dev/orchestrator/`)
-- `engine.py` — main pipeline engine driving phase transitions
-- `governance.py` — governance policy enforcement during pipeline
-- `knowledge.py` / `knowledge_pusher.py` — knowledge injection into pipeline stages
-- `quality.py` — quality gate evaluation
-- `contracts.py` — pipeline contract definitions
+`spec/SUPER_DEV_HOST_SPEC_V1.md` is the normative prose. Any change to
+`super-dev-spec::CLAUSES` MUST be accompanied by a change to the
+matching section of the markdown, and vice versa. The unit tests in
+`crates/super-dev-spec/src/lib.rs` lock the data shape; add new clauses
+there in `SD-LAYER-NNN` order.
 
-### Document & Artifact Generation (`super_dev/creators/`)
-- `document_generator.py` — PRD, architecture, UIUX document generation
-- `prompt_generator.py` / `prompt_templates.py` — LLM prompt construction
-- `frontend_builder.py` — frontend implementation playbooks
-- `implementation_builder.py` — backend implementation references
-- `spec_builder.py` — spec generation from documents
-- `adr_generator.py` — Architecture Decision Record generation
+## What lives outside the Rust workspace
 
-### Quality & Review (`super_dev/reviewers/`)
-- `quality_gate.py` — quality threshold enforcement (default threshold: 90)
-- `redteam.py` — security red-team analysis
-- `code_review.py` — automated code review
-- `ui_review.py` — UI compliance review
-- `validation_rules.py` — configurable validation rules engine
+- `knowledge/` — curated knowledge base (language-agnostic, used by the agent at runtime)
+- `super-dev-website/` — Next.js marketing site (independent build)
+- `output/`, `.super-dev/` — per-project user data (gitignored)
+- `docs/assets/` — README images
 
-### Enforcement (`super_dev/enforcement/`)
-- `validation.py` — file-level validation (no emoji icons, color tokens, etc.)
-- `pre_code_gate.py` — pre-coding checks
-- `host_hooks.py` — hook integration with host tools
+## Anti-rules (do not undo these)
 
-### Deployment (`super_dev/deployers/`)
-- `delivery.py` — delivery packaging
-- `cicd.py` — CI/CD pipeline generation
-- `rehearsal.py` / `rehearsal_runner.py` — deployment rehearsals
-
-### Knowledge System (`knowledge/`)
-Large curated knowledge base organized by domain (frontend, backend, security, database, architecture, etc.). Used by the pipeline to inject domain-specific constraints into each stage.
-
-- `super_dev/knowledge_tracker.py` — tracks knowledge references
-- `super_dev/knowledge_evolution.py` — knowledge base evolution
-
-### Web API (`super_dev/web/`)
-- `api.py` — FastAPI-based web interface for the pipeline
-
-### Host Integration
-- `super_dev/hooks/` — hook system for host tool integration
-- `super_dev/integrations/` — integration manager for external tools
-- `super_dev/skills/` — skill definitions for host environments
-
-### Configuration
-- `super-dev.yaml` — project-level configuration (domain, tech stack, quality gate, phases, experts)
-- `super_dev/config/` — configuration management
-
-## Test Structure
-
-- `tests/unit/` — unit tests for individual modules
-- `tests/integration/` — integration tests (CLI, web API)
-- `tests/e2e/` — end-to-end smoke tests
-- `tests/benchmark.py` — performance benchmarks
-
-## Key Concepts
-
-- **Pipeline phases**: discovery → intelligence → drafting → redteam → qa → delivery → deployment
-- **Super Dev flow contract**: research → docs → docs_confirm → spec → frontend → preview_confirm → backend → quality → delivery
-- **Quality gate**: configurable threshold (default 90/100), enforced before merge
-- **Experts**: PM, ARCHITECT, UI, UX, SECURITY, CODE (configurable in super-dev.yaml)
-- **Output directory**: `output/` — all generated artifacts (PRD, architecture, UIUX, research, specs)
-- **Session state**: `.super-dev/` — workflow state, session briefs, review state, decisions (ADRs)
-
-## Super Dev Pipeline Governance
-
-When the user triggers `/super-dev`, `super-dev:`, or `super-dev：`, enter the Super Dev pipeline mode. The pipeline follows a strict phase chain with confirmation gates:
-
-1. **Research** — read `knowledge/` and research similar products, write `output/*-research.md`
-2. **Core Documents** — generate PRD, architecture, UIUX documents in `output/`
-3. **Docs Confirmation Gate** — stop and wait for user approval before proceeding
-4. **Spec & Tasks** — generate execution plan and task breakdown
-5. **Frontend** — implement frontend first with runtime verification
-6. **Preview Confirmation Gate** — stop and wait for user approval
-7. **Backend** — implement backend, tests
-8. **Quality** — run quality gates, red-team review
-9. **Delivery** — proof pack, release readiness
-
-### Coding Constraints (enforced during all coding phases)
-- Check `package.json` / framework versions before writing code
-- Icons from declared library only (Lucide/Heroicons/Tabler), never emoji
-- No purple/pink gradient themes
-- Frontend fetch URLs must match backend route definitions exactly
-- Run `super-dev enforce validate` after UI code, `super-dev quality` after features
-
-### Session Continuity
-- `.super-dev/SESSION_BRIEF.md` — active workflow state, read before responding
-- `.super-dev/workflow-state.json` — machine-readable workflow state
-- User replies like `确认`, `通过`, `继续`, `修改` stay within the current Super Dev stage
-
-<!-- BEGIN SUPER DEV CLAUDE -->
-# Super Dev Claude Code Integration
-
-This project uses a pipeline-driven development model.
-
-## Positioning
-- Super Dev does not own a model endpoint.
-- Claude Code remains the execution host for coding capability.
-- Super Dev provides governance: protocol, gates, and audit artifacts.
-
-## Runtime Contract
-- Treat Super Dev as the local Python workflow tool plus Claude Code `CLAUDE.md + Skills` integration.
-- Primary surfaces are project-root `CLAUDE.md`, compatibility mirror `.claude/CLAUDE.md`, project-level `.claude/skills/super-dev/`, and user-level `~/.claude/skills/super-dev/`.
-- Compatibility surface `.claude/commands/super-dev.md` remains installed so older Claude Code builds still converge onto the same Super Dev workflow.
-- Optional repo enhancement surfaces `.claude-plugin/marketplace.json` and `plugins/super-dev-claude/.claude-plugin/plugin.json` can expose a richer Claude-native plugin layer without replacing the base `CLAUDE.md + Skills` contract.
-- When the user triggers `/super-dev`, `super-dev:`, or `super-dev：`, enter the Super Dev pipeline immediately rather than handling it like casual chat.
-- Use Claude Code browse/search for research and Claude Code terminal/editing for implementation.
-- Use local `super-dev` commands whenever you need to generate/update docs, spec artifacts, quality reports, and delivery outputs.
-
-## First-Response Contract
-- On the first reply after a host-supported Super Dev entry (for example `/super-dev ...`, `$super-dev`, `super-dev: ...`, `super-dev：...`, `/super-dev-seeai ...`, `$super-dev-seeai`, `super-dev-seeai: ...`, or `super-dev-seeai：...`), explicitly state that the matching Super Dev mode is now active rather than normal chat mode.
-- If the repository already contains `super-dev.yaml`, `.super-dev/WORKFLOW.md`, `output/*`, `.super-dev/review-state/*`, or an unfinished run state, the first natural-language requirement in a new host session must also default to continuing Super Dev rather than plain chat.
-- Before the first reply, read `.super-dev/WORKFLOW.md` and `output/*-bootstrap.md` when present, and treat them as the explicit bootstrap contract for this repository.
-- The first reply must explicitly state that the current phase is `research`, and that you will read `knowledge/` plus `output/knowledge-cache/*-knowledge-bundle.json` first when available before similar-product research.
-- In standard mode, the next sequence is research -> three core documents -> wait for user confirmation -> Spec / tasks -> frontend first with runtime verification -> backend / tests / delivery.
-- In SEEAI mode, the next sequence is research -> compact competition docs -> wait for user confirmation -> compact Spec -> full-stack sprint -> polish / handoff.
-- Both modes must explicitly promise that they will stop after the three core documents and wait for approval before creating Spec or writing code.
-
-## Local Knowledge Contract
-- Read relevant files under `knowledge/` before drafting PRD, architecture, and UIUX.
-- If `output/knowledge-cache/*-knowledge-bundle.json` exists, read it first and inherit its local knowledge hits into later stages.
-- Treat matched local standards, scenario packs, and checklists as hard constraints, not optional hints.
-
-## Conversation Continuity Contract
-- If `.super-dev/SESSION_BRIEF.md` exists, read it before responding and treat it as the active workflow state.
-- If the workflow is waiting for docs confirmation, preview confirmation, UI revision, architecture revision, or quality revision, then user replies like `修改`, `补充`, `继续改`, `确认`, `通过`, `继续`, or detailed feedback remain inside the current Super Dev stage.
-- After each requested revision inside a gate, stay in the same stage, update the required artifacts, summarize what changed, and wait again for explicit confirmation.
-- Do not silently exit Super Dev mode because the user asked for several edits, follow-up questions, or extra constraints.
-- Only leave the current Super Dev workflow if the user explicitly says to cancel the workflow, restart from scratch, or switch back to normal chat.
-
-## Before coding
-1. If Claude Code browse/search is available, research similar products first and write output/*-research.md as a real repository file
-2. Read output/*-prd.md
-3. Read output/*-architecture.md
-4. Read output/*-uiux.md
-5. Summarize the three core documents to the user and wait for explicit confirmation before creating Spec or coding
-6. Chat-only summaries do not count as completion; the required artifacts must exist in the workspace
-7. Read output/*-execution-plan.md
-8. Follow .super-dev/changes/*/tasks.md after confirmation, with frontend-first implementation and runtime verification
-
-9. If the user requests a UI redesign or says the UI is unsatisfactory, first update `output/*-uiux.md`, then redo the frontend, and rerun frontend runtime + UI review before continuing.
-
-## Output Quality
-- Keep security/performance constraints from red-team report.
-- Ensure quality gate threshold is met before merge.
-- UI must follow output/*-uiux.md and avoid AI-looking templates (purple gradient, emoji icons, default-font-only).
-- Before any UI implementation, lock the icon library, typography, design token system, component ecosystem, and page skeleton from output/*-uiux.md.
-- Do not use emoji as functional icons or placeholders.
-- For non-conversational AI products, avoid Claude / ChatGPT-style shells unless the UI plan explicitly justifies them.
-- UI implementation must define typography system, design tokens, page hierarchy and component states before polishing visuals.
-- Prioritize real screenshots, trust modules, proof points and task flows over decorative hero sections.
-
-## Coding Constraints (active during ALL coding phases)
-
-These rules apply every time you write or edit a file. They are NOT suggestions:
-
-### Tech Stack Pre-Research
-- Before writing ANY code, run `cat package.json` (or equivalent) to check framework versions.
-- If unsure about an API for the installed version, use WebFetch to read official docs first.
-- Never guess API signatures. Check docs.
-
-### Icon & Visual Rules
-- Icons MUST come from a declared icon library (Lucide/Heroicons/Tabler). No emoji as icons.
-- No purple/pink gradient themes. No default system font only.
-- Before showing any UI code, self-check: no emoji characters in the source.
-
-### Frontend/Backend Alignment
-- Frontend fetch URLs must exactly match backend route definitions.
-- Define API paths as shared constants when possible.
-
-### Per-File Self-Check
-- Before writing each file: correct imports, no emoji, colors from tokens only.
-- After completing a feature, run build + lint. Fix errors before moving on.
-
-### CLI Commands During Coding
-- Run `super-dev enforce validate` after writing UI code.
-- Run `super-dev quality` after completing a feature.
-- Run `super-dev review --state ui` after frontend is done.
-- Run `super-dev release proof-pack` before final delivery.
-
-## Four-Layer Governance Model
-
-Super Dev governance operates at four layers:
-
-**Layer 1 — CLAUDE.md (Persistent Rules)**
-Project-root `CLAUDE.md` is the canonical persistent memory surface. `.claude/CLAUDE.md` is kept as a compatibility mirror for builds that still read nested memory files.
-
-**Layer 2 — Skills (Primary Execution Contract)**
-Project-level `.claude/skills/super-dev/` and user-level `~/.claude/skills/super-dev/` carry the primary Super Dev execution contract. Claude Code only uses `super-dev` as the single skill name — no legacy core alias remains.
-
-**Layer 3 — Hooks (Runtime Enforcement)**
-PreToolUse hooks validate every file write. PostToolUse hooks audit results.
-Hooks are auto-registered when /super-dev is invoked.
-
-**Layer 4 — CLI Commands & Optional Plugin Enhancement (On-Demand Checks)**
-Run `super-dev enforce validate` / `super-dev quality` for deeper checks.
-These are triggered at key milestones, not every turn.
-If Claude Code surfaces repo plugins, `.claude-plugin/marketplace.json` + `plugins/super-dev-claude/.claude-plugin/plugin.json` should enhance the same Super Dev flow rather than fork it.
-
-## Super Dev System Flow Contract
-- SUPER_DEV_FLOW_CONTRACT_V1
-- PHASE_CHAIN: research>docs>docs_confirm>spec>frontend>preview_confirm>backend>quality>delivery
-- DOC_CONFIRM_GATE: required
-- PREVIEW_CONFIRM_GATE: required
-- HOST_PARITY: required
-<!-- END SUPER DEV CLAUDE -->
-
-
-
+- Do not reintroduce Python packaging (`pyproject.toml`, `super_dev/`).
+- Do not add adapters for hosts without an official Agent SDK. The
+  supported families are exactly: Anthropic, OpenAI, Google Antigravity.
+- Do not vendor `claude-agent-sdk`, `openai-agents`, or `google-adk` as
+  crate dependencies. Super Dev is pure-Rust by design. (Driving the
+  user's *installed* `claude` / `codex` CLI as a subprocess — see
+  `super-dev-host` — is the intended architecture and not this rule.)

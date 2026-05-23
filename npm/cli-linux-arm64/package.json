@@ -1,0 +1,21 @@
+{
+  "name": "@super-dev/cli-linux-arm64",
+  "version": "4.4.0",
+  "description": "super-dev prebuilt binary for Linux (aarch64 / gnu).",
+  "homepage": "https://github.com/shangyankeji/super-dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shangyankeji/super-dev.git"
+  },
+  "license": "MIT",
+  "files": [
+    "bin/"
+  ],
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "preferUnplugged": true
+}

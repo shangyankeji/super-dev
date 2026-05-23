@@ -1,63 +1,144 @@
-# 贡献指南 | Contributing Guide
+# Contributing to Super Dev | 贡献指南
 
-感谢你对 Super Dev 的贡献！/ Thank you for contributing to Super Dev!
+Thank you for contributing to Super Dev! 感谢贡献。
 
-## 如何贡献 | How to Contribute
+Super Dev 3.x is a **Rust workspace** that ships a single static binary
+plus per-host plugin bundles. Contributions can target any layer:
+governance kernel, agent runner, runtime adapters, CLI, plugin
+manifests, or the SUPER_DEV_HOST_SPEC_V1 spec itself.
 
-1. Fork [super-dev](https://github.com/shangyankeji/super-dev) 仓库
-2. 创建功能分支：`git checkout -b feat/your-feature`
-3. 提交更改并推送到你的 Fork
-4. 提交 Pull Request 到 `main` 分支
+## How to contribute | 如何贡献
 
-## 开发环境 | Development Setup
+1. Fork [super-dev](https://github.com/shangyankeji/super-dev).
+2. Create a feature branch: `git checkout -b feat/your-feature`.
+3. Make your changes; run the local checks below.
+4. Open a Pull Request against `main`.
 
-```bash
-# 需要 Python 3.10+
-pip install -e ".[dev]"
-```
+## Development setup | 开发环境
 
-## 代码风格 | Code Style
+Required:
 
-使用 **ruff** 和 **black**，行长度 100 字符。
-
-```bash
-ruff check super_dev/        # 检查
-ruff check --fix super_dev/  # 自动修复
-black super_dev/             # 格式化
-mypy super_dev/              # 类型检查
-```
-
-## 测试 | Testing
+- Rust **1.75+** (stable channel; check with `rustc --version`).
+- A working `cargo` (`rustup` is the easiest installer).
+- No Python, no Node, no Docker — Super Dev 3.x is pure Rust.
 
 ```bash
-pytest                              # 全部测试
-pytest tests/unit/test_xxx.py -v    # 单文件
-pytest --cov=super_dev              # 覆盖率
+git clone https://github.com/shangyankeji/super-dev.git
+cd super-dev
+cargo build --workspace
 ```
 
-请为新代码添加对应的单元测试。
-
-## 提交规范 | Commit Conventions
-
-遵循 [Conventional Commits](https://www.conventionalcommits.org/)：
+## Workspace layout | 工作区结构
 
 ```
-feat(scope): description    # 新功能
-fix(scope): description     # 修复
-docs: description           # 文档
-ci: description             # CI/CD
-chore: description          # 维护
+crates/
+├── super-dev/             # main binary (clap CLI)
+├── super-dev-spec/        # SUPER_DEV_HOST_SPEC_V1 as Rust data
+├── super-dev-governance/  # rules / audit / context / compliance kernel
+├── super-dev-agent/       # 9-phase runner + gates + state + experts + coach
+└── super-dev-runtime/     # Anthropic / OpenAI / Antigravity HTTP adapters
+
+plugin/
+├── claude-code/           # Claude Code plugin bundle (skill + commands + plugin.json)
+├── codex/                 # Codex plugin bundle (AGENTS.md + .codex/config.toml + skills)
+└── antigravity/           # Antigravity plugin bundle (AGENTS.md + skills)
+
+spec/
+└── SUPER_DEV_HOST_SPEC_V1.md   # normative specification
 ```
 
-常用 scope：`orchestrator`、`enforcement`、`cli`、`website`、`hosts`。
+## Local checks | 本地校验
 
-## PR 要求 | PR Requirements
+Every PR must pass these three commands clean:
 
-- 清晰的 PR 描述，说明变更原因和内容
-- 所有测试通过（`pytest`）
-- Lint 通过（`ruff check` + `black --check`）
-- 新功能需包含测试用例
+```bash
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+```
 
-## 报告问题 | Reporting Issues
+Convenient aliases (no installation required):
 
-请在 [GitHub Issues](https://github.com/shangyankeji/super-dev/issues) 提交 Bug 或功能建议，包含复现步骤和环境信息。
+```bash
+cargo fmt --all                       # apply formatting
+cargo clippy --workspace --fix        # auto-apply safe lint fixes
+cargo test --workspace --all-targets  # unit + integration + doc tests
+```
+
+## Adding a new spec clause | 新增规范条款
+
+Spec changes touch four places that **must stay in sync**:
+
+1. **Markdown** — add the new clause section to `spec/SUPER_DEV_HOST_SPEC_V1.md`.
+2. **Rust data** — append a `Clause { id, layer, title, level, section }`
+   entry to `crates/super-dev-spec/src/lib.rs#CLAUSES`. IDs are
+   permanent — never renumber.
+3. **Implementation** — if the clause is enforceable, add the
+   judgment / audit logic to `crates/super-dev-governance/src/{rules,audit,...}.rs`.
+4. **Compliance mapping** — if the clause maps to external frameworks,
+   extend `framework_for()` in
+   `crates/super-dev-governance/src/compliance.rs`.
+
+Tests in `crates/super-dev-spec/src/lib.rs` pin the clause-table
+structure; they will fail if you add a malformed ID. Add a unit test
+for the new rule alongside the implementation.
+
+## Adding a new host | 新增宿主
+
+1. Create `plugin/<host>/` with the host's native files (`AGENTS.md` or
+   equivalent, optional hook config, `skills/super-dev/SKILL.md`).
+2. Append a `(path, include_str!)` entry block to
+   `crates/super-dev/src/install.rs#<HOST>_PLUGIN` and add an
+   `InstallTarget::<Variant>`.
+3. Wire the new variant into `resolve_install_root` (workspace vs user
+   scope path) and the `InstallHost` clap value-enum in
+   `crates/super-dev/src/main.rs`.
+4. Add install + idempotency + detection tests in
+   `crates/super-dev/src/install.rs#tests`.
+
+Only hosts with an **official Agent SDK** are in scope for the
+reference implementation — see SUPER_DEV_HOST_SPEC_V1 §7.
+
+## Commit conventions | 提交规范
+
+Follow [Conventional Commits](https://www.conventionalcommits.org):
+
+```
+feat(scope): description    # new functionality
+fix(scope): description     # bug fix
+docs: description           # documentation only
+test: description           # tests only
+refactor(scope): description
+chore: description          # tooling, deps
+ci: description             # GitHub Actions / release workflow
+```
+
+Common scopes: `spec`, `governance`, `agent`, `runtime`, `cli`,
+`install`, `plugin`, `coach`.
+
+## PR checklist | PR 自检清单
+
+Before requesting review:
+
+- [ ] `cargo fmt --check` clean
+- [ ] `cargo clippy -D warnings` clean
+- [ ] `cargo test --workspace` green
+- [ ] New code has unit tests in the same file (`mod tests { ... }`)
+- [ ] If you changed `spec/SUPER_DEV_HOST_SPEC_V1.md`, you also
+      changed `crates/super-dev-spec/src/lib.rs#CLAUSES` (or vice versa)
+- [ ] PR description explains the *why*, not just the *what*
+- [ ] CHANGELOG.md updated under `[Unreleased]` for user-visible changes
+
+## Reporting issues | 报告问题
+
+Open issues at https://github.com/shangyankeji/super-dev/issues with:
+
+- `super-dev verify` output (paste verbatim)
+- Reproduction steps
+- Expected vs actual behavior
+- OS + `rustc --version` for build issues
+
+## License | 许可
+
+By contributing you agree your code is licensed under the project's
+[MIT License](LICENSE).

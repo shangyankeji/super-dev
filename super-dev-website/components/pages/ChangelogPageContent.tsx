@@ -6,6 +6,18 @@ import type { SiteLocale } from '@/lib/site-locale';
 const CHANGELOG = {
   zh: [
     {
+      version: '2.4.1',
+      date: '2026-04-25',
+      type: 'patch' as const,
+      changes: [
+        '当前修复主线切到五个直接影响交付判断的问题：backend-only 项目的 UI / UIUX 门禁收口、release readiness 的原生测试命令识别、轻量 resume 上下文、文档生命周期索引，以及 --with-user-surfaces 的接入一致性',
+        '新增 super-dev docs lifecycle，生成 .super-dev/DOCS_INDEX.md 和 docs-index.json，把当前事实、active change、spec 与只读 archive 分清楚',
+        'resume / continue 默认不再要求宿主读取全量 output、review-state、history、proof-pack 和旧截图，避免新窗口一开始就吃掉大半上下文',
+        '代码、文档、技能模板、官网首页和 Docs 当前版本统一切到 2.4.1，避免对外入口继续停留在 2.4.0',
+        '这版会继续沿着 patch 路径收口 14 / 15 / 16 号 issue，再进入正式发布',
+      ],
+    },
+    {
       version: '2.4.0',
       date: '2026-04-22',
       type: 'major' as const,
@@ -221,6 +233,18 @@ const CHANGELOG = {
     { version: '1.0.0', date: '2025-12-29', type: 'major' as const, changes: ['首次发布', '基础流水线框架（research / documents / spec / implement）', 'Spec-Driven Development 模块', '支持 Claude Code、Cursor、Windsurf 宿主', 'PyPI 正式发布'] },
   ],
   en: [
+    {
+      version: '2.4.1',
+      date: '2026-04-25',
+      type: 'patch' as const,
+      changes: [
+        'The current patch line focuses on five issues that directly affect delivery correctness: backend-only UI gating, native test-command detection, lightweight resume context, document lifecycle indexing, and --with-user-surfaces onboarding consistency.',
+        'Added super-dev docs lifecycle to generate .super-dev/DOCS_INDEX.md and docs-index.json, separating current truth, active changes, specs, and read-only archives.',
+        'resume / continue no longer asks hosts to read full output, review-state, history, proof packs, or old screenshots by default, reducing new-session context pressure.',
+        'Code, docs, skill templates, the homepage, and the docs entry now all point at 2.4.1 so the public surface stops lagging behind the active patch version.',
+        'This patch continues by closing issues #14, #15, and #16 before the next formal release.',
+      ],
+    },
     {
       version: '2.4.0',
       date: '2026-04-22',
@@ -471,7 +495,7 @@ export function ChangelogPageContent({ locale = 'zh' }: { locale?: SiteLocale })
                     : release.changes.slice(0, 2);
                 const showExpandedMajorView = index === 0 && release.type === 'major';
                 const releaseNotesHref =
-                  release.version === '2.4.0'
+                  release.version === releases[0]?.version
                     ? locale === 'zh'
                       ? '/docs/#highlights'
                       : '/en/docs/#highlights'

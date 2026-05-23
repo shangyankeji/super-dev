@@ -1,0 +1,79 @@
+Super Dev — 60-second walkthrough
+=================================
+
+WHAT IS SUPER DEV?
+------------------
+  Super Dev is the **project manager** for AI coding. It does NOT call
+  any LLM — it drives the Claude Code / Codex you already logged into.
+  Result: zero API key, deterministic process, full audit trail.
+
+THE PIPELINE (9 phases, 2 gates)
+--------------------------------
+  research → docs → ⏸ docs_confirm → spec → frontend → ⏸ preview_confirm
+                                              → backend → quality → delivery
+
+  ⏸ = Super Dev pauses, you review the artifacts, then approve to continue.
+
+YOUR ROLE
+---------
+  1. Type a one-line requirement.
+  2. Wait while Super Dev drives the AI through the early phases.
+  3. At the first gate (docs_confirm): read the PRD / architecture / UIUX.
+       • happy?    press 'c'
+       • not yet?  press 'q', use `super-dev revise "..."`, then retry
+  4. Wait again, gate 2 (preview_confirm): review spec + frontend output.
+  5. Wait again, pipeline finishes → take the proof-pack zip in `release/`.
+
+THE 9 COMMANDS
+--------------
+  super-dev                  launch the chat TUI (recommended; no subcommand = this)
+  super-dev init             write super-dev.yaml (run once per workspace)
+  super-dev run <req>        scripted form, no TUI
+  super-dev continue         approve the active gate
+  super-dev revise "<text>"  record a revision (stays at gate)
+  super-dev spec             print the SUPER_DEV_HOST_SPEC_V1 spec
+  super-dev verify           workspace conformance report
+  super-dev doctor           self-test
+  super-dev report           emit SOC2 / ISO27001 / EU AI Act mapping
+  super-dev examples         cheat-sheet (you're looking at the longer version)
+  super-dev guide            this walkthrough
+
+WHAT GETS WRITTEN
+-----------------
+  output/                  AI-generated artifacts (PRD, architecture, UIUX, code)
+    <slug>-prd.md
+    <slug>-architecture.md
+    <slug>-uiux.md
+    <slug>-execution-plan.md
+    <slug>-frontend-notes.md
+    <slug>-backend-notes.md
+    <slug>-quality-gate.json
+    <slug>-compliance-mapping.json
+  .super-dev/              state + audit (do not edit by hand)
+    workflow-state.json
+    audit/tool-calls.jsonl
+    audit/verify.jsonl        ← build / test outcomes per phase
+    decisions/<gate>.md       ← every revision request
+  super-dev.yaml           your spec manifest
+  release/                 final deliverable
+    proof-pack-<slug>-<ts>.zip   ← give this to your stakeholder
+
+GOVERNANCE RULES (always enforced)
+----------------------------------
+  SD-CODE-001  no emoji as functional icons
+  SD-CODE-002  no hardcoded colors — design tokens only
+  SD-CODE-003  frontend↔backend API path alignment
+  SD-CODE-004  tech-stack pre-research
+  SD-FLOW-*    phase chain + 2 gates + revision semantics + session continuity
+  SD-ART-*     6 mandatory artifacts (PRD / architecture / UIUX / spec / tasks / ADR)
+  SD-EVID-*    5-piece evidence chain (API + tool-call audit + quality + compliance + proof-pack)
+  SD-META-*    spec manifest + version negotiation
+
+  Verify loop runs `cargo check` / `npm install` / `python3` after every
+  code phase. Failures land in .super-dev/audit/verify.jsonl.
+
+NEXT STEPS
+----------
+  super-dev examples     # the cheat-sheet
+  super-dev spec         # the formal spec
+  super-dev              # just start using it

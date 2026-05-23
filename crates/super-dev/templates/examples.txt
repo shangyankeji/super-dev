@@ -1,0 +1,60 @@
+Super Dev — common workflows
+============================
+
+★ First-time use (recommended)
+-------------------------------
+    super-dev                                 # launch the TUI, auto-detects claude / codex
+                                              # type your requirement, press Enter
+                                              # at each gate: read artifacts, press 'c'
+                                              # done → release/proof-pack-*.zip
+
+★ Scripted / CI form
+--------------------
+    super-dev init                            # write super-dev.yaml manifest
+    super-dev run "做一个登录系统" \
+                --backend claude-code         # drive Claude Code (no API key needed)
+    super-dev continue                        # approve docs_confirm gate
+    super-dev continue                        # approve preview_confirm gate
+    super-dev verify                          # check final workspace state
+
+★ Iterating at a gate
+---------------------
+    super-dev revise "把 OAuth 那段去掉,先做 MVP"     # record revision request
+    # re-run last block, then:
+    super-dev continue                        # once happy
+
+★ Switching the worker
+----------------------
+    super-dev run "..." --backend codex       # use Codex instead of Claude Code
+    super-dev run "..."                       # no --backend → offline templates (demo / CI)
+
+★ Inspecting state
+------------------
+    super-dev verify                          # workflow state + evidence chain summary
+    super-dev doctor                          # binary / workspace self-test
+    super-dev spec --clauses                  # the 25-clause table
+    super-dev report                          # SOC2 / ISO27001 / EU AI Act mapping
+
+★ TUI keybindings
+-----------------
+    Welcome screen:                  Pipeline running:
+      Enter   start                    c      approve gate
+      Tab     switch backend           b      backends overlay
+      F1      help                     q      quit (state saved)
+      Esc     quit                     F1/?   help
+
+★ Slash commands (TUI welcome only)
+-----------------------------------
+    /help     toggle help overlay
+    /quit     exit
+
+★ Environment overrides
+-----------------------
+    SUPER_DEV_CLAUDE_BIN          path to the `claude` binary       (default: claude)
+    SUPER_DEV_CLAUDE_PRINT_FLAG   non-interactive flag for claude   (default: --print)
+    SUPER_DEV_CODEX_BIN           path to the `codex` binary        (default: codex)
+    SUPER_DEV_CODEX_EXEC_SUBCMD   non-interactive sub-command       (default: exec)
+    SUPER_DEV_VERIFY_TIMEOUT_SECS verify-loop per-call timeout      (default: 120)
+
+For the full spec: super-dev spec
+For a guided walkthrough: super-dev guide

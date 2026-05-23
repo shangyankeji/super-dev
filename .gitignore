@@ -1,93 +1,51 @@
-# Super Dev 项目忽略文件
+# Rust build output
+target/
+**/*.rs.bk
 
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-!super_dev/web/frontend/
-!super_dev/web/frontend/dist/
-!super_dev/web/frontend/dist/index.html
-downloads/
-eggs/
-.eggs/
-/lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# Virtual Environment
-venv/
-ENV/
-env/
-.venv/
-
-# IDE
-.vscode/
+# Editor / OS
+.DS_Store
+Thumbs.db
 .idea/
+.vscode/
 *.swp
 *.swo
 *~
-.codex/config.toml
-.codex/commands/
 
-# OS
-.DS_Store
-Thumbs.db
-
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-
-# Node
-**/node_modules/
-
-# 输出文件
-output/
-.research/
-docs/plans/
-*.docx
-*.pdf
-artifacts/
-.super-dev/runs/
-.super-dev/review-state/
-/.super-dev/policy.yaml
-
-# Host runtime / onboarding artifacts (project-local generated files)
-/.agent/
-/.codebuddy/
-/.gemini/
-/.iflow/
-/.kimi/
-/.kiro/
-/.opencode/
-/.qoder/
-/.trae/
-/.windsurf/
-/GEMINI.md
-
-# Local logs and media
-logs/
-dist_2_0_9/
-
-# Super Dev runtime state (per-project, not code)
+# Workspace runtime state (per-project, not source)
+.super-dev/audit/
+.super-dev/quality/
+.super-dev/compliance/
 .super-dev/decisions/
 .super-dev/workflow-history/
 .super-dev/workflow-events.jsonl
+.super-dev/workflow-state.json
+.super-dev/SESSION_BRIEF.md
+.super-dev/pipeline-state.json
+.super-dev/checkpoints/
 .super-dev/knowledge-stats.db
 .super-dev/install-manifest.json
-.super-dev/checkpoints/
-.super-dev/pipeline-state.json
-.super-dev/SESSION_BRIEF.md
-.super-dev/workflow-state.json
 .super-dev/project.md
+.super-dev/runs/
+.super-dev/coach/
+.super-dev/changes/
+
+# Per-platform npm sub-packages have their binaries populated at
+# release time; .gitkeep keeps the dir tracked but the actual binaries
+# never live in source control.
+npm/cli-*/bin/super-dev
+npm/cli-*/bin/super-dev.exe
+
+# Generated artifacts the user keeps locally
+output/
+
+# Node modules from the marketing site
+super-dev-website/node_modules/
+super-dev-website/.next/
+super-dev-website/out/
+
+# Secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key

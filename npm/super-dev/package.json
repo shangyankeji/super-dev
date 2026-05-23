@@ -1,0 +1,43 @@
+{
+  "name": "super-dev",
+  "version": "4.4.0",
+  "description": "AI 编码的项目经理 — drives your logged-in Claude Code / Codex through a 9-phase commercial delivery pipeline. No API key needed.",
+  "keywords": [
+    "ai",
+    "claude-code",
+    "codex",
+    "tui",
+    "rust",
+    "agent",
+    "orchestrator",
+    "spec-driven",
+    "audit"
+  ],
+  "homepage": "https://github.com/shangyankeji/super-dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shangyankeji/super-dev.git"
+  },
+  "bugs": {
+    "url": "https://github.com/shangyankeji/super-dev/issues"
+  },
+  "license": "MIT",
+  "author": "Shangyan Technology <11964948@qq.com>",
+  "bin": {
+    "super-dev": "bin/cli.js"
+  },
+  "files": [
+    "bin/",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "optionalDependencies": {
+    "@super-dev/cli-darwin-arm64": "4.4.0",
+    "@super-dev/cli-darwin-x64": "4.4.0",
+    "@super-dev/cli-linux-x64": "4.4.0",
+    "@super-dev/cli-linux-arm64": "4.4.0",
+    "@super-dev/cli-win32-x64": "4.4.0"
+  }
+}
