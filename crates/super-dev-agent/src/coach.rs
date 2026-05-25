@@ -125,7 +125,8 @@ rules:\n\n\
 - No default-system-font-only designs; always declare a font stack.\n\
 - No \"Welcome to [App]\" giant centered headings with no actual content.\n\
 - No AI-chatbot shell layouts unless the product IS a chatbot.\n\
-- Dark mode support via `prefers-color-scheme` when the UIUX doc defines dark tokens.\
+- Dark mode is REQUIRED. Every UIUX doc MUST include a `@media (prefers-color-scheme: dark)` \
+  block that overrides surface/text/border tokens. Every frontend MUST wire it.\
 "
     .to_string()
 }
@@ -140,7 +141,7 @@ fn render_research(slug: &str, req: &str, opts: &RunOptions) -> String {
          - **Sections (in order):**\n\
            - `# Research — {slug}`\n\
            - `## Requirement` (echo verbatim)\n\
-           - `## Discovery` — answer these design-grounding questions:\n\
+           - `## Discovery` (REQUIRED — do NOT skip this section) — answer these design-grounding questions:\n\
              - **Target audience**: who uses this product? (developers / consumers / enterprise / internal team)\n\
              - **Visual tone**: which fits best? (professional / playful / technical / editorial / bold)\n\
              - **Design direction**: pick ONE from: Modern Minimal / Editorial Clean / Tech Utility / Soft Warm / Bold Geometric\n\
@@ -280,6 +281,9 @@ fn render_docs(slug: &str, req: &str, design_inject: &str) -> String {
          - `## Self-critique` — score this design on 5 dimensions (1-10 each): \
            Hierarchy clarity / Visual distinctiveness / Detail polish / \
            Functional completeness / Innovation. If any ≤ 6, revise before submitting.\n\
+         - `## Dark mode` (REQUIRED) — a complete `@media (prefers-color-scheme: dark)` \
+           block overriding bg/surface/text/border/shadow tokens. Test that it actually \
+           works before submitting.\n\
          - `## Accessibility notes` — contrast ratios, focus rings, ARIA landmarks.\n\n\
          ## Input\n\n\
          ### Requirement\n\n{req}\n\n\

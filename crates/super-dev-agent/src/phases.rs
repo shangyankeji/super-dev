@@ -265,20 +265,17 @@ fn score_path(path: &str, keywords: &[String]) -> usize {
     let p = path.to_ascii_lowercase();
     let path_hits = keywords.iter().filter(|k| p.contains(k.as_str())).count();
     // Content-level check: read first 500 chars for keyword matches.
-    let content_hits = std::fs::read_to_string(path)
-        .ok()
-        .map(|body| {
-            let lower: String = body
-                .chars()
-                .take(500)
-                .collect::<String>()
-                .to_ascii_lowercase();
-            keywords
-                .iter()
-                .filter(|k| lower.contains(k.as_str()))
-                .count()
-        })
-        .unwrap_or(0);
+    let content_hits = std::fs::read_to_string(path).map_or(0, |body| {
+        let lower: String = body
+            .chars()
+            .take(500)
+            .collect::<String>()
+            .to_ascii_lowercase();
+        keywords
+            .iter()
+            .filter(|k| lower.contains(k.as_str()))
+            .count()
+    });
     path_hits * 2 + content_hits
 }
 
@@ -616,6 +613,32 @@ pub fn run_quality(opts: &RunOptions) -> io::Result<PhaseOutput> {
         &output_dir.join(format!("{slug}-research.md")),
         1.5,
     ));
+
+    // Discovery section in research
+    let research_content = fs::read_to_string(output_dir.join(format!("{slug}-research.md")))
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let has_discovery = research_content.contains("## discovery")
+        || research_content.contains("target audience")
+        || research_content.contains("design direction");
+    checks.push(QualityCheck {
+        name: "Discovery section".to_string(),
+        category: "quality".to_string(),
+        description: "Research brief includes Discovery questions (audience/tone/direction)"
+            .to_string(),
+        status: if has_discovery {
+            "passed".to_string()
+        } else {
+            "warning".to_string()
+        },
+        score: if has_discovery { 100 } else { 60 },
+        details: if has_discovery {
+            "Discovery section found in research brief".to_string()
+        } else {
+            "Missing Discovery section — design direction may be inconsistent".to_string()
+        },
+        weight: 1.5,
+    });
 
     // SD-ART-002 — three core docs
     for (label, file) in [
