@@ -60,9 +60,25 @@ impl ClaudeCodeDriver {
     }
 
     /// The argument vector preceding the prompt. Exposed for tests.
+    ///
+    /// Flag rationale:
+    /// - `--print` (or `-p`): non-interactive single-shot mode.
+    /// - `--output-format text`: explicit text output — no JSON envelope
+    ///   so the existing `clean_output` pipeline gets plain markdown.
+    ///
+    /// Deliberately **does NOT** pass `--bare`. Anthropic's headless
+    /// docs recommend `--bare` for CI, but bare mode skips OAuth and
+    /// keychain reads, requiring `ANTHROPIC_API_KEY`. Super Dev's whole
+    /// pitch is "drive your already-logged-in subscription", so the
+    /// keychain MUST be reachable — `--bare` would break the very
+    /// users we exist to serve.
     #[must_use]
     pub fn base_args(&self) -> Vec<String> {
-        vec![self.print_flag.clone()]
+        vec![
+            self.print_flag.clone(),
+            "--output-format".to_string(),
+            "text".to_string(),
+        ]
     }
 }
 
@@ -102,7 +118,7 @@ impl HostDriver for ClaudeCodeDriver {
     }
 
     fn display_name(&self) -> &'static str {
-        "Claude Code"
+        "Claude Code CLI"
     }
 
     async fn probe(&self) -> ProbeResult {
@@ -136,9 +152,16 @@ mod tests {
     fn defaults_are_sane() {
         let d = ClaudeCodeDriver::default();
         assert_eq!(d.backend_id(), "claude-code");
-        assert_eq!(d.display_name(), "Claude Code");
+        assert_eq!(d.display_name(), "Claude Code CLI");
         assert_eq!(d.kind(), RuntimeKind::Anthropic);
-        assert_eq!(d.base_args(), vec!["--print".to_string()]);
+        assert_eq!(
+            d.base_args(),
+            vec![
+                "--print".to_string(),
+                "--output-format".to_string(),
+                "text".to_string(),
+            ]
+        );
     }
 
     #[tokio::test]

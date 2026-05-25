@@ -288,7 +288,9 @@ fn render_chat_history(frame: &mut Frame, area: Rect, app: &App) {
         // Blank separator between messages keeps the wall readable.
         rendered.push(Line::from(""));
     }
-    let take = rendered.len().min(inner_height);
+    let total_rendered = rendered.len();
+    let take = total_rendered.min(inner_height);
+    let hidden_above = total_rendered.saturating_sub(take);
     let visible: Vec<Line<'static>> = rendered
         .into_iter()
         .rev()
@@ -297,12 +299,15 @@ fn render_chat_history(frame: &mut Frame, area: Rect, app: &App) {
         .into_iter()
         .rev()
         .collect();
+    // Surface "N more lines scrolled off-screen" in the block title so
+    // the user is never silently missing context.
+    let title = if hidden_above == 0 {
+        " Conversation ".to_string()
+    } else {
+        format!(" Conversation · ↑ {hidden_above} more above ")
+    };
     let para = Paragraph::new(visible)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(" Conversation "),
-        )
+        .block(Block::default().borders(Borders::ALL).title(title))
         .wrap(Wrap { trim: false });
     frame.render_widget(para, area);
 }
@@ -316,10 +321,21 @@ fn render_chat_input(frame: &mut Frame, area: Rect, app: &App) {
 
     let title = if app.input.starts_with('/') {
         " /-command — ↑↓ choose · Tab autocomplete · Enter run ".to_string()
+    } else if let Some(gate) = app.active_gate {
+        // Gate-aware hint — surface what to do when the pipeline is
+        // paused so the user doesn't have to guess.
+        format!(
+            " ⏸ at gate `{}` — type revision / /continue / /diff ",
+            gate.id_str()
+        )
     } else if app.input.contains('\n') {
         " multi-line · Enter submit · Shift+Enter newline · ↑↓ recall ".to_string()
     } else if !app.input.is_empty() {
         " Enter submit · Shift+Enter newline · ↑↓ recall history ".to_string()
+    } else if app.finished {
+        " ✓ pipeline complete — type a new requirement to start another, or /quit ".to_string()
+    } else if app.run_started {
+        " ⏳ pipeline running — wait for the next gate, or /quit to exit ".to_string()
     } else {
         " type your reply · /help for slash commands · ↑↓ recall history ".to_string()
     };
@@ -399,7 +415,7 @@ fn render_chat_footer(frame: &mut Frame, area: Rect, _app: &App) {
 // ---------- Help overlay (both modes) -------------------------------------
 
 fn render_help_overlay(frame: &mut Frame, app: &App) {
-    let area = centered_rect(frame.area(), 70, 75);
+    let area = centered_rect(frame.area(), 72, 80);
     frame.render_widget(Clear, area);
 
     let header = match app.mode {
@@ -407,38 +423,7 @@ fn render_help_overlay(frame: &mut Frame, app: &App) {
         AppMode::Chat => " Help — slash commands & keys ",
     };
 
-    let rows: Vec<(&str, &str)> = match app.mode {
-        AppMode::Picker => vec![
-            ("↑ / ↓", "navigate the worker list"),
-            ("Enter", "confirm — saves to ~/.super-dev/config.toml"),
-            ("F1", "toggle this help"),
-            ("Esc", "quit"),
-        ],
-        AppMode::Chat => vec![
-            (
-                "Enter",
-                "submit; non-slash = requirement (or revision if a gate is open)",
-            ),
-            ("/claude", "switch worker to Claude Code"),
-            ("/codex", "switch worker to Codex"),
-            ("/offline", "switch worker to deterministic templates"),
-            ("/init", "(reminder) workspace bootstrap is a CLI verb"),
-            ("/continue", "approve the active gate"),
-            ("/revise <txt>", "stay at gate, request changes"),
-            ("/diff", "show last artifact (M14 phase 2 — coming)"),
-            (
-                "/spec /verify /doctor",
-                "show spec / status / self-test (coming)",
-            ),
-            ("/clear", "clear chat history (config stays)"),
-            ("/help or /?", "this overlay"),
-            ("/quit", "exit"),
-            ("F1", "toggle this overlay"),
-            ("Esc", "close overlay / quit"),
-        ],
-    };
-
-    let mut items: Vec<ListItem> = Vec::with_capacity(rows.len() + 2);
+    let mut items: Vec<ListItem> = Vec::new();
     items.push(ListItem::new(Line::from(Span::styled(
         " Super Dev — AI 编码的项目经理",
         Style::default()
@@ -446,16 +431,90 @@ fn render_help_overlay(frame: &mut Frame, app: &App) {
             .add_modifier(Modifier::BOLD),
     ))));
     items.push(ListItem::new(Line::from("")));
-    for (key, desc) in rows {
-        items.push(ListItem::new(Line::from(vec![
-            Span::styled(
-                format!("  {key:<22} "),
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(desc.to_string(), Style::default().fg(Color::Gray)),
-        ])));
+
+    match app.mode {
+        AppMode::Picker => {
+            push_help_group(
+                &mut items,
+                "Navigation",
+                &[
+                    ("↑ / ↓", "navigate the worker list"),
+                    ("Enter", "confirm — saves to ~/.super-dev/config.toml"),
+                    ("F1", "toggle this help"),
+                    ("Esc", "quit"),
+                ],
+            );
+        }
+        AppMode::Chat => {
+            push_help_group(
+                &mut items,
+                "Worker",
+                &[
+                    ("/claude", "Claude Code CLI"),
+                    ("/codex", "Codex CLI"),
+                    ("/gemini", "Gemini CLI"),
+                    ("/droid", "Droid CLI"),
+                    ("/opencode", "OpenCode CLI"),
+                    ("/qwen", "Qwen Code CLI"),
+                    ("/copilot", "Copilot CLI"),
+                    ("/trae", "Trae CLI"),
+                    ("/codebuddy", "CodeBuddy CLI"),
+                    ("/qoder", "Qoder CLI"),
+                    ("/kimi", "Kimi Code CLI"),
+                    ("/offline", "deterministic templates"),
+                    ("/model <id>", "set model id (saved to config.toml)"),
+                ],
+            );
+            push_help_group(
+                &mut items,
+                "Pipeline & gates",
+                &[
+                    (
+                        "Enter",
+                        "submit; non-slash = requirement (or revision at gate)",
+                    ),
+                    ("/continue or c", "approve the active gate"),
+                    ("/revise <txt>", "stay at gate, request changes"),
+                    ("/diff [artifact]", "show an artifact (default: PRD)"),
+                    ("/run [slug] <req>", "start a new run with explicit slug"),
+                    ("/init", "write super-dev.yaml manifest"),
+                ],
+            );
+            push_help_group(
+                &mut items,
+                "Design & inspect",
+                &[
+                    ("/design <name>", "pick a design system"),
+                    ("/template <name>", "pick a seed template"),
+                    ("/status", "detailed pipeline status"),
+                    ("/export", "export latest proof-pack"),
+                    ("/knowledge", "list knowledge + design files"),
+                    ("/spec", "show spec clauses"),
+                    ("/verify", "workspace conformance"),
+                    ("/doctor", "self-test"),
+                    ("/history", "conversation history"),
+                    ("/version", "versions"),
+                    ("/changelog", "CHANGELOG"),
+                ],
+            );
+            push_help_group(
+                &mut items,
+                "Editing & exit",
+                &[
+                    (
+                        "Shift+Enter",
+                        "insert newline (multi-line requirement / revision)",
+                    ),
+                    ("↑ / ↓", "recall input history"),
+                    ("Tab", "autocomplete from slash palette"),
+                    ("/clear", "clear chat history (config stays)"),
+                    ("/help or /?", "this overlay"),
+                    ("/quit or q", "exit"),
+                    ("F1", "toggle this overlay"),
+                    ("Esc", "close overlay / quit"),
+                ],
+            );
+        }
     }
 
     let list = List::new(items).block(
@@ -465,6 +524,27 @@ fn render_help_overlay(frame: &mut Frame, app: &App) {
             .border_style(Style::default().fg(Color::Cyan)),
     );
     frame.render_widget(list, area);
+}
+
+fn push_help_group(items: &mut Vec<ListItem<'_>>, title: &str, rows: &[(&str, &str)]) {
+    items.push(ListItem::new(Line::from(Span::styled(
+        format!(" {title}"),
+        Style::default()
+            .fg(Color::LightCyan)
+            .add_modifier(Modifier::BOLD),
+    ))));
+    for (key, desc) in rows {
+        items.push(ListItem::new(Line::from(vec![
+            Span::styled(
+                format!("  {key:<22} "),
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled((*desc).to_string(), Style::default().fg(Color::Gray)),
+        ])));
+    }
+    items.push(ListItem::new(Line::from("")));
 }
 
 fn centered_rect(area: Rect, percent_x: u16, percent_y: u16) -> Rect {
@@ -492,7 +572,7 @@ mod tests {
     use super_dev_spec::Phase;
 
     fn render_to_string(app: &App) -> String {
-        let backend = TestBackend::new(100, 32);
+        let backend = TestBackend::new(120, 70);
         let mut terminal = Terminal::new(backend).unwrap();
         terminal.draw(|f| render(f, app)).unwrap();
         let buffer = terminal.backend().buffer().clone();
@@ -509,6 +589,7 @@ mod tests {
             UserConfig {
                 backend: backend.map(str::to_string),
                 model: None,
+                ..Default::default()
             },
             std::path::PathBuf::from("/tmp/sd-test-config.toml"),
             std::path::PathBuf::from("/tmp/sd-test-workspace"),
@@ -588,6 +669,52 @@ mod tests {
     }
 
     #[test]
+    fn chat_history_title_surfaces_scrolloff_count() {
+        let mut app = app_with(Some("offline"));
+        // Render at a small viewport so plenty of lines spill above.
+        for i in 0..40 {
+            app.apply_engine(super_dev_agent::EngineEvent::Note(format!(
+                "scroll-content-line-{i}"
+            )));
+        }
+        let backend = TestBackend::new(80, 18);
+        let mut term = Terminal::new(backend).unwrap();
+        term.draw(|f| crate::ui::render(f, &app)).unwrap();
+        let buf = term.backend().buffer();
+        let mut out = String::new();
+        for y in 0..buf.area().height {
+            for x in 0..buf.area().width {
+                out.push_str(buf[(x, y)].symbol());
+            }
+            out.push('\n');
+        }
+        assert!(out.contains("more above"), "title was: {out}");
+    }
+
+    #[test]
+    fn input_title_shows_gate_hint_when_paused() {
+        let mut app = app_with(Some("offline"));
+        app.apply_engine(super_dev_agent::EngineEvent::GateOpened {
+            gate: super_dev_agent::Gate::DocsConfirm,
+        });
+        let out = render_to_string(&app);
+        // The input box title is gate-aware.
+        assert!(out.contains("at gate"));
+        assert!(out.contains("docs_confirm"));
+    }
+
+    #[test]
+    fn input_title_shows_running_hint_when_pipeline_active() {
+        let mut app = app_with(Some("offline"));
+        app.apply_engine(super_dev_agent::EngineEvent::PipelineStarted {
+            slug: "demo".into(),
+            requirement: "x".into(),
+        });
+        let out = render_to_string(&app);
+        assert!(out.contains("pipeline running"));
+    }
+
+    #[test]
     fn cursor_glyph_moves_with_arrow_keys() {
         let mut app = app_with(Some("offline"));
         for c in "abc".chars() {
@@ -644,5 +771,33 @@ mod tests {
         assert!(out.contains("slash commands"));
         assert!(out.contains("/claude"));
         assert!(out.contains("/quit"));
+    }
+
+    #[test]
+    fn help_overlay_in_chat_uses_grouped_sections() {
+        let mut app = app_with(Some("offline"));
+        let _ = app.apply_key(KeyCode::F(1));
+        // Render at a taller terminal so the 4-group overlay isn't cropped.
+        let backend = TestBackend::new(120, 60);
+        let mut term = Terminal::new(backend).unwrap();
+        term.draw(|f| crate::ui::render(f, &app)).unwrap();
+        let buf = term.backend().buffer();
+        let mut out = String::new();
+        for y in 0..buf.area().height {
+            for x in 0..buf.area().width {
+                out.push_str(buf[(x, y)].symbol());
+            }
+            out.push('\n');
+        }
+        // Each group header appears, and verbs are sorted under them.
+        assert!(out.contains("Worker"));
+        assert!(out.contains("Pipeline & gates"));
+        assert!(out.contains("Design & inspect"));
+        assert!(out.contains("Editing & exit"));
+        // 4.4 surfaces live in the right groups.
+        assert!(out.contains("/model"));
+        assert!(out.contains("/version"));
+        assert!(out.contains("/changelog"));
+        assert!(out.contains("Shift+Enter"));
     }
 }

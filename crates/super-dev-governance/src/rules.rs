@@ -178,6 +178,62 @@ pub fn check_color_tokens(file_path: &str, content: &str) -> Decision {
     Decision::block("SD-CODE-002", reason)
 }
 
+/// Check for common "AI slop" visual anti-patterns in UI source files.
+///
+/// P0-level checks (cardinal sins that make output look AI-generated):
+/// - Purple/violet gradient backgrounds (`linear-gradient` containing purple hues)
+/// - "Lorem ipsum" placeholder text
+/// - "Welcome to [App]" generic hero headings
+///
+/// Implements an extension of **SD-CODE-001/002** focused on visual
+/// quality beyond just emoji and color tokens.
+#[must_use]
+pub fn check_ai_slop(file_path: &str, content: &str) -> Decision {
+    let ext = extension_of(file_path);
+    if !EMOJI_GUARDED_EXTS.contains(&ext.as_str()) {
+        return Decision::pass();
+    }
+
+    let mut issues: Vec<&str> = Vec::new();
+
+    let lower = content.to_ascii_lowercase();
+    if lower.contains("lorem ipsum") || lower.contains("dolor sit amet") {
+        issues.push("Lorem ipsum placeholder text");
+    }
+    if lower.contains("welcome to")
+        && (lower.contains("<h1") || lower.contains("<h2") || lower.contains("heading"))
+    {
+        issues.push("Generic 'Welcome to [App]' heading");
+    }
+    if lower.contains("linear-gradient") {
+        let has_purple = lower.contains("#7c3aed")
+            || lower.contains("#8b5cf6")
+            || lower.contains("#a855f7")
+            || lower.contains("#9333ea")
+            || lower.contains("purple")
+            || lower.contains("violet");
+        let has_pink = lower.contains("#ec4899")
+            || lower.contains("#f472b6")
+            || lower.contains("pink")
+            || lower.contains("fuchsia");
+        if has_purple && has_pink {
+            issues.push("Purple-to-pink gradient (classic AI template pattern)");
+        }
+    }
+
+    if issues.is_empty() {
+        return Decision::pass();
+    }
+
+    let reason = format!(
+        "Super Dev anti-slop: {} detected in {file_path}. \
+         These patterns make output look AI-generated. \
+         Use real content and design tokens from output/*-uiux.md.",
+        issues.join("; ")
+    );
+    Decision::block("SD-CODE-005", reason)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -300,5 +356,41 @@ mod tests {
     #[test]
     fn color_blocks_in_css_file() {
         assert!(check_color_tokens("src/styles.css", ".btn { color: #ff0000 }").block);
+    }
+
+    // --- AI slop --------------------------------------------------------
+
+    #[test]
+    fn slop_blocks_lorem_ipsum() {
+        let d = check_ai_slop("src/Hero.tsx", "<p>Lorem ipsum dolor sit amet</p>");
+        assert!(d.block);
+        assert!(d.reason.contains("Lorem ipsum"));
+    }
+
+    #[test]
+    fn slop_blocks_welcome_heading() {
+        let d = check_ai_slop("src/Hero.tsx", "<h1>Welcome to MyApp</h1>");
+        assert!(d.block);
+        assert!(d.reason.contains("Welcome to"));
+    }
+
+    #[test]
+    fn slop_blocks_purple_pink_gradient() {
+        let d = check_ai_slop(
+            "src/Hero.tsx",
+            "background: linear-gradient(135deg, #7c3aed, #ec4899)",
+        );
+        assert!(d.block);
+        assert!(d.reason.contains("gradient"));
+    }
+
+    #[test]
+    fn slop_passes_clean_code() {
+        assert!(!check_ai_slop("src/Hero.tsx", "<h1>Ship faster</h1>").block);
+    }
+
+    #[test]
+    fn slop_ignores_non_ui_files() {
+        assert!(!check_ai_slop("README.md", "Lorem ipsum in docs is fine").block);
     }
 }

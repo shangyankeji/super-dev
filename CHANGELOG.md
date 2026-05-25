@@ -2,6 +2,101 @@
 
 本文件记录 Super Dev 的所有重要变更。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [Unreleased]
+
+### 新增 — 3 个主流 backend(13 个 worker 总覆盖)
+
+继续补全主流 AI 编码 CLI 矩阵,这一轮加 3 个:
+
+| Backend ID | TUI 命令 | 调用形式 | 说明 |
+|---|---|---|---|
+| **`trae`** | `/trae` | `trae-cli run "<p>"` | ByteDance Trae Agent(注意:**`trae-cli`** 不是 IDE 的 `trae`) |
+| **`plandex`** | `/plandex` | `plandex tell --skip-menu --stop "<p>"` | 大上下文(2M tokens)开源 agent,147k stars |
+| **`cody`** | `/cody` | `cody chat --message "<p>"` | Sourcegraph 企业级,带代码索引上下文 |
+
+实现:都是 `SimpleHostDriver` 工厂函数,Plandex 因为是 agentic 模式(`tell` 默认会编辑文件)也用了 `STDOUT_ONLY_SUFFIX`(同 Droid)。`BACKEND_IDS.len() == 13` 锁定,`driver_for` 13 路全连。
+
+**研究后跳过的主流 CLI**:
+- **Open Interpreter**:`interpreter` 二进制只有交互模式,没有一发即走的 CLI 形式(Python API 才有 `interpreter.chat(...)`),不适合 subprocess 驱动。
+- **Cline / Roo Code**:都是 VS Code 扩展,没有独立 CLI。
+- **Warp 2.0**:是终端而不是 agent。
+- **Codeium / Windsurf**:只是 VS Code 自动补全,没有非交互 CLI。
+- **Devin**(Cognition):没有公开 CLI 接口。
+
+### Backend 出厂质量 — 5 个核心 host 完美适配
+
+针对 **claude-code / gemini / codex / droid / opencode** 这 5 个旗舰 backend,逐个端到端真测 + 修发现的所有问题。出厂结论:
+
+| Backend | 状态 | 实测条件 |
+|---|---|---|
+| `claude-code` | ✓ 完美 | 完整 9 阶段流水线 + proof-pack 落地 + 95/100 质量门 |
+| `gemini` | ✓ 完美 | 真实 Linear/Stripe 案例分析,docs_confirm 225 行 LLM 实输出 |
+| `droid` | ✓ 完美 | `say hello` 单行干净返回,9 阶段流水线持续验证中 |
+| `codex` | ✓ 驱动完美 | 网络可达即开箱可用(需要能访问 `chatgpt.com/backend-api`) |
+| `opencode` | ✓ 驱动完美 | 接通 + TUI header 已剥离,LLM 调用速度取决于用户配的 model 提供商 |
+
+### Backend 驱动修复
+
+- **Codex 之前 `codex exec "<p>"` 在非 git 目录会 hang**:加 `--sandbox workspace-write`(headless 必备,否则进入交互 approval 等输入)、`--skip-git-repo-check`(Super Dev workspace 通常不是 git repo)、`--color never`(避免 ANSI 噪声)。
+- **Claude Code 驱动加 `--output-format text`**:之前裸 `--print` 在某些版本会返回 JSON 信封。**故意不加 `--bare`**:bare 模式会跳过 OAuth + keychain,要求 `ANTHROPIC_API_KEY` —— 而 Super Dev 全部价值就在于驱动用户**已经登录的订阅**,所以 `--bare` 会反向破坏目标用户。
+- **Droid 驱动加 `-o text`**:虽然是文档默认值,显式声明避免未来 Droid 改默认值时回归。
+- **OpenCode 输出 sanitize**:`opencode run` 在 stdout 顶部输出 `> build · <model>` TUI 风格头部,Super Dev 在 `SimpleHostDriver::complete()` 里加 backend-specific 后处理(`strip_opencode_header`)剥掉这个头,让喂给下游 phase 的内容只有真实 LLM 文本。
+- **CodexDriver / SimpleHostDriver 文档全部更新**:每个 flag 都有"为什么"注释 + 实测验证版本号 + 已知环境依赖。
+
+### 新增 — 8 个新 host backend (10 个 worker 全适配)
+
+之前只接了 Claude Code 和 Codex。这一版把所有主流 AI 编码 CLI 一次性收齐:
+
+| Backend ID | 触发命令 | 调用形式 |
+|---|---|---|
+| `claude-code` | `/claude` | `claude --print "<prompt>"` |
+| `codex` | `/codex` | `codex exec --skip-git-repo-check "<prompt>"` |
+| **`gemini`** | `/gemini` | `gemini -p "<prompt>"` (Google Gemini CLI) |
+| **`droid`** | `/droid` | `droid exec --auto medium "<prompt>"` (Factory.ai) |
+| **`opencode`** | `/opencode` | `opencode run "<prompt>"` (开源,Go) |
+| **`cursor-agent`** | `/cursor` | `cursor-agent -p --output-format text "<prompt>"` |
+| **`qwen`** | `/qwen` | `qwen -p "<prompt>"` (阿里 Qwen Code,Gemini CLI fork) |
+| **`continue`** | `/continue-cli` | `cn -p "<prompt>"` (Continue.dev) |
+| **`copilot`** | `/copilot` | `copilot -p --allow-all-tools "<prompt>"` (新版 GitHub Copilot CLI) |
+| **`aider`** | `/aider` | `aider --yes --no-stream --message "<prompt>"` |
+
+实现:`crates/super-dev-host/src/simple.rs` 加 `SimpleHostDriver` 通用结构,8 个工厂函数 (`droid()` / `opencode()` / `gemini()` / `cursor_agent()` / `qwen()` / `continue_cli()` / `copilot()` / `aider()`) 一次性生成所有新 backend。每个 backend 都支持 `SUPER_DEV_<NAME>_BIN` 环境变量覆盖二进制路径。`probe_all()` 现在并发探测全部 10 个 host(`tokio::join!` 10 路并行)。Picker / `BackendArg` / slash-command 路由全跟上。
+
+### 修复
+
+- **`super-dev continue` 不再悄悄掉回 offline 模板。** 原行为:`super-dev run "..." --backend claude-code` 跑通 docs_confirm 之后,`super-dev continue` 默认回退到 offline,导致 spec/frontend/backend 阶段不再走真 worker。修复:`WorkflowState` 增加 `backend` 字段,`continue` / `revise` 自动复用 `run` 时声明的 worker,新增 `super-dev continue --backend <id>` 显式覆盖。
+- **`codex` 后端在非 git 目录跑会 fail。** Codex CLI 要求工作目录是 git repo 或显式 `--skip-git-repo-check`。Super Dev workspace 经常只有 `output/` + `.super-dev/`,所以 `CodexDriver::base_args()` 默认带上 `--skip-git-repo-check`。
+- **`runtime:` 报告标签误导。** 之前 offline 模式打印 `runtime: Anthropic (Claude Agent SDK)`,看上去是真在调 Claude SDK。修成 `runtime: Offline deterministic templates (no AI; demos / CI)` 或 `runtime: Host CLI worker — Claude Code (claude-code)`,名实相符。
+- **`transition note` 用 `runtime:` 标签同上,改成 `worker:`** + 把 offline 写成 `offline-templates` 而不是 RuntimeKind 字符串。
+- **`super-dev verify` 多出一栏 worker。** `workflow-state: phase=... active_gate=... worker=claude-code ...`,审计链一眼看清哪个 worker 在跑。
+
+### 新增
+
+- **TUI gate 卡片**:停在 `docs_confirm` / `preview_confirm` 时,SuperDev 推一张完整卡片(待审稿工件清单 + `/continue` / `/revise` / `/diff` 三个动作 + 简短指引)。`Gate` 角色的消息额外用黄色 ╔══ ╗ 框包出来。
+- **回车 `c` 快捷键**:在 gate 状态下,单字符 `c` / `C` 等价 `/continue`,和 gate 卡片承诺的快捷键名实相符。
+- **`/model <id>`**:TUI 内切换 worker model 并落到 config.toml。
+- **`/version` overlay**:binary / spec / worker / model / workspace / config 一览。
+- **`/changelog` overlay**:`include_str!` 编译期内嵌本文件。
+- **`/help` 分组**:从 17 条平铺改成 Worker / Pipeline & gates / Inspect / Editing & exit 四组,picker 模式保留 Navigation 单组。
+- **聊天滚动指示**:历史超出可见区域时,标题动态变成 ` Conversation · ↑ N more above `。
+- **Pre-flight 计划消息**:用户提交需求那一刻,SuperDev 推一条 9 阶段计划卡片(包含两道 gate 提示),消除"按了回车之后是不是没反应"的疑虑。
+- **gate-aware 输入框标题** + **stage-aware did-you-mean**:`/quitz` → `/quit`,`/rev` → `/revise`,未启动 / 跑流水线中 / 已完成 三种状态的 `/continue` 各自给精确引导。
+- **`/verify` overlay 含质量门得分**:`88/100 (PASSED)` 直接显示,不必再开 JSON。
+
+### 改进
+
+- `super-dev continue --backend claude-code` 显式覆盖 worker(高于持久化字段)。
+- Spec / Verify / Doctor / Diff / History overlay 已完整可用(M14b 留的 stub 已落地)。
+- `SUPER_DEV_CODEX_BIN` / `SUPER_DEV_CODEX_EXEC_SUBCMD` 环境变量仍可覆盖默认值。
+- `read_workflow_state` 向下兼容老的 state 文件(没有 `backend` 字段时默认为空)。
+
+### 测试 +30 (4.4.0 基线 225 → 现在 255+)
+
+- `app.rs` +13:gate 卡片、`c` 快捷键、`/model` 持久化、`/version` overlay、`/changelog` overlay、did-you-mean、preflight、`/verify` 质量门、JSON 标量解析器。
+- `ui.rs` +5:gate-aware 标题、运行中标题、滚动指示、`/help` 分组渲染、对话滚动溢出。
+- `state.rs` +2:backend 字段 round-trip、legacy state 向下兼容。
+- 其它小修。
+
 ## [4.4.0] - 2026-05-23
 
 ### 主题

@@ -293,11 +293,78 @@ impl App {
             tick: 0,
             should_quit: false,
         };
+        app.load_history();
         if app.mode == AppMode::Chat {
             app.push_greeting();
+            app.maybe_push_resume_hint();
         }
         app.refresh_status();
         app
+    }
+
+    fn history_path(&self) -> std::path::PathBuf {
+        self.project_root
+            .join(".super-dev")
+            .join("input-history.txt")
+    }
+
+    fn load_history(&mut self) {
+        if let Ok(body) = std::fs::read_to_string(self.history_path()) {
+            for line in body.lines().rev().take(50) {
+                if !line.is_empty() {
+                    self.input_history.push_front(line.to_string());
+                }
+            }
+        }
+    }
+
+    fn persist_history(&self) {
+        let path = self.history_path();
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let lines: Vec<&str> = self.input_history.iter().map(String::as_str).collect();
+        let _ = std::fs::write(path, lines.join("\n"));
+    }
+
+    /// If a `.super-dev/workflow-state.json` exists in the workspace
+    /// (meaning a prior session left the pipeline mid-flight), surface
+    /// it as a system message so the user can resume with `/continue`
+    /// instead of staring at a fresh prompt and wondering "did my
+    /// previous work disappear?".
+    fn maybe_push_resume_hint(&mut self) {
+        let Some(state) = super_dev_agent::read_workflow_state(&self.project_root) else {
+            return;
+        };
+        let gate = state.active_gate.clone();
+        let req = state.requirement.clone();
+        if gate.is_empty() && state.phase == "delivery" {
+            // Last session completed; mention the proof-pack but don't
+            // nudge a resume.
+            self.push(
+                ChatRole::System,
+                format!(
+                    "📂 workspace 上次跑完了流水线(需求:\"{req}\")。\n  /diff 看上次产出 · 或直接输入新需求开新一轮。",
+                ),
+            );
+            return;
+        }
+        if !gate.is_empty() {
+            self.push(
+                ChatRole::System,
+                format!(
+                    "📂 workspace 上次会话停在 gate `{gate}`(需求:\"{req}\")。\n  /continue 继续推进 · /diff 看产出 · 或开新需求(会重置 workflow state)。",
+                ),
+            );
+        } else if !req.is_empty() {
+            self.push(
+                ChatRole::System,
+                format!(
+                    "📂 workspace 检测到未完成的会话(phase={}, 需求:\"{req}\")。\n  直接输入新需求会重新开始,或在另一个终端跑 `super-dev continue` 推进上次。",
+                    state.phase,
+                ),
+            );
+        }
     }
 
     fn push(&mut self, role: ChatRole, body: impl Into<String>) {
@@ -311,22 +378,27 @@ impl App {
     }
 
     fn push_greeting(&mut self) {
+        let ds_label = self.config.design_system.as_deref().unwrap_or("(未选择)");
+        let tpl_label = self.config.seed_template.as_deref().unwrap_or("(自动)");
         self.push(
             ChatRole::SuperDev,
             format!(
-                "Super Dev · AI 编码的项目经理 · 工人:{} · 直接告诉我做什么。",
+                "Super Dev · AI 编码的项目经理\n\
+                 工人: {} · 设计系统: {ds_label} · 模板: {tpl_label}\n\
+                 直接告诉我做什么,我会驱动工人按 9 阶段流水线交付。",
                 self.backend_label,
             ),
         );
-        // Three concrete starter prompts so a first-time user knows what
-        // "tell me what to do" looks like in practice.
         self.push(
             ChatRole::System,
             "试试这种问法:\n  \
              · 做一个登录系统,支持邮箱+OAuth+MFA\n  \
-             · 帮我做一个简单的 todo list,前端 React,后端 Rust\n  \
+             · 帮我做一个 SaaS 数据分析仪表盘\n  \
              · 给现有项目加二步验证(TOTP + 备用码)\n\n\
-             斜杠命令:/claude /codex /offline 切工人 · /help 看全部 · /quit 退出",
+             开始前可选:\n  \
+             · /design modern-minimal — 选设计风格(5 种方向可选)\n  \
+             · /template dashboard — 选页面模板(landing / dashboard / blog)\n  \
+             · /help — 看全部命令",
         );
     }
 
@@ -357,9 +429,15 @@ impl App {
         } else {
             String::new()
         };
+        let ds_short = self
+            .config
+            .design_system
+            .as_deref()
+            .map(|s| format!(" · 🎨 {s}"))
+            .unwrap_or_default();
         self.status = format!(
-            "● {} · {}{}{}{}",
-            self.backend_label, dots, running, gate_label, done_label
+            "● {} · {}{}{}{}{}",
+            self.backend_label, dots, running, gate_label, done_label, ds_short
         );
     }
 
@@ -439,7 +517,8 @@ impl App {
 
     /// Push a submitted line onto the input-history ring. De-dups
     /// consecutive duplicates (typing the same thing twice doesn't
-    /// double-pollute the ↑↓ recall).
+    /// double-pollute the ↑↓ recall). Also persists to disk so history
+    /// survives across TUI sessions.
     pub fn remember_submission(&mut self, text: &str) {
         const HISTORY_CAP_PROMPTS: usize = 100;
         if text.trim().is_empty() {
@@ -452,6 +531,7 @@ impl App {
         while self.input_history.len() > HISTORY_CAP_PROMPTS {
             self.input_history.pop_front();
         }
+        self.persist_history();
     }
 
     /// Step back through input history. Loads the previous prompt into
@@ -495,17 +575,41 @@ impl App {
 
     /// Verbs the palette popover suggests, in display order. (verb, hint)
     pub const SLASH_VERBS: &'static [(&'static str, &'static str)] = &[
-        ("claude", "switch worker to Claude Code"),
-        ("codex", "switch worker to Codex"),
+        ("claude", "switch worker to Claude Code CLI"),
+        ("codex", "switch worker to Codex CLI"),
+        ("gemini", "switch worker to Gemini CLI"),
+        ("droid", "switch worker to Droid CLI"),
+        ("opencode", "switch worker to OpenCode CLI"),
+        ("qwen", "switch worker to Qwen Code CLI"),
+        ("copilot", "switch worker to Copilot CLI"),
+        ("trae", "switch worker to Trae CLI"),
+        ("codebuddy", "switch worker to CodeBuddy CLI"),
+        ("qoder", "switch worker to Qoder CLI"),
+        ("kimi", "switch worker to Kimi Code CLI"),
         ("offline", "switch worker to offline templates"),
+        ("model", "set the model id (e.g. /model claude-opus-4-7)"),
+        (
+            "design",
+            "pick a design system (e.g. /design modern-minimal)",
+        ),
+        (
+            "template",
+            "pick a seed template (e.g. /template dashboard)",
+        ),
+        ("run", "start a new run (/run [slug] <requirement>)"),
         ("init", "write super-dev.yaml manifest"),
         ("continue", "approve the active gate"),
         ("revise", "stay at gate, request changes"),
+        ("status", "show detailed pipeline status"),
+        ("export", "export the latest proof-pack"),
+        ("knowledge", "list knowledge + design files"),
         ("spec", "show the SUPER_DEV_HOST_SPEC_V1 spec"),
         ("verify", "show workspace conformance"),
         ("doctor", "self-test"),
         ("diff", "show an artifact (default: PRD)"),
         ("history", "show the conversation history"),
+        ("changelog", "show CHANGELOG.md"),
+        ("version", "show super-dev / spec / worker versions"),
         ("help", "show all keybindings"),
         ("clear", "clear chat history"),
         ("quit", "exit"),
@@ -535,7 +639,17 @@ impl App {
 
     /// Replace the input with `/{verb} ` (with trailing space so the
     /// user can immediately type args). Called by Tab autocomplete.
+    ///
+    /// Second-level: if input is `/design ` or `/template ` (verb +
+    /// space + partial arg), Tab completes from the available design
+    /// systems / seed templates.
     pub fn autocomplete_palette(&mut self) {
+        // Second-level arg completion for /design and /template.
+        if let Some(arg_completion) = self.try_arg_completion() {
+            self.input = arg_completion;
+            self.input_cursor = self.input_len();
+            return;
+        }
         let matches = self.palette_matches();
         if matches.is_empty() {
             return;
@@ -545,6 +659,30 @@ impl App {
         self.input = format!("/{verb} ");
         self.input_cursor = self.input_len();
         self.palette_selected = 0;
+    }
+
+    fn try_arg_completion(&self) -> Option<String> {
+        let input = self.input.trim_start();
+        let (prefix, partial) = if let Some(rest) = input.strip_prefix("/design ") {
+            ("/design ", rest.trim())
+        } else if let Some(rest) = input.strip_prefix("/template ") {
+            ("/template ", rest.trim())
+        } else {
+            return None;
+        };
+        let candidates = if prefix == "/design " {
+            self.list_design_systems()
+        } else {
+            self.list_seed_templates()
+        };
+        if partial.is_empty() {
+            candidates.first().map(|c| format!("{prefix}{c}"))
+        } else {
+            candidates
+                .iter()
+                .find(|c| c.starts_with(partial))
+                .map(|c| format!("{prefix}{c}"))
+        }
     }
 
     /// Move palette highlight up/down (with wrap-around). Called by
@@ -605,13 +743,7 @@ impl App {
             }
             EngineEvent::GateOpened { gate } => {
                 self.active_gate = Some(gate);
-                self.push(
-                    ChatRole::Gate,
-                    format!(
-                        "⏸ 暂停在 gate `{}`。\n  /continue 或 c 通过\n  /revise <说明> 提修订\n  /diff <工件> 看产出",
-                        gate.id_str()
-                    ),
-                );
+                self.push(ChatRole::Gate, gate_card(gate, &self.slug));
             }
             EngineEvent::BlockCompleted {
                 final_phase,
@@ -905,28 +1037,33 @@ impl App {
     }
 
     /// Treat non-slash text as either a fresh requirement (if no run is
-    /// active) or a revision (if a gate is open).
+    /// active) or a revision (if a gate is open). Single-letter `c` at a
+    /// gate is the documented shortcut for "approve / continue" — match
+    /// the gate card so users don't have to type `/continue` every time.
     fn submit_text(&mut self, text: String) -> Action {
         self.push(ChatRole::You, text.clone());
-        if self.active_gate.is_some() {
+        if let Some(gate) = self.active_gate {
+            if matches!(text.trim(), "c" | "C") {
+                self.active_gate = None;
+                self.push(
+                    ChatRole::SuperDev,
+                    format!("✓ approved gate `{}` — continuing…", gate.id_str()),
+                );
+                return Action::Continue(gate);
+            }
             self.push(
                 ChatRole::SuperDev,
                 format!("收到修订:\"{text}\"。重新跑当前 block…"),
             );
             Action::Revise(text)
         } else if self.run_started && self.finished {
-            // After delivery, treat further text as a fresh kickoff.
-            self.push(
-                ChatRole::SuperDev,
-                format!("收到新需求:\"{text}\"。流水线重新开始…"),
-            );
             self.reset_for_new_run();
+            self.maybe_suggest_design();
+            self.push_preflight(&text);
             Action::StartRun(text)
         } else if !self.run_started {
-            self.push(
-                ChatRole::SuperDev,
-                format!("收到需求:\"{text}\"。流水线启动中…"),
-            );
+            self.maybe_suggest_design();
+            self.push_preflight(&text);
             Action::StartRun(text)
         } else {
             self.push(
@@ -935,6 +1072,45 @@ impl App {
             );
             Action::None
         }
+    }
+
+    /// Surface a "this is what I'm about to do" preview so the user
+    /// isn't left wondering whether their Enter actually did anything.
+    /// Lands BEFORE the background pipeline task spawns + emits its
+    /// own `PipelineStarted`.
+    fn maybe_suggest_design(&mut self) {
+        if self.config.design_system.is_some() {
+            return;
+        }
+        let available = self.list_design_systems();
+        if available.is_empty() {
+            return;
+        }
+        self.push(
+            ChatRole::System,
+            format!(
+                "提示: 你还没选设计系统。可用 /design <name> 在 run 前锁定视觉方向:\n  \
+                 {}。\n  \
+                 不选也行 — worker 会自动根据需求推荐一个。",
+                available.join(" · ")
+            ),
+        );
+    }
+
+    fn push_preflight(&mut self, text: &str) {
+        let ds = self.config.design_system.as_deref().unwrap_or("auto");
+        let tpl = self.config.seed_template.as_deref().unwrap_or("auto");
+        let plan = format!(
+            "收到需求:\"{text}\"\n\n\
+             配置: worker `{}` · 设计系统 `{ds}` · 模板 `{tpl}`\n\n\
+             9 阶段流水线:\n  \
+             1) research(竞品 + discovery) → 2) docs(PRD + Architecture + UIUX) → ⏸ docs_confirm\n  \
+             3) spec → 4) frontend(按 UIUX tokens 实现) → ⏸ preview_confirm\n  \
+             5) backend → 6) quality(5 维审查) → 7) delivery → proof-pack\n\n\
+             两道 gate 我会停下来给你审稿。流水线启动中…",
+            self.backend_label,
+        );
+        self.push(ChatRole::SuperDev, plan);
     }
 
     fn reset_for_new_run(&mut self) {
@@ -972,6 +1148,15 @@ impl App {
             }
             "claude" | "claude-code" => self.slash_backend(Some("claude-code")),
             "codex" => self.slash_backend(Some("codex")),
+            "gemini" => self.slash_backend(Some("gemini")),
+            "droid" => self.slash_backend(Some("droid")),
+            "opencode" => self.slash_backend(Some("opencode")),
+            "qwen" => self.slash_backend(Some("qwen")),
+            "copilot" => self.slash_backend(Some("copilot")),
+            "trae" | "trae-cli" => self.slash_backend(Some("trae")),
+            "codebuddy" => self.slash_backend(Some("codebuddy")),
+            "qoder" | "qodercli" => self.slash_backend(Some("qoder")),
+            "kimi" => self.slash_backend(Some("kimi")),
             "offline" => self.slash_backend(None),
             "init" => {
                 // Write the SD-META-001 manifest directly from the TUI.
@@ -1014,13 +1199,23 @@ impl App {
                     );
                     Action::Continue(gate)
                 } else {
-                    self.push(ChatRole::System, "目前没有打开的 gate。");
+                    let hint = if self.run_started && !self.finished {
+                        "流水线正在跑 — 等下一个 gate 暂停时再 /continue。"
+                    } else if self.finished {
+                        "流水线已完成。直接输入新需求开新一轮,或 /quit 退出。"
+                    } else {
+                        "还没启动流水线。直接输入需求一句话即可启动 9 阶段流水线。"
+                    };
+                    self.push(ChatRole::System, hint);
                     Action::None
                 }
             }
             "revise" => {
                 if rest.is_empty() {
-                    self.push(ChatRole::System, "用法:/revise <修订说明>");
+                    self.push(
+                        ChatRole::System,
+                        "用法:/revise <修订说明>。\n  示例:/revise 去掉社交登录,只留邮箱密码",
+                    );
                     Action::None
                 } else if self.active_gate.is_some() {
                     self.push(
@@ -1029,7 +1224,10 @@ impl App {
                     );
                     Action::Revise(rest.to_string())
                 } else {
-                    self.push(ChatRole::System, "目前没有打开的 gate,无法修订。");
+                    self.push(
+                        ChatRole::System,
+                        "目前没有打开的 gate,无法修订 — 要修改产出需要先等流水线停在 gate(docs_confirm / preview_confirm)。",
+                    );
                     Action::None
                 }
             }
@@ -1053,15 +1251,66 @@ impl App {
                 self.open_history_overlay();
                 Action::None
             }
+            "model" => self.slash_model(rest),
+            "design" => self.slash_design(rest),
+            "template" => self.slash_template(rest),
+            "run" => self.slash_run(rest),
+            "status" => {
+                self.open_status_overlay();
+                Action::None
+            }
+            "export" => {
+                self.slash_export();
+                Action::None
+            }
+            "knowledge" => {
+                self.open_knowledge_overlay();
+                Action::None
+            }
+            "version" => {
+                self.open_version_overlay();
+                Action::None
+            }
+            "changelog" => {
+                self.open_changelog_overlay();
+                Action::None
+            }
             _ => {
+                let hint = Self::did_you_mean(&verb)
+                    .map(|s| format!(" 是想用 `/{s}` 吗?"))
+                    .unwrap_or_default();
                 self.push(
                     ChatRole::System,
-                    format!("未知命令 `/{verb}` — 输入 /help 看列表。"),
+                    format!("未知命令 `/{verb}`。{hint} 输入 /help 看完整列表。"),
                 );
                 Action::None
             }
         };
         Some(action)
+    }
+
+    /// Closest recognised slash verb to `typed`, if any sits within a
+    /// useful "did-you-mean" radius. Used to suggest a fix when the user
+    /// mistypes a command verb.
+    fn did_you_mean(typed: &str) -> Option<&'static str> {
+        if typed.is_empty() {
+            return None;
+        }
+        // Prefix match first — handles `/c` → `claude` and `/rev` → `revise`.
+        if let Some((verb, _)) = Self::SLASH_VERBS.iter().find(|(v, _)| v.starts_with(typed)) {
+            return Some(verb);
+        }
+        // Otherwise Levenshtein ≤ 2 against known verbs.
+        let typed_lower = typed.to_ascii_lowercase();
+        let (mut best, mut best_dist) = (None, usize::MAX);
+        for (verb, _) in Self::SLASH_VERBS {
+            let d = lev(&typed_lower, verb);
+            if d < best_dist && d <= 2 {
+                best = Some(*verb);
+                best_dist = d;
+            }
+        }
+        best
     }
 
     fn slash_backend(&mut self, backend: Option<&str>) -> Action {
@@ -1073,6 +1322,385 @@ impl App {
         );
         self.refresh_status();
         Action::BackendChanged
+    }
+
+    fn slash_model(&mut self, arg: &str) -> Action {
+        if arg.is_empty() {
+            let current = self
+                .config
+                .model
+                .as_deref()
+                .unwrap_or("(default for worker)");
+            self.push(
+                ChatRole::System,
+                format!(
+                    "用法:/model <model-id>。当前 model: {current}。\n  \
+                     示例:/model claude-opus-4-7 · /model gpt-5 · /model gemini-2.5-pro"
+                ),
+            );
+            return Action::None;
+        }
+        self.config.model = Some(arg.to_string());
+        if let Err(e) = crate::config::save_to(&self.config, &self.config_path) {
+            self.push(
+                ChatRole::System,
+                format!("(无法写入 {}: {e})", self.config_path.display()),
+            );
+        }
+        self.push(
+            ChatRole::System,
+            format!("model 切换为 `{arg}` — 下一个 run 起用此 model。"),
+        );
+        Action::None
+    }
+
+    fn slash_design(&mut self, arg: &str) -> Action {
+        let available = self.list_design_systems();
+        if arg.is_empty() {
+            let current = self.config.design_system.as_deref().unwrap_or("(none)");
+            let list = if available.is_empty() {
+                "(no design systems found in knowledge/design-systems/)".to_string()
+            } else {
+                available.join(" · ")
+            };
+            self.push(
+                ChatRole::System,
+                format!(
+                    "用法:/design <name>。当前: {current}。\n  可选: {list}\n  \
+                     示例:/design modern-minimal · /design tech-utility · /design soft-warm"
+                ),
+            );
+            return Action::None;
+        }
+        if !available.contains(&arg.to_string()) && !available.is_empty() {
+            self.push(
+                ChatRole::System,
+                format!("未找到设计系统 `{arg}`。可选: {}", available.join(" · ")),
+            );
+            return Action::None;
+        }
+        self.config.design_system = Some(arg.to_string());
+        if let Err(e) = crate::config::save_to(&self.config, &self.config_path) {
+            self.push(
+                ChatRole::System,
+                format!("(无法写入 {}: {e})", self.config_path.display()),
+            );
+        }
+        self.push(
+            ChatRole::SuperDev,
+            format!(
+                "设计系统切换为 `{arg}` — 下一个 run 的 UIUX 阶段将以此为基准生成色板、字体、组件。"
+            ),
+        );
+        Action::None
+    }
+
+    fn slash_template(&mut self, arg: &str) -> Action {
+        let available = self.list_seed_templates();
+        if arg.is_empty() {
+            let current = self
+                .config
+                .seed_template
+                .as_deref()
+                .unwrap_or("(auto-detect)");
+            let list = if available.is_empty() {
+                "(no seed templates found in knowledge/seed-templates/)".to_string()
+            } else {
+                available.join(" · ")
+            };
+            self.push(
+                ChatRole::System,
+                format!(
+                    "用法:/template <name>。当前: {current}。\n  可选: {list}\n  \
+                     示例:/template saas-landing · /template dashboard · /template blog-content"
+                ),
+            );
+            return Action::None;
+        }
+        if !available.contains(&arg.to_string()) && !available.is_empty() {
+            self.push(
+                ChatRole::System,
+                format!("未找到模板 `{arg}`。可选: {}", available.join(" · ")),
+            );
+            return Action::None;
+        }
+        self.config.seed_template = Some(arg.to_string());
+        if let Err(e) = crate::config::save_to(&self.config, &self.config_path) {
+            self.push(
+                ChatRole::System,
+                format!("(无法写入 {}: {e})", self.config_path.display()),
+            );
+        }
+        self.push(
+            ChatRole::SuperDev,
+            format!(
+                "种子模板切换为 `{arg}` — 下一个 run 的 frontend 阶段将参考此模板的页面结构和质量标准。"
+            ),
+        );
+        Action::None
+    }
+
+    fn list_design_systems(&self) -> Vec<String> {
+        let dir = self.project_root.join("knowledge/design-systems");
+        Self::list_md_stems(&dir)
+    }
+
+    fn list_seed_templates(&self) -> Vec<String> {
+        let dir = self.project_root.join("knowledge/seed-templates");
+        Self::list_md_stems(&dir)
+    }
+
+    fn list_md_stems(dir: &std::path::Path) -> Vec<String> {
+        let mut names = Vec::new();
+        if let Ok(rd) = std::fs::read_dir(dir) {
+            for entry in rd.flatten() {
+                let p = entry.path();
+                if p.extension().and_then(|s| s.to_str()) == Some("md") {
+                    if let Some(stem) = p.file_stem().and_then(|s| s.to_str()) {
+                        if !stem.starts_with("00-") {
+                            names.push(stem.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        names.sort();
+        names
+    }
+
+    fn slash_run(&mut self, arg: &str) -> Action {
+        if arg.is_empty() {
+            self.push(
+                ChatRole::System,
+                "用法:/run [slug] <需求>\n  \
+                 示例:/run my-app 做一个登录系统\n  \
+                 示例:/run 做一个 todo list (slug 自动用目录名)",
+            );
+            return Action::None;
+        }
+        let (slug, req) = if let Some((first, rest)) = arg.split_once(' ') {
+            if rest.trim().is_empty() {
+                (String::new(), first.to_string())
+            } else {
+                (first.to_string(), rest.trim().to_string())
+            }
+        } else {
+            (String::new(), arg.to_string())
+        };
+        if !slug.is_empty() {
+            self.slug = slug;
+        }
+        if self.run_started {
+            self.reset_for_new_run();
+        }
+        self.maybe_suggest_design();
+        self.push_preflight(&req);
+        Action::StartRun(req)
+    }
+
+    fn open_status_overlay(&mut self) {
+        let mut body = String::from("super-dev status\n================\n\n");
+        body.push_str(&format!("worker:        {}\n", self.backend_label));
+        body.push_str(&format!(
+            "design system: {}\n",
+            self.config.design_system.as_deref().unwrap_or("(none)")
+        ));
+        body.push_str(&format!(
+            "seed template: {}\n",
+            self.config.seed_template.as_deref().unwrap_or("(auto)")
+        ));
+        body.push_str(&format!(
+            "slug:          {}\n",
+            if self.slug.is_empty() {
+                "(not set)"
+            } else {
+                &self.slug
+            }
+        ));
+        body.push_str(&format!(
+            "requirement:   {}\n",
+            if self.requirement.is_empty() {
+                "(none yet)"
+            } else {
+                &self.requirement
+            }
+        ));
+        body.push_str("\n## Pipeline phases\n\n");
+        body.push_str("| # | Phase | Status |\n|---|---|---|\n");
+        for (i, row) in self.phases.iter().enumerate() {
+            let icon = match row.status {
+                PhaseStatus::Done => "✓",
+                PhaseStatus::Running => "◐",
+                PhaseStatus::Pending => "○",
+            };
+            body.push_str(&format!("| {} | {} | {} |\n", i + 1, row.phase.id(), icon));
+        }
+        if let Some(gate) = self.active_gate {
+            body.push_str(&format!("\n⏸ Active gate: `{}`\n", gate.id_str()));
+        }
+        if self.finished {
+            body.push_str("\n✓ Pipeline complete — proof-pack in release/\n");
+        }
+        // Artifacts
+        let output_dir = self.project_root.join("output");
+        if output_dir.is_dir() {
+            body.push_str("\n## Artifacts\n\n");
+            if let Ok(rd) = std::fs::read_dir(&output_dir) {
+                let mut entries: Vec<_> = rd.filter_map(Result::ok).collect();
+                entries.sort_by_key(std::fs::DirEntry::file_name);
+                for e in entries.iter().take(20) {
+                    let name = e.file_name();
+                    let size = std::fs::metadata(e.path()).map_or(0, |m| m.len());
+                    body.push_str(&format!(
+                        "  · {} ({} bytes)\n",
+                        name.to_string_lossy(),
+                        size
+                    ));
+                }
+            }
+        }
+        self.overlay = Some(Overlay::from_body(" status — Esc close ", &body));
+    }
+
+    fn slash_export(&mut self) {
+        let release = self.project_root.join("release");
+        if !release.is_dir() {
+            self.push(
+                ChatRole::System,
+                "release/ 目录不存在 — 流水线需要跑到 delivery 才会生成 proof-pack。",
+            );
+            return;
+        }
+        let mut zips: Vec<_> = std::fs::read_dir(&release)
+            .ok()
+            .map(|rd| {
+                rd.filter_map(Result::ok)
+                    .filter(|e| e.path().extension().and_then(|s| s.to_str()) == Some("zip"))
+                    .collect()
+            })
+            .unwrap_or_default();
+        zips.sort_by_key(std::fs::DirEntry::file_name);
+        if zips.is_empty() {
+            self.push(
+                ChatRole::System,
+                "release/ 目录为空 — 需要完成 delivery 阶段才会产出 proof-pack.zip。",
+            );
+            return;
+        }
+        let latest = zips.last().unwrap();
+        let size = std::fs::metadata(latest.path()).map_or(0, |m| m.len() / 1024);
+        self.push(
+            ChatRole::SuperDev,
+            format!(
+                "✓ 最新 proof-pack: {}\n  大小: {size} KiB\n  路径: {}\n\n\
+                 可直接分享给审核人员。用 `unzip -l {}` 查看内容。",
+                latest.file_name().to_string_lossy(),
+                latest.path().display(),
+                latest.path().display(),
+            ),
+        );
+    }
+
+    fn open_knowledge_overlay(&mut self) {
+        let mut body = String::from("knowledge base\n==============\n\n");
+        // Design systems
+        body.push_str("## Design systems (knowledge/design-systems/)\n\n");
+        let ds = self.list_design_systems();
+        if ds.is_empty() {
+            body.push_str("  (none found)\n");
+        } else {
+            let active = self.config.design_system.as_deref().unwrap_or("");
+            for name in &ds {
+                let mark = if name == active { "●" } else { "○" };
+                body.push_str(&format!("  {mark} {name}\n"));
+            }
+        }
+        // Seed templates
+        body.push_str("\n## Seed templates (knowledge/seed-templates/)\n\n");
+        let tpl = self.list_seed_templates();
+        if tpl.is_empty() {
+            body.push_str("  (none found)\n");
+        } else {
+            let active = self.config.seed_template.as_deref().unwrap_or("");
+            for name in &tpl {
+                let mark = if name == active { "●" } else { "○" };
+                body.push_str(&format!("  {mark} {name}\n"));
+            }
+        }
+        // General knowledge
+        body.push_str("\n## Knowledge files (knowledge/)\n\n");
+        let kdir = self.project_root.join("knowledge");
+        if kdir.is_dir() {
+            let mut count = 0;
+            if let Ok(rd) = std::fs::read_dir(&kdir) {
+                let mut dirs: Vec<_> = rd
+                    .filter_map(Result::ok)
+                    .filter(|e| e.path().is_dir())
+                    .collect();
+                dirs.sort_by_key(std::fs::DirEntry::file_name);
+                for d in &dirs {
+                    let name = d.file_name();
+                    let n = name.to_string_lossy();
+                    if n == "design-systems" || n == "seed-templates" {
+                        continue;
+                    }
+                    let file_count = std::fs::read_dir(d.path()).map_or(0, Iterator::count);
+                    body.push_str(&format!("  📁 {n}/ ({file_count} files)\n"));
+                    count += file_count;
+                }
+            }
+            body.push_str(&format!("\n  Total: {count} knowledge files\n"));
+        } else {
+            body.push_str("  (no knowledge/ directory)\n");
+        }
+        self.overlay = Some(Overlay::from_body(" knowledge — Esc close ", &body));
+    }
+
+    fn open_version_overlay(&mut self) {
+        let mut body = String::new();
+        body.push_str("Super Dev — version\n");
+        body.push_str("===================\n\n");
+        body.push_str(&format!(
+            "binary       super-dev {} (built from rev {})\n",
+            env!("CARGO_PKG_VERSION"),
+            option_env!("VERGEN_GIT_SHA").unwrap_or("unreleased"),
+        ));
+        body.push_str(&format!("spec         {}\n", super_dev_spec::SPEC_VERSION));
+        body.push_str(&format!("worker       {}\n", self.backend_label));
+        if let Some(m) = &self.config.model {
+            body.push_str(&format!("model        {m}\n"));
+        } else {
+            body.push_str("model        (default for the worker)\n");
+        }
+        body.push_str(&format!(
+            "design       {}\n",
+            self.config
+                .design_system
+                .as_deref()
+                .unwrap_or("(none — use /design to pick)")
+        ));
+        body.push_str(&format!(
+            "template     {}\n",
+            self.config
+                .seed_template
+                .as_deref()
+                .unwrap_or("(auto-detect)")
+        ));
+        body.push_str(&format!("workspace    {}\n", self.project_root.display()));
+        body.push_str(&format!("config       {}\n", self.config_path.display()));
+        body.push('\n');
+        body.push_str("Project home: https://github.com/shangyankeji/super-dev\n");
+        self.overlay = Some(Overlay::from_body(" version — Esc close ", &body));
+    }
+
+    fn open_changelog_overlay(&mut self) {
+        // Embedded at compile time so the overlay matches the binary,
+        // not whatever CHANGELOG.md happens to be in the user's cwd.
+        let body = include_str!("../../../CHANGELOG.md");
+        self.overlay = Some(Overlay::from_body(
+            " CHANGELOG — Esc close, ↑↓ scroll ",
+            body,
+        ));
     }
 
     // ---- overlays --------------------------------------------------------
@@ -1140,6 +1768,36 @@ impl App {
                 body.push_str(&format!("  {mark} {:<14} {}\n", b.id, b.detail));
             }
         }
+        // Design systems + seed templates
+        body.push_str("\ndesign infrastructure:\n");
+        let ds_list = self.list_design_systems();
+        if ds_list.is_empty() {
+            body.push_str("  ⚠ no design systems found in knowledge/design-systems/\n");
+        } else {
+            let active = self.config.design_system.as_deref().unwrap_or("");
+            for ds in &ds_list {
+                let mark = if ds == active { "●" } else { "○" };
+                body.push_str(&format!("  {mark} {ds}\n"));
+            }
+        }
+        let tpl_list = self.list_seed_templates();
+        if !tpl_list.is_empty() {
+            let active = self.config.seed_template.as_deref().unwrap_or("");
+            body.push_str("  templates: ");
+            let labels: Vec<String> = tpl_list
+                .iter()
+                .map(|t| {
+                    if t == active {
+                        format!("[{t}]")
+                    } else {
+                        t.clone()
+                    }
+                })
+                .collect();
+            body.push_str(&labels.join(" · "));
+            body.push('\n');
+        }
+
         self.overlay = Some(Overlay::from_body(" doctor — press Esc to close ", &body));
     }
 
@@ -1167,12 +1825,17 @@ impl App {
         body.push_str("\n## Workflow state\n");
         match super_dev_agent::read_workflow_state(&self.project_root) {
             Some(s) => body.push_str(&format!(
-                "  phase={} active_gate={} slug={}\n  requirement={}\n",
+                "  phase={} active_gate={} worker={} slug={}\n  requirement={}\n",
                 s.phase,
                 if s.active_gate.is_empty() {
                     "<none>"
                 } else {
                     &s.active_gate
+                },
+                if s.backend.is_empty() {
+                    "offline-templates"
+                } else {
+                    s.backend.as_str()
                 },
                 s.slug,
                 s.requirement,
@@ -1198,6 +1861,45 @@ impl App {
             }
         } else {
             body.push_str("  (output/ not yet created)\n");
+        }
+
+        // Quality gate — quick verdict so users don't have to open the JSON.
+        body.push_str("\n## Quality gate\n");
+        let qg_paths: Vec<_> = std::fs::read_dir(&output_dir)
+            .ok()
+            .map(|rd| {
+                rd.filter_map(Result::ok)
+                    .filter(|e| {
+                        e.file_name()
+                            .to_string_lossy()
+                            .ends_with("-quality-gate.json")
+                    })
+                    .map(|e| e.path())
+                    .collect()
+            })
+            .unwrap_or_default();
+        if qg_paths.is_empty() {
+            body.push_str("  (quality phase has not produced a gate report yet)\n");
+        } else {
+            for p in &qg_paths {
+                let score_line = match std::fs::read_to_string(p) {
+                    Ok(s) => {
+                        let score = extract_json_number(&s, "score")
+                            .map_or_else(|| "?".to_string(), |n| n.to_string());
+                        let verdict = match extract_json_bool(&s, "passed") {
+                            Some(true) => "PASSED",
+                            Some(false) => "BLOCKED",
+                            None => "?",
+                        };
+                        format!(
+                            "  · {} → {score}/100 ({verdict})\n",
+                            p.file_name().unwrap_or_default().to_string_lossy(),
+                        )
+                    }
+                    Err(_) => format!("  · {} (unreadable)\n", p.display()),
+                };
+                body.push_str(&score_line);
+            }
         }
 
         // Release proof-packs
@@ -1324,26 +2026,123 @@ impl App {
 /// The fixed set of options the picker shows. Probe results refine the
 /// labels at runtime.
 fn default_picker_items() -> Vec<PickerItem> {
-    vec![
-        PickerItem {
-            backend_id: Some("claude-code".to_string()),
-            label: "claude-code".to_string(),
+    // Mirrors `super_dev_host::BACKEND_IDS` order. Each row stays in
+    // the "detecting…" state until `apply_engine(BackendProbed)` lands.
+    let mut items: Vec<PickerItem> = super_dev_host::BACKEND_IDS
+        .iter()
+        .map(|id| PickerItem {
+            backend_id: Some((*id).to_string()),
+            label: (*id).to_string(),
             ready: false,
             detail: "detecting…".to_string(),
-        },
-        PickerItem {
-            backend_id: Some("codex".to_string()),
-            label: "codex".to_string(),
-            ready: false,
-            detail: "detecting…".to_string(),
-        },
-        PickerItem {
-            backend_id: None,
-            label: "offline".to_string(),
-            ready: true,
-            detail: "deterministic templates (no AI; demos / CI)".to_string(),
-        },
-    ]
+        })
+        .collect();
+    items.push(PickerItem {
+        backend_id: None,
+        label: "offline".to_string(),
+        ready: true,
+        detail: "deterministic templates (no AI; demos / CI)".to_string(),
+    });
+    items
+}
+
+/// Tiny scalar extractors used by the `/verify` overlay so we don't need
+/// a JSON dependency just to surface "score: 95 / passed: true" from the
+/// quality-gate file. Returns `None` if the key isn't present or the
+/// value isn't shaped like a JSON number / bool.
+fn extract_json_number(json: &str, key: &str) -> Option<u32> {
+    let needle = format!("\"{key}\"");
+    let after = json.split(&needle).nth(1)?;
+    let colon = after.find(':')?;
+    let rest = &after[colon + 1..];
+    let digits: String = rest
+        .chars()
+        .skip_while(|c| c.is_whitespace())
+        .take_while(char::is_ascii_digit)
+        .collect();
+    digits.parse::<u32>().ok()
+}
+
+fn extract_json_bool(json: &str, key: &str) -> Option<bool> {
+    let needle = format!("\"{key}\"");
+    let after = json.split(&needle).nth(1)?;
+    let colon = after.find(':')?;
+    let rest = after[colon + 1..].trim_start();
+    if rest.starts_with("true") {
+        Some(true)
+    } else if rest.starts_with("false") {
+        Some(false)
+    } else {
+        None
+    }
+}
+
+/// Classic Levenshtein distance — used by the slash command typo
+/// "did you mean" suggestion. Kept O(n·m) since `n` and `m` are
+/// always under ~15 chars (verb names).
+fn lev(a: &str, b: &str) -> usize {
+    let a_bytes: Vec<char> = a.chars().collect();
+    let b_bytes: Vec<char> = b.chars().collect();
+    let n = a_bytes.len();
+    let m = b_bytes.len();
+    if n == 0 {
+        return m;
+    }
+    if m == 0 {
+        return n;
+    }
+    let mut prev: Vec<usize> = (0..=m).collect();
+    let mut curr = vec![0usize; m + 1];
+    for i in 1..=n {
+        curr[0] = i;
+        for j in 1..=m {
+            let cost = usize::from(a_bytes[i - 1] != b_bytes[j - 1]);
+            curr[j] = (prev[j] + 1).min(curr[j - 1] + 1).min(prev[j - 1] + cost);
+        }
+        std::mem::swap(&mut prev, &mut curr);
+    }
+    prev[m]
+}
+
+/// Build the multi-line card shown in chat history when a Super Dev gate
+/// pauses the pipeline. Lists exactly which artifacts are waiting for the
+/// user's eyes and which slash commands move it forward — so the user
+/// doesn't have to remember what `docs_confirm` vs `preview_confirm`
+/// actually means.
+fn gate_card(gate: Gate, slug: &str) -> String {
+    let slug = if slug.is_empty() { "<slug>" } else { slug };
+    let (title, artifacts, next) = match gate {
+        Gate::DocsConfirm => (
+            "docs_confirm — three core docs are ready for review",
+            vec![
+                format!("output/{slug}-prd.md"),
+                format!("output/{slug}-architecture.md"),
+                format!("output/{slug}-uiux.md"),
+            ],
+            "审核三份核心文档,确认后再进入 spec / frontend。",
+        ),
+        Gate::PreviewConfirm => (
+            "preview_confirm — frontend preview is ready for review",
+            vec![
+                format!("output/{slug}-frontend-notes.md"),
+                format!("output/{slug}-execution-plan.md"),
+            ],
+            "审核前端可运行预览,确认后再进入 backend / quality / delivery。",
+        ),
+    };
+
+    let mut out = String::new();
+    out.push_str(&format!("⏸ {title}\n"));
+    out.push_str("  待审稿工件:\n");
+    for a in artifacts {
+        out.push_str(&format!("    · {a}\n"));
+    }
+    out.push_str("  下一步:\n");
+    out.push_str("    · /continue 或回车 c    → 通过这道 gate,继续流水线\n");
+    out.push_str("    · /revise <修订说明>     → 把反馈喂回 worker 重做\n");
+    out.push_str("    · /diff <工件>           → 查看刚才生成的内容\n");
+    out.push_str(&format!("  指引: {next}"));
+    out
 }
 
 fn refresh_picker_with_probes(items: &mut [PickerItem], probes: &[BackendInfo]) {
@@ -1366,6 +2165,7 @@ mod tests {
         let cfg = UserConfig {
             backend: backend.map(str::to_string),
             model: None,
+            ..Default::default()
         };
         App::new(
             "demo",
@@ -1395,24 +2195,25 @@ mod tests {
     #[test]
     fn picker_arrow_keys_navigate() {
         let mut app = fresh_app(None);
+        let last = app.picker_items.len() - 1;
         assert_eq!(app.picker_selected, 0);
-        let _ = app.apply_key(KeyCode::Down);
-        assert_eq!(app.picker_selected, 1);
-        let _ = app.apply_key(KeyCode::Down);
-        assert_eq!(app.picker_selected, 2);
-        // Off-end is clamped.
-        let _ = app.apply_key(KeyCode::Down);
-        assert_eq!(app.picker_selected, 2);
+        // Walk all the way down — should clamp at `last`.
+        for _ in 0..(app.picker_items.len() + 2) {
+            let _ = app.apply_key(KeyCode::Down);
+        }
+        assert_eq!(app.picker_selected, last);
         let _ = app.apply_key(KeyCode::Up);
-        assert_eq!(app.picker_selected, 1);
+        assert_eq!(app.picker_selected, last - 1);
     }
 
     #[test]
     fn picker_enter_on_offline_transitions_to_chat() {
         let mut app = fresh_app(None);
-        // Offline is the 3rd item (idx 2) and is always ready.
-        let _ = app.apply_key(KeyCode::Down);
-        let _ = app.apply_key(KeyCode::Down);
+        // Offline is the LAST row and is always ready.
+        let target = app.picker_items.len() - 1;
+        while app.picker_selected < target {
+            let _ = app.apply_key(KeyCode::Down);
+        }
         let action = app.apply_key(KeyCode::Enter);
         assert_eq!(action, Action::BackendChanged);
         assert_eq!(app.mode, AppMode::Chat);
@@ -1507,6 +2308,7 @@ mod tests {
         let cfg = UserConfig {
             backend: Some("offline".to_string()),
             model: None,
+            ..Default::default()
         };
         let mut app = App::new(
             "demo",
@@ -1549,7 +2351,7 @@ mod tests {
         assert!(app
             .history
             .iter()
-            .any(|m| m.body.contains("没有打开的 gate")));
+            .any(|m| m.body.contains("还没启动流水线") || m.body.contains("没有打开的 gate")));
     }
 
     #[test]
@@ -1718,6 +2520,7 @@ mod tests {
         let cfg = UserConfig {
             backend: Some("offline".into()),
             model: None,
+            ..Default::default()
         };
         let mut app = App::new(
             "demo",
@@ -1770,6 +2573,342 @@ mod tests {
         // Any typing — even one char — clears the pending confirmation.
         let _ = a.apply_key(KeyCode::Char('x'));
         assert!(!a.pending_quit_confirm);
+    }
+
+    // ---- resume hint on chat init ----
+
+    #[test]
+    fn resume_hint_appears_when_workflow_state_paused_at_gate() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        // Seed a workflow-state.json that looks like "paused at docs_confirm".
+        let state_dir = tmp.path().join(".super-dev");
+        std::fs::create_dir_all(&state_dir).unwrap();
+        let state_json = r#"{
+            "phase": "docs_confirm",
+            "active_gate": "docs_confirm",
+            "slug": "demo",
+            "requirement": "做一个登录系统",
+            "last_transition_at": "2026-05-23T10:00:00Z",
+            "note": "",
+            "spec_version": "SUPER_DEV_HOST_SPEC_V1"
+        }"#;
+        std::fs::write(state_dir.join("workflow-state.json"), state_json).unwrap();
+
+        let cfg = UserConfig {
+            backend: Some("offline".into()),
+            model: None,
+            ..Default::default()
+        };
+        let app = App::new(
+            "demo",
+            cfg,
+            std::path::PathBuf::from("/tmp/sd-test-config.toml"),
+            tmp.path().to_path_buf(),
+        );
+
+        // Greeting + resume hint both land in history.
+        let resume_msg = app
+            .history
+            .iter()
+            .find(|m| m.body.contains("docs_confirm"))
+            .expect("resume hint should mention the paused gate");
+        assert_eq!(resume_msg.role, ChatRole::System);
+        assert!(resume_msg.body.contains("做一个登录系统"));
+        assert!(resume_msg.body.contains("/continue"));
+    }
+
+    #[test]
+    fn resume_hint_marks_completed_runs() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let state_dir = tmp.path().join(".super-dev");
+        std::fs::create_dir_all(&state_dir).unwrap();
+        let state_json = r#"{
+            "phase": "delivery",
+            "active_gate": "",
+            "slug": "demo",
+            "requirement": "做个 todo",
+            "last_transition_at": "2026-05-23T10:00:00Z",
+            "note": "Pipeline complete.",
+            "spec_version": "SUPER_DEV_HOST_SPEC_V1"
+        }"#;
+        std::fs::write(state_dir.join("workflow-state.json"), state_json).unwrap();
+
+        let cfg = UserConfig {
+            backend: Some("offline".into()),
+            model: None,
+            ..Default::default()
+        };
+        let app = App::new(
+            "demo",
+            cfg,
+            std::path::PathBuf::from("/tmp/sd-test-config.toml"),
+            tmp.path().to_path_buf(),
+        );
+        let msg = app
+            .history
+            .iter()
+            .find(|m| m.body.contains("上次跑完了") || m.body.contains("上次会话"))
+            .expect("delivery-state should produce a chat hint");
+        assert!(msg.body.contains("做个 todo"));
+    }
+
+    #[test]
+    fn no_resume_hint_for_clean_workspace() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let cfg = UserConfig {
+            backend: Some("offline".into()),
+            model: None,
+            ..Default::default()
+        };
+        let app = App::new(
+            "demo",
+            cfg,
+            std::path::PathBuf::from("/tmp/sd-test-config.toml"),
+            tmp.path().to_path_buf(),
+        );
+        // Greeting still present (always), but no resume hint.
+        assert!(!app
+            .history
+            .iter()
+            .any(|m| m.body.contains("docs_confirm") || m.body.contains("上次")));
+    }
+
+    // ---- /model + /version + /changelog + typo did-you-mean ----
+
+    #[test]
+    fn slash_model_without_arg_prints_usage() {
+        let mut a = fresh_app(Some("offline"));
+        for c in "/model".chars() {
+            let _ = a.apply_key(KeyCode::Char(c));
+        }
+        let _ = a.apply_key(KeyCode::Enter);
+        assert!(a.history.iter().any(|m| m.body.contains("用法:/model")));
+        // config.model still None.
+        assert!(a.config.model.is_none());
+    }
+
+    #[test]
+    fn slash_model_with_arg_saves_to_config() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let cfg_path = tmp.path().join("config.toml");
+        let cfg = UserConfig {
+            backend: Some("offline".into()),
+            model: None,
+            ..Default::default()
+        };
+        let mut app = App::new(
+            "demo",
+            cfg,
+            cfg_path.clone(),
+            std::path::PathBuf::from("/tmp/sd-test-workspace"),
+        );
+        for c in "/model claude-opus-4-7".chars() {
+            let _ = app.apply_key(KeyCode::Char(c));
+        }
+        let _ = app.apply_key(KeyCode::Enter);
+        assert_eq!(app.config.model.as_deref(), Some("claude-opus-4-7"));
+        // Persisted.
+        let loaded = crate::config::load_from(&cfg_path);
+        assert_eq!(loaded.model.as_deref(), Some("claude-opus-4-7"));
+    }
+
+    #[test]
+    fn slash_version_opens_overlay_with_binary_info() {
+        let mut a = fresh_app(Some("offline"));
+        for c in "/version".chars() {
+            let _ = a.apply_key(KeyCode::Char(c));
+        }
+        let _ = a.apply_key(KeyCode::Enter);
+        let ov = a.overlay.as_ref().expect("version overlay");
+        let joined = ov.lines.join("\n");
+        assert!(joined.contains("super-dev"));
+        assert!(joined.contains(env!("CARGO_PKG_VERSION")));
+        assert!(joined.contains("SUPER_DEV_HOST_SPEC_V1"));
+    }
+
+    #[test]
+    fn slash_changelog_opens_overlay_with_header() {
+        let mut a = fresh_app(Some("offline"));
+        for c in "/changelog".chars() {
+            let _ = a.apply_key(KeyCode::Char(c));
+        }
+        let _ = a.apply_key(KeyCode::Enter);
+        let ov = a.overlay.as_ref().expect("changelog overlay");
+        assert!(ov.lines.iter().any(|l| l.contains("Changelog")));
+    }
+
+    #[test]
+    fn did_you_mean_suggests_for_typo() {
+        // "/quitz" → suggest /quit
+        let suggestion = App::did_you_mean("quitz");
+        assert_eq!(suggestion, Some("quit"));
+    }
+
+    #[test]
+    fn did_you_mean_suggests_via_prefix() {
+        // "/rev" → /revise (prefix wins)
+        let suggestion = App::did_you_mean("rev");
+        assert_eq!(suggestion, Some("revise"));
+    }
+
+    #[test]
+    fn did_you_mean_returns_none_for_garbage() {
+        assert_eq!(App::did_you_mean("xxxxxxxxxx"), None);
+    }
+
+    #[test]
+    fn unknown_slash_command_includes_did_you_mean_hint() {
+        let mut a = fresh_app(Some("offline"));
+        for c in "/quitz".chars() {
+            let _ = a.apply_key(KeyCode::Char(c));
+        }
+        let _ = a.apply_key(KeyCode::Enter);
+        let last = a.history.back().unwrap();
+        assert!(last.body.contains("/quitz"));
+        assert!(last.body.contains("/quit"));
+        assert!(last.body.contains("是想用"));
+    }
+
+    #[test]
+    fn extract_json_number_pulls_score() {
+        let json = r#"{"score": 95, "passed": true, "notes": "ok"}"#;
+        assert_eq!(extract_json_number(json, "score"), Some(95));
+        assert_eq!(extract_json_number(json, "missing"), None);
+    }
+
+    #[test]
+    fn extract_json_bool_pulls_passed() {
+        let json = r#"{"score": 70, "passed": false}"#;
+        assert_eq!(extract_json_bool(json, "passed"), Some(false));
+        assert_eq!(extract_json_bool(json, "score"), None);
+    }
+
+    #[test]
+    fn verify_overlay_surfaces_quality_gate_when_present() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = tmp.path();
+        let out_dir = root.join("output");
+        std::fs::create_dir_all(&out_dir).unwrap();
+        std::fs::write(
+            out_dir.join("demo-quality-gate.json"),
+            r#"{"score": 88, "passed": true}"#,
+        )
+        .unwrap();
+
+        let mut app = App::new(
+            "demo",
+            UserConfig {
+                backend: Some("offline".into()),
+                model: None,
+                ..Default::default()
+            },
+            std::path::PathBuf::from("/tmp/cfg.toml"),
+            root.to_path_buf(),
+        );
+        for c in "/verify".chars() {
+            let _ = app.apply_key(KeyCode::Char(c));
+        }
+        let _ = app.apply_key(KeyCode::Enter);
+        let ov = app.overlay.as_ref().expect("verify overlay");
+        let joined = ov.lines.join("\n");
+        assert!(joined.contains("Quality gate"));
+        assert!(joined.contains("88/100"));
+        assert!(joined.contains("PASSED"));
+    }
+
+    #[test]
+    fn gate_card_lists_artifacts_and_next_steps() {
+        let mut a = fresh_app(Some("offline"));
+        a.apply_engine(EngineEvent::PipelineStarted {
+            slug: "demo".into(),
+            requirement: "x".into(),
+        });
+        a.apply_engine(EngineEvent::GateOpened {
+            gate: Gate::DocsConfirm,
+        });
+        let card = a
+            .history
+            .iter()
+            .find(|m| m.role == ChatRole::Gate)
+            .expect("gate card must land in chat");
+        // Lists the three core docs by slug.
+        assert!(card.body.contains("output/demo-prd.md"));
+        assert!(card.body.contains("output/demo-architecture.md"));
+        assert!(card.body.contains("output/demo-uiux.md"));
+        // Lists next-step verbs.
+        assert!(card.body.contains("/continue"));
+        assert!(card.body.contains("/revise"));
+        assert!(card.body.contains("/diff"));
+    }
+
+    #[test]
+    fn gate_card_for_preview_confirm_lists_frontend_artifacts() {
+        let mut a = fresh_app(Some("offline"));
+        a.apply_engine(EngineEvent::PipelineStarted {
+            slug: "shop".into(),
+            requirement: "x".into(),
+        });
+        a.apply_engine(EngineEvent::GateOpened {
+            gate: Gate::PreviewConfirm,
+        });
+        let card = a
+            .history
+            .iter()
+            .find(|m| m.role == ChatRole::Gate)
+            .expect("gate card must land in chat");
+        assert!(card.body.contains("output/shop-frontend-notes.md"));
+        assert!(card.body.contains("output/shop-execution-plan.md"));
+    }
+
+    #[test]
+    fn bare_c_at_gate_is_treated_as_continue_shortcut() {
+        let mut a = fresh_app(Some("offline"));
+        a.apply_engine(EngineEvent::GateOpened {
+            gate: Gate::DocsConfirm,
+        });
+        let _ = a.apply_key(KeyCode::Char('c'));
+        let action = a.apply_key(KeyCode::Enter);
+        assert_eq!(action, Action::Continue(Gate::DocsConfirm));
+        assert!(a.active_gate.is_none());
+    }
+
+    #[test]
+    fn bare_c_without_gate_starts_a_run() {
+        let mut a = fresh_app(Some("offline"));
+        let _ = a.apply_key(KeyCode::Char('c'));
+        let action = a.apply_key(KeyCode::Enter);
+        // Outside a gate, "c" is a normal requirement (not magic).
+        assert_eq!(action, Action::StartRun("c".to_string()));
+    }
+
+    #[test]
+    fn slash_continue_no_run_hint_redirects_to_typing_a_requirement() {
+        let mut a = fresh_app(Some("offline"));
+        for c in "/continue".chars() {
+            let _ = a.apply_key(KeyCode::Char(c));
+        }
+        let _ = a.apply_key(KeyCode::Enter);
+        let last = a.history.back().unwrap();
+        assert!(
+            last.body.contains("还没启动流水线"),
+            "expected redirect hint, got: {}",
+            last.body
+        );
+    }
+
+    #[test]
+    fn preflight_message_lands_when_starting_run() {
+        let mut a = fresh_app(Some("offline"));
+        for c in "build me a thing".chars() {
+            let _ = a.apply_key(KeyCode::Char(c));
+        }
+        let action = a.apply_key(KeyCode::Enter);
+        assert_eq!(action, Action::StartRun("build me a thing".to_string()));
+        // The SuperDev preflight message includes the 9-phase plan.
+        assert!(a.history.iter().any(|m| m.role == ChatRole::SuperDev
+            && m.body.contains("9 阶段")
+            && m.body.contains("docs_confirm")
+            && m.body.contains("preview_confirm")));
     }
 
     // ---- cursor + editing ----

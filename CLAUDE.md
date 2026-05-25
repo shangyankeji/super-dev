@@ -13,8 +13,7 @@ As of 4.0 the **primary execution mode drives an already-logged-in host
 CLI** (`claude --print`, `codex exec`) as a subprocess — no API key, the
 user's existing host session is the brain. The binary has three modes:
 
-- `--backend claude-code|codex` — drive a logged-in host CLI (no key)
-- `--api` — direct provider HTTP (Anthropic / OpenAI / Antigravity; needs a key)
+- `--backend <id>` — drive a logged-in host CLI (no key); 13 backends supported
 - default — offline deterministic templates
 
 Just typing `super-dev` (no subcommand) launches a Claude Code-style chat
@@ -72,9 +71,10 @@ there in `SD-LAYER-NNN` order.
 ## Anti-rules (do not undo these)
 
 - Do not reintroduce Python packaging (`pyproject.toml`, `super_dev/`).
-- Do not add adapters for hosts without an official Agent SDK. The
-  supported families are exactly: Anthropic, OpenAI, Google Antigravity.
-- Do not vendor `claude-agent-sdk`, `openai-agents`, or `google-adk` as
-  crate dependencies. Super Dev is pure-Rust by design. (Driving the
-  user's *installed* `claude` / `codex` CLI as a subprocess — see
-  `super-dev-host` — is the intended architecture and not this rule.)
+- Only add adapters for hosts that have a documented non-interactive CLI
+  form (`binary [flags] "<prompt>"` → stdout). Currently 13 backends:
+  claude-code, codex, gemini, droid, opencode, cursor-agent, qwen,
+  continue, copilot, aider, trae, plandex, cody.
+- Do not vendor any host SDK crate. Super Dev is pure-Rust by design.
+  Driving the user's *installed* CLI as a subprocess — see
+  `super-dev-host` — is the intended architecture.

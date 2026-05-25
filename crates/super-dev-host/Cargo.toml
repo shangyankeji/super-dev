@@ -13,6 +13,7 @@ super-dev-runtime = { workspace = true }
 super-dev-spec = { workspace = true }
 
 async-trait = { workspace = true }
+futures = "0.3"
 tokio = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }

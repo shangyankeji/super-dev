@@ -1,8 +1,32 @@
 //! `CodexDriver` — drives the `codex` CLI in non-interactive exec mode.
 //!
-//! Shells out to `codex exec "<prompt>"`. Like the Claude Code driver,
-//! it uses the user's already-authenticated `codex` session — no API
-//! key required.
+//! Shells out to:
+//!
+//! ```text
+//! codex exec --skip-git-repo-check --sandbox workspace-write --color never "<prompt>"
+//! ```
+//!
+//! Like the Claude Code driver, it uses the user's already-authenticated
+//! `codex` session — no API key required.
+//!
+//! Flag rationale:
+//!
+//! - `--skip-git-repo-check`: Super Dev workspaces are often `output/` + `.super-dev/` scratch dirs without a git repo. Codex otherwise refuses to run.
+//! - `--sandbox workspace-write`: required for headless use. Without it codex enters interactive approval mode and hangs waiting for stdin confirmation. `workspace-write` permits reads + writes scoped to cwd, no network or system mutation.
+//! - `--color never`: don't emit ANSI escape sequences. (`run_subprocess` strips them anyway; this is cleaner at the source.)
+//!
+//! ## Known environment requirements
+//!
+//! `codex exec` calls `https://chatgpt.com/backend-api/...` on the user's
+//! `ChatGPT` subscription. If that endpoint is unreachable (firewall,
+//! corporate proxy, region block), codex retries 5 times then errors —
+//! Super Dev catches the failure and falls back to the offline template
+//! (with a `tracing::warn!`). The driver itself is correct; the failure
+//! is environmental.
+//!
+//! Per-call timeout is [`DEFAULT_TIMEOUT`] (5 minutes). If your codex CLI
+//! is hanging (e.g. `codex login` hasn't completed), the call falls back
+//! to the offline template after the timeout fires.
 //!
 //! Overridable for forward compatibility:
 //!
@@ -58,9 +82,28 @@ impl CodexDriver {
     }
 
     /// The argument vector preceding the prompt. Exposed for tests.
+    ///
+    /// Flag rationale:
+    /// - `--skip-git-repo-check`: Super Dev workspaces are frequently
+    ///   `output/` + `.super-dev/` scratch dirs that aren't git repos;
+    ///   codex otherwise refuses to run.
+    /// - `--sandbox workspace-write`: required for headless use,
+    ///   otherwise codex enters interactive approval mode and hangs
+    ///   waiting for user input on stdin. `workspace-write` permits
+    ///   reads + writes scoped to cwd, no network or system mutation.
+    /// - `--color never`: don't emit ANSI escape sequences that would
+    ///   later need stripping. (`run_subprocess` strips them anyway,
+    ///   but this is cleaner at the source.)
     #[must_use]
     pub fn base_args(&self) -> Vec<String> {
-        vec![self.exec_subcmd.clone()]
+        vec![
+            self.exec_subcmd.clone(),
+            "--skip-git-repo-check".to_string(),
+            "--sandbox".to_string(),
+            "workspace-write".to_string(),
+            "--color".to_string(),
+            "never".to_string(),
+        ]
     }
 }
 
@@ -100,7 +143,7 @@ impl HostDriver for CodexDriver {
     }
 
     fn display_name(&self) -> &'static str {
-        "Codex"
+        "Codex CLI"
     }
 
     async fn probe(&self) -> ProbeResult {
@@ -134,9 +177,19 @@ mod tests {
     fn defaults_are_sane() {
         let d = CodexDriver::default();
         assert_eq!(d.backend_id(), "codex");
-        assert_eq!(d.display_name(), "Codex");
+        assert_eq!(d.display_name(), "Codex CLI");
         assert_eq!(d.kind(), RuntimeKind::Openai);
-        assert_eq!(d.base_args(), vec!["exec".to_string()]);
+        assert_eq!(
+            d.base_args(),
+            vec![
+                "exec".to_string(),
+                "--skip-git-repo-check".to_string(),
+                "--sandbox".to_string(),
+                "workspace-write".to_string(),
+                "--color".to_string(),
+                "never".to_string(),
+            ]
+        );
     }
 
     #[tokio::test]

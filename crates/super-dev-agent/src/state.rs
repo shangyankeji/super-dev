@@ -34,6 +34,11 @@ pub struct WorkflowState {
     /// Free-form note about the latest action. Empty by default.
     #[serde(default)]
     pub note: String,
+    /// Backend id that produced this state (e.g. `claude-code`, `codex`,
+    /// or empty for offline). Persisted so `continue` / `revise` resume
+    /// against the same worker the original `run` used.
+    #[serde(default)]
+    pub backend: String,
     /// Spec version the agent is conformant against.
     pub spec_version: String,
 }
@@ -49,6 +54,7 @@ impl WorkflowState {
             requirement: String::new(),
             last_transition_at: Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string(),
             note: String::new(),
+            backend: String::new(),
             spec_version: super_dev_spec::SPEC_VERSION.to_string(),
         }
     }
@@ -93,5 +99,38 @@ mod tests {
     fn read_returns_none_for_missing() {
         let tmp = TempDir::new().unwrap();
         assert!(read_workflow_state(tmp.path()).is_none());
+    }
+
+    #[test]
+    fn backend_field_roundtrips() {
+        let tmp = TempDir::new().unwrap();
+        let mut s = WorkflowState::new(Phase::Docs);
+        s.backend = "claude-code".into();
+        s.active_gate = "docs_confirm".into();
+        write_workflow_state(tmp.path(), &s).unwrap();
+        let back = read_workflow_state(tmp.path()).unwrap();
+        assert_eq!(back.backend, "claude-code");
+    }
+
+    #[test]
+    fn legacy_state_without_backend_still_reads() {
+        // States written before the `backend` field existed must still
+        // deserialize — the new column defaults to empty.
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path().join(".super-dev");
+        std::fs::create_dir_all(&dir).unwrap();
+        let legacy = r#"{
+            "phase": "frontend",
+            "active_gate": "preview_confirm",
+            "slug": "old",
+            "requirement": "do thing",
+            "last_transition_at": "2026-01-01T00:00:00Z",
+            "note": "",
+            "spec_version": "SUPER_DEV_HOST_SPEC_V1"
+        }"#;
+        std::fs::write(dir.join("workflow-state.json"), legacy).unwrap();
+        let s = read_workflow_state(tmp.path()).expect("legacy state must read");
+        assert_eq!(s.backend, "", "missing field must default to empty");
+        assert_eq!(s.slug, "old");
     }
 }

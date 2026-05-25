@@ -173,11 +173,15 @@ fn examples_command_prints_cheatsheet() {
         .expect("examples should run");
     assert!(out.status.success());
     let s = String::from_utf8_lossy(&out.stdout);
-    // Spot-check that the cheat-sheet mentions the main entrypoints.
+    // Spot-check the main entrypoints + new 4.4 surface.
     assert!(s.contains("super-dev"));
     assert!(s.contains("super-dev run"));
     assert!(s.contains("super-dev continue"));
-    assert!(s.contains("TUI keybindings"));
+    // 4.4 cheat-sheet headings:
+    assert!(s.contains("First-time use"));
+    assert!(s.contains("slash commands") || s.contains("Inside the TUI"));
+    assert!(s.contains("/claude"));
+    assert!(s.contains("Shift+Enter"));
 }
 
 #[test]
@@ -189,9 +193,10 @@ fn guide_command_prints_walkthrough() {
     assert!(out.status.success());
     let s = String::from_utf8_lossy(&out.stdout);
     assert!(s.contains("60-second walkthrough"));
-    assert!(s.contains("THE 9 COMMANDS"));
+    assert!(s.contains("THE COMMAND SURFACE"));
     assert!(s.contains("docs_confirm"));
     assert!(s.contains("preview_confirm"));
+    assert!(s.contains("INPUT BOX FEATURES"));
 }
 
 #[test]

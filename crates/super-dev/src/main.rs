@@ -1,18 +1,19 @@
 //! `super-dev` — the single binary entrypoint.
 //!
-//! 4.2+ verbs (no install / uninstall / hook — those belonged to the
-//! injection-style plugin model, which was dropped):
+//! 4.4+ verbs (the standalone `tui` subcommand and the legacy
+//! `install` / `uninstall` / `hook` verbs were dropped — the TUI is now
+//! the default entry, and host injection is gone):
 //!
-//! - (none)                  launch the TUI (same as `tui`)
+//! - (none)                  launch the chat TUI (recommended entry)
 //! - `init`                  write the `super-dev.yaml` spec manifest
-//! - `tui [<req>]`           interactive TUI; opens welcome screen when no req
 //! - `run <req>`             drive research → docs, pause at `docs_confirm`
-//! - `continue`              approve the active gate and advance
+//! - `continue`              approve the active gate (reuses persisted backend)
 //! - `revise <text>`         keep the active gate, request revisions
 //! - `spec`                  print `SUPER_DEV_HOST_SPEC_V1`
-//! - `verify`                inspect workspace conformance
+//! - `verify`                inspect workspace conformance + worker
 //! - `report`                emit the SD-EVID-004 compliance mapping
 //! - `doctor`                self-test
+//! - `examples` / `guide`    cheat-sheet / walkthrough
 //!
 //! Anything outside this surface is intentionally absent.
 
@@ -69,7 +70,7 @@ enum Command {
     #[command(
         long_about = "Bootstrap a workspace by writing a `super-dev.yaml` spec manifest\n\
                       (SD-META-001). This declares the project to Super Dev so future\n\
-                      `super-dev run` / `super-dev tui` invocations have a stable slug,\n\
+                      `super-dev run` / `super-dev` (TUI) invocations have a stable slug,\n\
                       conformance level, and quality threshold.\n\
                       \n\
                       Idempotent — re-running on an initialised workspace is a no-op\n\
@@ -96,18 +97,32 @@ enum Command {
     /// Drive the pipeline from `research` to the first gate (`docs_confirm`).
     #[command(
         long_about = "Run the pipeline non-interactively from `research` to the first\n\
-                      gate (`docs_confirm`). Two modes:\n\
+                      gate (`docs_confirm`). Workers:\n\
                       \n  \
-                      --backend claude-code   drive your logged-in Claude Code CLI (no key)\n  \
-                      --backend codex         drive your logged-in Codex CLI (no key)\n  \
-                      (default)               offline deterministic templates — for CI / demos\n\
+                      --backend claude-code    Anthropic Claude Code\n  \
+                      --backend codex          OpenAI Codex\n  \
+                      --backend gemini         Google Gemini CLI\n  \
+                      --backend droid          Factory.ai Droid\n  \
+                      --backend opencode       OpenCode (open-source)\n  \
+                      --backend cursor-agent   Cursor Agent (headless)\n  \
+                      --backend qwen           Alibaba Qwen Code\n  \
+                      --backend continue       Continue (cn)\n  \
+                      --backend copilot        GitHub Copilot CLI\n  \
+                      --backend aider          Aider (--message mode)\n  \
+                      (default)                offline deterministic templates\n\
+                      \n\
+                      All host backends drive the user's already-installed,\n\
+                      already-logged-in CLI — no API key needed.\n\
                       \n\
                       After `run`, the pipeline pauses at the `docs_confirm` gate.\n\
                       Review `output/*-prd.md` etc., then run `super-dev continue` to\n\
                       proceed, or `super-dev revise \"...\"` to ask for changes.",
         after_help = "EXAMPLES:\n  \
                       super-dev run \"做一个登录系统\"                       # offline\n  \
-                      super-dev run \"...\" --backend claude-code              # use Claude\n  \
+                      super-dev run \"...\" --backend claude-code              # Claude Code\n  \
+                      super-dev run \"...\" --backend gemini                   # Google Gemini\n  \
+                      super-dev run \"...\" --backend droid                    # Factory Droid\n  \
+                      super-dev run \"...\" --backend cursor-agent             # Cursor headless\n  \
                       super-dev run \"...\" --backend codex --slug my-mvp      # explicit slug"
     )]
     Run {
@@ -140,12 +155,18 @@ enum Command {
                       `continue` is a no-op if no gate is active.",
         after_help = "EXAMPLES:\n  \
                       super-dev continue\n  \
+                      super-dev continue --backend claude-code\n  \
                       super-dev continue --project-root ./app"
     )]
     Continue {
         /// Workspace root; defaults to current directory.
         #[arg(long)]
         project_root: Option<PathBuf>,
+        /// Drive the next block via an already-logged-in host CLI. When
+        /// omitted, falls back to whatever the original `run` recorded —
+        /// or offline templates if no backend was tracked.
+        #[arg(long, value_enum)]
+        backend: Option<BackendArg>,
     },
     /// Stay in the active gate and record a revision request.
     #[command(
@@ -247,12 +268,35 @@ enum Command {
 }
 
 /// Host CLI backend selector for `super-dev run --backend`.
+///
+/// Each variant maps 1:1 onto a registered [`super_dev_host::HostDriver`].
+/// Adding a new host requires (1) a driver in `super-dev-host`, (2) a
+/// variant here, (3) the matching id pair in [`BackendArg::id`] /
+/// [`BackendArg::from_id`].
 #[derive(Debug, Copy, Clone, clap::ValueEnum)]
 enum BackendArg {
-    /// Drive the already-logged-in `claude` CLI (no API key needed).
+    /// Drive Claude Code CLI.
     ClaudeCode,
-    /// Drive the already-logged-in `codex` CLI (no API key needed).
+    /// Drive Codex CLI.
     Codex,
+    /// Drive Gemini CLI.
+    Gemini,
+    /// Drive Droid CLI.
+    Droid,
+    /// Drive OpenCode CLI.
+    Opencode,
+    /// Drive Qwen Code CLI.
+    Qwen,
+    /// Drive Copilot CLI.
+    Copilot,
+    /// Drive Trae CLI.
+    Trae,
+    /// Drive CodeBuddy CLI.
+    Codebuddy,
+    /// Drive Qoder CLI.
+    Qoder,
+    /// Drive Kimi Code CLI.
+    Kimi,
 }
 
 impl BackendArg {
@@ -260,6 +304,32 @@ impl BackendArg {
         match self {
             Self::ClaudeCode => "claude-code",
             Self::Codex => "codex",
+            Self::Gemini => "gemini",
+            Self::Droid => "droid",
+            Self::Opencode => "opencode",
+            Self::Qwen => "qwen",
+            Self::Copilot => "copilot",
+            Self::Trae => "trae",
+            Self::Codebuddy => "codebuddy",
+            Self::Qoder => "qoder",
+            Self::Kimi => "kimi",
+        }
+    }
+
+    fn from_id(id: &str) -> Option<Self> {
+        match id {
+            "claude-code" => Some(Self::ClaudeCode),
+            "codex" => Some(Self::Codex),
+            "gemini" => Some(Self::Gemini),
+            "droid" => Some(Self::Droid),
+            "opencode" => Some(Self::Opencode),
+            "qwen" => Some(Self::Qwen),
+            "copilot" => Some(Self::Copilot),
+            "trae" => Some(Self::Trae),
+            "codebuddy" => Some(Self::Codebuddy),
+            "qoder" => Some(Self::Qoder),
+            "kimi" => Some(Self::Kimi),
+            _ => None,
         }
     }
 }
@@ -297,7 +367,10 @@ async fn main() -> Result<()> {
             })
             .await
         }
-        Command::Continue { project_root } => cmd_continue(project_root).await,
+        Command::Continue {
+            project_root,
+            backend,
+        } => cmd_continue(project_root, backend).await,
         Command::Revise { text, project_root } => cmd_revise(text, project_root).await,
         Command::Spec { clauses } => cmd_spec(clauses),
         Command::Verify { project_root } => cmd_verify(project_root),
@@ -389,12 +462,18 @@ async fn cmd_run(args: RunArgs) -> Result<()> {
         requirement: args.requirement,
         slug: args.slug,
         model: args.model,
+        backend: args
+            .backend
+            .as_ref()
+            .map_or(String::new(), |b| b.id().to_string()),
+        design_system: String::new(),
+        seed_template: String::new(),
     };
 
     // Two modes:
     //   --backend <host>  → drive a logged-in host CLI as the worker
     //   (default)         → offline deterministic templates
-    let (report, runtime_kind) = if let Some(backend) = args.backend {
+    let (report, runtime_label) = if let Some(backend) = args.backend {
         let driver = super_dev_host::driver_for(backend.id())
             .ok_or_else(|| anyhow::anyhow!("unknown backend `{}`", backend.id()))?;
         match driver.probe().await {
@@ -412,30 +491,34 @@ async fn cmd_run(args: RunArgs) -> Result<()> {
                 anyhow::bail!("backend `{}` is unhealthy: {detail}", backend.id());
             }
         }
-        let kind = driver.kind();
+        let label = format!(
+            "Host CLI worker — {} ({})",
+            driver.display_name(),
+            backend.id()
+        );
         let runner = AgentRunner::new(driver, opts);
         runner.start().context("failed to start agent")?;
         let report = runner
             .run_initial_block(true)
             .await
             .context("pipeline failure")?;
-        (report, kind)
+        (report, label)
     } else {
-        let kind = RuntimeKind::Anthropic;
-        let runner = AgentRunner::new(OfflineRuntime::new(kind), opts);
+        let label = "Offline deterministic templates (no AI; demos / CI)".to_string();
+        let runner = AgentRunner::new(OfflineRuntime::new(RuntimeKind::Anthropic), opts);
         runner.start().context("failed to start agent")?;
         let report = runner
             .run_initial_block(false)
             .await
             .context("pipeline failure")?;
-        (report, kind)
+        (report, label)
     };
 
-    print_report(&project_root, runtime_kind, &report);
+    print_report(&project_root, &runtime_label, &report);
     Ok(())
 }
 
-fn print_report(project_root: &Path, runtime: RuntimeKind, report: &RunReport) {
+fn print_report(project_root: &Path, runtime_label: &str, report: &RunReport) {
     println!(
         "Super Dev — {}.",
         if report.paused_at.is_some() {
@@ -445,7 +528,7 @@ fn print_report(project_root: &Path, runtime: RuntimeKind, report: &RunReport) {
         }
     );
     println!("  workspace: {}", project_root.display());
-    println!("  runtime: {}", runtime.display_name());
+    println!("  runtime: {runtime_label}");
     println!(
         "  final phase: {} | active gate: {}",
         report.final_phase.id(),
@@ -481,7 +564,10 @@ fn print_report(project_root: &Path, runtime: RuntimeKind, report: &RunReport) {
     }
 }
 
-async fn cmd_continue(project_root: Option<PathBuf>) -> Result<()> {
+async fn cmd_continue(
+    project_root: Option<PathBuf>,
+    backend_override: Option<BackendArg>,
+) -> Result<()> {
     let project_root = resolve_root(project_root)?;
     let state = read_workflow_state(&project_root).ok_or_else(|| {
         anyhow::anyhow!("no .super-dev/workflow-state.json — run `super-dev run` first")
@@ -527,19 +613,73 @@ async fn cmd_continue(project_root: Option<PathBuf>) -> Result<()> {
     } else {
         state.requirement.clone()
     };
+
+    // Resolve backend: explicit flag > persisted state > offline.
+    let backend_id: Option<String> = backend_override
+        .as_ref()
+        .map(|b| b.id().to_string())
+        .or_else(|| {
+            if state.backend.is_empty() {
+                None
+            } else {
+                Some(state.backend.clone())
+            }
+        });
+
     let opts = RunOptions {
         project_root: project_root.clone(),
         requirement,
         slug,
-        model: "offline".to_string(),
+        model: "claude-sonnet-4-6".to_string(),
+        backend: backend_id.clone().unwrap_or_default(),
+        design_system: String::new(),
+        seed_template: String::new(),
     };
-    let runner = AgentRunner::new(OfflineRuntime::new(RuntimeKind::Anthropic), opts);
-    let report = runner
-        .continue_from_gate(gate)
-        .await
-        .context("pipeline failure")?;
 
-    print_report(&project_root, RuntimeKind::Anthropic, &report);
+    let (report, runtime_label) = if let Some(id) = backend_id {
+        let backend = BackendArg::from_id(&id)
+            .ok_or_else(|| anyhow::anyhow!("unknown backend `{id}` in workflow-state.json"))?;
+        let driver = super_dev_host::driver_for(backend.id())
+            .ok_or_else(|| anyhow::anyhow!("no driver registered for `{}`", backend.id()))?;
+        match driver.probe().await {
+            super_dev_host::ProbeResult::Ready { version } => {
+                println!("Backend {} ready ({version}).", driver.display_name());
+            }
+            super_dev_host::ProbeResult::NotInstalled { program } => {
+                anyhow::bail!(
+                    "backend `{}` not available: `{program}` is not on PATH. \
+                     Pass --backend offline (or no --backend) to fall back.",
+                    backend.id()
+                );
+            }
+            super_dev_host::ProbeResult::Unhealthy { detail } => {
+                anyhow::bail!("backend `{}` is unhealthy: {detail}", backend.id());
+            }
+        }
+        let label = format!(
+            "Host CLI worker — {} ({})",
+            driver.display_name(),
+            backend.id()
+        );
+        let runner = AgentRunner::new(driver, opts);
+        let report = runner
+            .continue_from_gate(gate)
+            .await
+            .context("pipeline failure")?;
+        (report, label)
+    } else {
+        let runner = AgentRunner::new(OfflineRuntime::new(RuntimeKind::Anthropic), opts);
+        let report = runner
+            .continue_from_gate(gate)
+            .await
+            .context("pipeline failure")?;
+        (
+            report,
+            "Offline deterministic templates (no AI; demos / CI)".to_string(),
+        )
+    };
+
+    print_report(&project_root, &runtime_label, &report);
     Ok(())
 }
 
@@ -571,7 +711,7 @@ async fn cmd_revise(text: String, project_root: Option<PathBuf>) -> Result<()> {
         GateOutcome::Approved => {
             // Defensive: user said "继续" via revise — treat as approval.
             println!("input parsed as approval; treating as `continue`.");
-            cmd_continue(Some(project_root)).await
+            cmd_continue(Some(project_root), None).await
         }
         GateOutcome::Cancelled => {
             anyhow::bail!("user cancelled the pipeline");
@@ -737,12 +877,17 @@ fn cmd_report(slug: Option<String>, project_root: Option<PathBuf>) -> Result<()>
 
 fn print_state(s: &WorkflowState) {
     println!(
-        "workflow-state: phase={} active_gate={} last_transition_at={}",
+        "workflow-state: phase={} active_gate={} worker={} last_transition_at={}",
         s.phase,
         if s.active_gate.is_empty() {
             "<none>"
         } else {
             &s.active_gate
+        },
+        if s.backend.is_empty() {
+            "offline-templates"
+        } else {
+            s.backend.as_str()
         },
         s.last_transition_at
     );

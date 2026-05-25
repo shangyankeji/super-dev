@@ -40,7 +40,7 @@ pub mod verify;
 pub use events::{ChannelSink, EngineEvent, EventSink, NullSink, RecordingSink};
 pub use gates::{classify_reply, Gate, GateOutcome};
 pub use manifest::{ConformanceLevel, Profile, SpecManifest};
-pub use phases::PhaseOutput;
+pub use phases::{knowledge_top_files, phase_knowledge_digest, PhaseOutput};
 pub use runner::{AgentRunner, RunOptions, RunReport};
 pub use state::{read_workflow_state, write_workflow_state, WorkflowState};
 pub use verify::{detect_project, run_verify, ProjectKind, VerifyOutcome};

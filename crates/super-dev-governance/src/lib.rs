@@ -40,7 +40,7 @@ pub use compliance::{
     build_compliance_mapping, ClauseEvidence, ComplianceFrameworks, CLAUSE_COMPLIANCE,
 };
 pub use context::{compose_session_context, SessionContext};
-pub use rules::{check_color_tokens, check_emoji, Decision};
+pub use rules::{check_ai_slop, check_color_tokens, check_emoji, Decision};
 
 /// Re-export the spec marker so downstream crates can pin against it.
 pub use super_dev_spec::SPEC_VERSION;

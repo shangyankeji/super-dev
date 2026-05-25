@@ -51,6 +51,138 @@ pub fn knowledge_digest(opts: &RunOptions) -> String {
     smart_knowledge_digest(&dir, &opts.requirement)
 }
 
+/// Phase-aware knowledge digest — each pipeline phase gets knowledge
+/// from its relevant domain subdirectories, keyword-ranked against the
+/// user requirement. This is the "virtual expert's professional library".
+#[must_use]
+pub fn phase_knowledge_digest(opts: &RunOptions, phase: Phase) -> String {
+    let base = opts.project_root.join("knowledge");
+    if !base.is_dir() {
+        return String::new();
+    }
+    let subdirs: &[&str] = match phase {
+        Phase::Research => return knowledge_digest(opts),
+        Phase::Docs => &[
+            "product",
+            "architecture",
+            "design",
+            "frontend",
+            "industries",
+        ],
+        Phase::DocsConfirm | Phase::PreviewConfirm => return String::new(),
+        Phase::Spec => &["development", "00-governance", "product"],
+        Phase::Frontend => &["frontend", "design", "design-systems", "seed-templates"],
+        Phase::Backend => &["backend", "api", "database", "security", "cloud-native"],
+        Phase::Quality => &["testing", "security", "00-governance"],
+        Phase::Delivery => &["cicd", "operations", "00-governance", "security"],
+    };
+
+    let mut all_paths = Vec::new();
+    for sub in subdirs {
+        let dir = base.join(sub);
+        if dir.is_dir() {
+            walk_md(&dir, &mut all_paths, 0);
+        }
+    }
+    if all_paths.is_empty() {
+        return String::new();
+    }
+
+    let keywords = extract_keywords(&opts.requirement);
+    let mut scored: Vec<(usize, &String)> = all_paths
+        .iter()
+        .map(|p| (score_path(p, &keywords), p))
+        .collect();
+    scored.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(b.1)));
+
+    let top_k = 4;
+    let chosen: Vec<&String> = scored
+        .iter()
+        .filter(|(s, _)| *s > 0)
+        .take(top_k)
+        .map(|(_, p)| *p)
+        .collect();
+
+    if chosen.is_empty() {
+        let mut sorted: Vec<&String> = all_paths.iter().collect();
+        sorted.sort();
+        let fallback: Vec<&String> = sorted.into_iter().take(3).collect();
+        if fallback.is_empty() {
+            return String::new();
+        }
+        let mut out = format!(
+            "\n\n## Expert knowledge ({} phase)\n\n\
+             Top {} files from {} domain knowledge (no keyword match, showing first files):\n\n",
+            phase.id(),
+            fallback.len(),
+            subdirs.join("/")
+        );
+        for rel in fallback {
+            let full = base.join(rel);
+            let excerpt = read_excerpt(&full, 400);
+            out.push_str(&format!("### `{rel}`\n\n{excerpt}\n\n"));
+        }
+        return out;
+    }
+
+    let mut out = format!(
+        "\n\n## Expert knowledge ({} phase)\n\n\
+         Top {} of {} domain files (keyword-ranked from {}):\n\n",
+        phase.id(),
+        chosen.len(),
+        all_paths.len(),
+        subdirs.join(", ")
+    );
+    for rel in chosen {
+        let full = base.join(rel);
+        let excerpt = read_excerpt(&full, 400);
+        out.push_str(&format!("### `{rel}`\n\n{excerpt}\n\n"));
+    }
+    out
+}
+
+/// The file paths (`knowledge/*.md`, workspace-relative) the digest
+/// would surface to the worker for this requirement. Used by the runner
+/// to emit a chat-visible "I'm reading X, Y, Z" event so the user can
+/// see Super Dev is doing context retrieval, not flying blind.
+///
+/// Returns `(chosen_paths, total_scanned)` where `total_scanned` is the
+/// full corpus size — handy for showing "selected 6 of 306" in the UI.
+#[must_use]
+pub fn knowledge_top_files(opts: &RunOptions) -> (Vec<String>, usize) {
+    let dir = opts.project_root.join("knowledge");
+    if !dir.is_dir() {
+        return (Vec::new(), 0);
+    }
+    let mut paths = Vec::new();
+    walk_md(&dir, &mut paths, 0);
+    if paths.is_empty() {
+        return (Vec::new(), 0);
+    }
+    let total = paths.len();
+    let keywords = extract_keywords(&opts.requirement);
+    let mut scored: Vec<(usize, &String)> = paths
+        .iter()
+        .map(|p| (score_path(p, &keywords), p))
+        .collect();
+    scored.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(b.1)));
+    let top_k = 6;
+    let top: Vec<String> = scored
+        .iter()
+        .filter(|(s, _)| *s > 0)
+        .take(top_k)
+        .map(|(_, p)| (*p).clone())
+        .collect();
+    let chosen = if top.is_empty() {
+        let mut sorted: Vec<String> = paths.clone();
+        sorted.sort();
+        sorted.into_iter().take(top_k).collect()
+    } else {
+        top
+    };
+    (chosen, total)
+}
+
 /// Smart digest: rank knowledge files against `requirement`, then emit
 /// the top-K with a short excerpt. Pure-text scoring, no embeddings.
 fn smart_knowledge_digest(dir: &Path, requirement: &str) -> String {
@@ -164,19 +296,26 @@ pub fn run_research(opts: &RunOptions, generated_body: Option<&str>) -> io::Resu
     let knowledge_digest = summarise_knowledge_dir(&opts.project_root.join("knowledge"));
 
     let research_path = output_dir.join(format!("{slug}-research.md"));
+    let existing_on_disk = fs::read_to_string(&research_path).unwrap_or_default();
     let research_body = match generated_body {
-        Some(text) if !text.trim().is_empty() => text.to_string(),
-        _ => format!(
-            "# Research — {slug}\n\n\
-             > Auto-generated placeholder. Replace with model-driven research in the LLM milestone.\n\n\
-             ## Requirement\n\n{}\n\n\
-             ## Local knowledge available\n\n{}\n\n\
-             ## Open questions for the model\n\n\
-             - Which similar products exist? What do they do well / badly?\n\
-             - What domain risks should the architecture mitigate?\n\
-             - What UI patterns are non-negotiable in this domain?\n",
-            opts.requirement, knowledge_digest,
-        ),
+        Some(text) if !text.trim().is_empty() => prefer_richer(text, &existing_on_disk),
+        _ => {
+            if !existing_on_disk.is_empty() && existing_on_disk.len() > 200 {
+                existing_on_disk
+            } else {
+                format!(
+                    "# Research — {slug}\n\n\
+                     > Offline scaffold — pass `--backend claude-code` or `--backend codex` to fill this in with real worker-generated content.\n\n\
+                     ## Requirement\n\n{}\n\n\
+                     ## Local knowledge available\n\n{}\n\n\
+                     ## Open questions for the model\n\n\
+                     - Which similar products exist? What do they do well / badly?\n\
+                     - What domain risks should the architecture mitigate?\n\
+                     - What UI patterns are non-negotiable in this domain?\n",
+                    opts.requirement, knowledge_digest,
+                )
+            }
+        }
     };
     fs::write(&research_path, &research_body)?;
 
@@ -233,20 +372,17 @@ pub fn run_docs(opts: &RunOptions, content: &DocsContent) -> io::Result<PhaseOut
     let arch = output_dir.join(format!("{slug}-architecture.md"));
     let uiux = output_dir.join(format!("{slug}-uiux.md"));
 
-    fs::write(
-        &prd,
-        pick(&content.prd, || render_prd(&slug, &opts.requirement)),
-    )?;
-    fs::write(
-        &arch,
-        pick(&content.architecture, || {
-            render_architecture(&slug, &opts.requirement)
-        }),
-    )?;
-    fs::write(
-        &uiux,
-        pick(&content.uiux, || render_uiux(&slug, &opts.requirement)),
-    )?;
+    // For each doc: prefer the richer of (worker stdout, worker disk file,
+    // offline template). This handles the case where the worker writes a
+    // full document to disk via Edit tool but returns only a summary to
+    // stdout — we keep the richer disk version.
+    write_preferring_richer(&prd, &content.prd, || render_prd(&slug, &opts.requirement))?;
+    write_preferring_richer(&arch, &content.architecture, || {
+        render_architecture(&slug, &opts.requirement)
+    })?;
+    write_preferring_richer(&uiux, &content.uiux, || {
+        render_uiux(&slug, &opts.requirement)
+    })?;
 
     for p in [&prd, &arch, &uiux] {
         audit(
@@ -323,7 +459,8 @@ pub fn run_frontend(opts: &RunOptions) -> io::Result<PhaseOutput> {
     let note = output_dir.join(format!("{slug}-frontend-notes.md"));
     let body = format!(
         "# Frontend notes — {slug}\n\n\
-         > Auto-generated placeholder. Replace with real frontend implementation summary.\n\n\
+         > Instruction checklist for the interactive worker session.\n\
+         > Open Claude Code / Codex in this workspace and follow each item.\n\n\
          ## Sources of truth\n\n\
          - `output/{slug}-prd.md` (acceptance criteria)\n\
          - `output/{slug}-architecture.md` (API surface)\n\
@@ -363,7 +500,8 @@ pub fn run_backend(opts: &RunOptions) -> io::Result<PhaseOutput> {
     let note = output_dir.join(format!("{slug}-backend-notes.md"));
     let body = format!(
         "# Backend notes — {slug}\n\n\
-         > Auto-generated placeholder. Replace with real backend implementation summary.\n\n\
+         > Instruction checklist for the interactive worker session.\n\
+         > Open Claude Code / Codex in this workspace and follow each item.\n\n\
          ## Sources of truth\n\n\
          - `output/{slug}-architecture.md` (API surface + data model)\n\
          - `.super-dev/audit/frontend-api-calls.jsonl` (every URL the frontend wrote)\n\n\
@@ -522,6 +660,48 @@ pub fn run_quality(opts: &RunOptions) -> io::Result<PhaseOutput> {
         color_blocks,
         2.0,
     ));
+
+    // SD-CODE-005 — anti-slop visual quality check on output artifacts
+    let slop_issues = count_slop_violations(&output_dir);
+    let slop_detail = if slop_issues == 0 {
+        "No AI template patterns detected in output artifacts".to_string()
+    } else {
+        format!(
+            "{slop_issues} AI-slop pattern(s) detected (Lorem ipsum, generic headings, purple gradients)"
+        )
+    };
+    checks.push(QualityCheck {
+        name: "Anti-AI-slop check".to_string(),
+        category: "quality".to_string(),
+        description: "SD-CODE-005 — no AI-template visual patterns in output".to_string(),
+        status: if slop_issues == 0 {
+            "passed".to_string()
+        } else {
+            "warning".to_string()
+        },
+        score: if slop_issues == 0 { 100 } else { 60 },
+        details: slop_detail,
+        weight: 1.5,
+    });
+
+    let uiux_path = output_dir.join(format!("{slug}-uiux.md"));
+    let uiux_score = i32::try_from(score_uiux_completeness(&uiux_path)).unwrap_or(100);
+    checks.push(QualityCheck {
+        name: "Design system completeness".to_string(),
+        category: "quality".to_string(),
+        description: "UIUX doc includes color/typography/spacing/icon/component/a11y sections"
+            .to_string(),
+        status: if uiux_score >= 80 {
+            "passed".to_string()
+        } else if uiux_score >= 50 {
+            "warning".to_string()
+        } else {
+            "failed".to_string()
+        },
+        score: uiux_score,
+        details: format!("UIUX document completeness: {uiux_score}/100"),
+        weight: 2.0,
+    });
 
     let total_score = avg_score(&checks);
     let weighted_score = weighted_avg(&checks);
@@ -870,10 +1050,82 @@ fn walk_files(dir: &Path, out: &mut Vec<PathBuf>, depth: usize) {
 // =====================================================================
 
 /// Pick `override` text when non-empty, else compute the deterministic fallback.
+fn write_preferring_richer(
+    path: &Path,
+    stdout_text: &Option<String>,
+    fallback: impl FnOnce() -> String,
+) -> io::Result<()> {
+    let existing = fs::read_to_string(path).unwrap_or_default();
+    let candidate = pick(stdout_text, fallback);
+    let body = prefer_richer(&candidate, &existing);
+    fs::write(path, body)
+}
+
 fn pick(override_text: &Option<String>, fallback: impl FnOnce() -> String) -> String {
     match override_text {
         Some(text) if !text.trim().is_empty() => text.clone(),
         _ => fallback(),
+    }
+}
+
+/// Count anti-slop violations across markdown artifacts in output/.
+fn count_slop_violations(output_dir: &Path) -> usize {
+    let mut count = 0;
+    if let Ok(rd) = fs::read_dir(output_dir) {
+        for entry in rd.flatten() {
+            let p = entry.path();
+            if p.extension().and_then(|s| s.to_str()) != Some("md") {
+                continue;
+            }
+            if let Ok(content) = fs::read_to_string(&p) {
+                let lower = content.to_ascii_lowercase();
+                if lower.contains("lorem ipsum") || lower.contains("dolor sit amet") {
+                    count += 1;
+                }
+                if lower.contains("welcome to") && lower.contains("# ") {
+                    count += 1;
+                }
+            }
+        }
+    }
+    count
+}
+
+/// Score UIUX document completeness. Checks for key sections:
+/// color palette, typography, spacing, icon library, components,
+/// accessibility. Each section found = +16 points (max ~100).
+fn score_uiux_completeness(path: &Path) -> u32 {
+    let content = fs::read_to_string(path)
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    if content.is_empty() {
+        return 0;
+    }
+    let sections = [
+        "color",
+        "typography",
+        "spacing",
+        "icon",
+        "component",
+        "accessibility",
+    ];
+    let found = sections.iter().filter(|s| content.contains(**s)).count();
+    let base = (found as u32 * 16).min(96);
+    if content.len() > 500 {
+        base + 4
+    } else {
+        base
+    }
+}
+
+/// When the worker returns text via stdout AND already wrote a file to
+/// disk, the disk version is often the richer one (full document) while
+/// stdout may be just a summary. Pick whichever has more substance.
+fn prefer_richer(stdout_text: &str, disk_text: &str) -> String {
+    if disk_text.len() > stdout_text.len() * 2 && disk_text.len() > 200 {
+        disk_text.to_string()
+    } else {
+        stdout_text.to_string()
     }
 }
 
@@ -931,7 +1183,7 @@ fn walk_md(dir: &Path, out: &mut Vec<String>, depth: usize) {
 fn render_prd(slug: &str, requirement: &str) -> String {
     format!(
         "# PRD — {slug}\n\n\
-         > Auto-generated placeholder. Replace with model-driven content in the LLM milestone.\n\n\
+         > Offline scaffold — pass `--backend claude-code` or `--backend codex` to fill this in with real worker-generated content.\n\n\
          ## Goal\n\n{requirement}\n\n\
          ## Scope\n\n- _what's in_\n- _what's out_\n\n\
          ## User stories\n\n- As a user, I want …\n\n\
@@ -943,7 +1195,7 @@ fn render_prd(slug: &str, requirement: &str) -> String {
 fn render_architecture(slug: &str, requirement: &str) -> String {
     format!(
         "# Architecture — {slug}\n\n\
-         > Auto-generated placeholder.\n\n\
+         > Offline scaffold — pass `--backend claude-code` or `--backend codex` to fill this in with real worker-generated content.\n\n\
          ## System overview\n\n_Diagram + prose describing the components implementing: {requirement}_\n\n\
          ## API surface\n\n| Method | Path | Purpose |\n|---|---|---|\n| GET | /api/example | _purpose_ |\n\n\
          ## Data model\n\n_Schemas / tables / message shapes._\n\n\
@@ -954,19 +1206,75 @@ fn render_architecture(slug: &str, requirement: &str) -> String {
 fn render_uiux(slug: &str, requirement: &str) -> String {
     format!(
         "# UI/UX — {slug}\n\n\
-         > Auto-generated placeholder.\n\n\
-         ## Design tokens\n\n```css\n:root {{\n  --color-bg: #_set in LLM milestone_;\n  --color-text: #_set in LLM milestone_;\n  --space-1: 0.25rem;\n}}\n```\n\n\
+         > Offline scaffold — pass `--backend claude-code` or `--backend droid` to generate a real design system.\n\n\
+         ## Visual direction\n\nModern Minimal — clean, precise, whitespace-first.\n\n\
+         ## Color palette\n\n```css\n:root {{\n\
+         \x20 --color-bg: #fafafa;\n\
+         \x20 --color-surface: #ffffff;\n\
+         \x20 --color-text: #111827;\n\
+         \x20 --color-text-secondary: #6b7280;\n\
+         \x20 --color-primary: #2563eb;\n\
+         \x20 --color-primary-hover: #1d4ed8;\n\
+         \x20 --color-accent: #f59e0b;\n\
+         \x20 --color-border: #e5e7eb;\n\
+         \x20 --color-error: #ef4444;\n\
+         \x20 --color-success: #10b981;\n\
+         }}\n\
+         @media (prefers-color-scheme: dark) {{\n\
+         \x20 :root {{\n\
+         \x20\x20\x20 --color-bg: #0f172a;\n\
+         \x20\x20\x20 --color-surface: #1e293b;\n\
+         \x20\x20\x20 --color-text: #f1f5f9;\n\
+         \x20\x20\x20 --color-text-secondary: #94a3b8;\n\
+         \x20\x20\x20 --color-border: #334155;\n\
+         \x20 }}\n\
+         }}\n```\n\n\
+         ## Typography system\n\n\
+         - Headings: `Inter, system-ui, sans-serif` weight 600\n\
+         - Body: `Inter, system-ui, sans-serif` weight 400\n\
+         - `--text-xs: 0.75rem` / `--text-sm: 0.875rem` / `--text-base: 1rem` / `--text-lg: 1.125rem` / `--text-xl: 1.25rem` / `--text-2xl: 1.5rem` / `--text-3xl: 1.875rem`\n\n\
+         ## Spacing scale\n\n\
+         `--space-1: 4px` / `--space-2: 8px` / `--space-3: 12px` / `--space-4: 16px` / `--space-6: 24px` / `--space-8: 32px` / `--space-10: 40px` / `--space-12: 48px`\n\n\
          ## Icon library\n\n- Declared: Lucide\n\n\
-         ## Page hierarchy\n\n- Home\n  - Detail\n  - Settings\n\n\
-         ## Component skeleton\n\n_For: {requirement}_\n\n\
-         ## Accessibility notes\n\n- Color contrast ≥ 4.5:1\n- Keyboard reachable for every interactive control\n",
+         ## Page hierarchy\n\n- `/` Home\n  - `/detail/:id` Detail\n  - `/settings` Settings\n\n\
+         ## Component inventory\n\n\
+         _Components for: {requirement}_\n\n\
+         | Component | States |\n\
+         |---|---|\n\
+         | Button | default / hover / active / disabled / loading |\n\
+         | Input | default / focus / error / disabled |\n\
+         | Card | default / hover / selected |\n\
+         | Modal | open / closing (transition) |\n\n\
+         ## Motion guidelines\n\n\
+         - `--transition-fast: 150ms ease-out` (hover, focus)\n\
+         - `--transition-normal: 250ms ease-in-out` (modals, drawers)\n\
+         - `--transition-slow: 400ms ease-in-out` (page transitions)\n\n\
+         ## Anti-patterns\n\n\
+         1. No decorative hero gradients\n\
+         2. No emoji as functional icons\n\
+         3. No AI-chatbot shell layout\n\
+         4. No cards with identical placeholder text\n\
+         5. No cramped layouts without spacing tokens\n\n\
+         ## Self-critique\n\n\
+         | Dimension | Score |\n|---|---|\n\
+         | Hierarchy clarity | 7/10 |\n\
+         | Visual distinctiveness | 6/10 |\n\
+         | Detail polish | 5/10 |\n\
+         | Functional completeness | 7/10 |\n\
+         | Innovation | 5/10 |\n\n\
+         > Offline template scores low on distinctiveness + polish — use a real worker for production.\n\n\
+         ## Accessibility notes\n\n\
+         - Color contrast ≥ 4.5:1 (AA)\n\
+         - Keyboard reachable for every interactive control\n\
+         - Focus ring: 2px solid var(--color-primary), offset 2px\n\
+         - `aria-label` on icon-only buttons\n",
     )
 }
 
 fn render_execution_plan(slug: &str, requirement: &str) -> String {
     format!(
         "# Execution plan — {slug}\n\n\
-         > Auto-generated placeholder.\n\n\
+         > Skeleton execution plan — open in your worker session and flesh out per-task acceptance criteria.\n\n\
          ## Goal recap\n\n{requirement}\n\n\
          ## Sequence\n\n\
          1. Frontend skeleton + design tokens\n\
@@ -1004,6 +1312,9 @@ mod tests {
             requirement: "build a login system".to_string(),
             slug: "demo".to_string(),
             model: "stub".to_string(),
+            backend: String::new(),
+            design_system: String::new(),
+            seed_template: String::new(),
         }
     }
 

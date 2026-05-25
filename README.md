@@ -9,7 +9,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.75%2B-orange)](https://www.rust-lang.org/)
 [![Spec](https://img.shields.io/badge/spec-SUPER__DEV__HOST__SPEC__V1-blue)](spec/SUPER_DEV_HOST_SPEC_V1.md)
-[![Version](https://img.shields.io/badge/version-4.0.0-success)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-4.4.0-success)](CHANGELOG.md)
 
 [English](README_EN.md) | 简体中文
 
@@ -21,31 +21,43 @@
 
 `Super Dev` 是 **AI 编码宿主的教练与编排器**——它本身不写代码、不是 IDE。它把一份完整的商业项目交付规范（[SUPER_DEV_HOST_SPEC_V1](spec/SUPER_DEV_HOST_SPEC_V1.md)）按 9 阶段流水线落地：先研究什么、产出哪些工件、什么时候停下来等用户确认、什么文件不许写、留下什么审计证据。
 
-**核心模式:驱动你已登录的宿主 CLI。** Super Dev 把用户已经安装并登录的 `claude` / `codex` 命令行当作按需调用的执行后端——**不需要 API key**,吃的是你已有的宿主订阅。终端里敲 `super-dev` 就进入 ratatui 实时进度界面,正常对话即可。
+**核心模式:驱动你已登录的宿主 CLI。** Super Dev 把用户已经安装并登录的 AI 编码 CLI 当作按需调用的执行后端——**不需要 API key**,吃的是你已有的宿主订阅。终端里敲 `super-dev` 就进入 ratatui 实时进度界面,正常对话即可。
 
 一个二进制、零运行时依赖、单文件分发。
 
 ## 两个核心事实
 
 - **我们不调任何大模型 API**——Super Dev 自己是确定性的 Rust 状态机
-- **真正写代码的是你电脑上已登录的 Claude Code / Codex** ——我们只把它们当工人调度
+- **真正写代码的是你电脑上已登录的 AI 编码 CLI**——我们只把它们当工人调度
 
 | 模式 | 命令 | 需要 API key | 说明 |
 |---|---|---|---|
-| **宿主 CLI**（推荐） | `--backend claude-code` / `--backend codex` | **否** | 驱动你已登录的宿主 CLI,吃现有订阅 |
+| **宿主 CLI**（推荐） | `--backend claude-code` 等 | **否** | 驱动你已登录的宿主 CLI,吃现有订阅 |
 | **离线** | （默认,无 flag） | 否 | 确定性模板,无网络（演示 / CI 用） |
 
 > 1.0 早期版本曾内置直调 Anthropic/OpenAI/Antigravity HTTP API,4.0 起**彻底移除**——Super Dev 是"项目经理",不是"AI 客户端"。
 
-## 只服务深度兼容的三家宿主
+## 支持 13 个主流 AI 编码 CLI
 
-只保留**三家有官方 Agent SDK** 的宿主家族（Cursor / Windsurf / Cline / Roo / Continue / Trae / Qoder / CodeBuddy / Kiro / Droid 等浅适配宿主全部 out-of-scope）：
+Super Dev 驱动所有有非交互 CLI 的主流 AI 编码工具——你装了哪个就用哪个:
 
-| 宿主家族 | 官方 SDK | 桌面端 | CLI 端 |
+| Backend ID | 二进制 | 非交互调用形式 | TUI 命令 |
 |---|---|---|---|
-| **Anthropic** | Claude Agent SDK | Claude Desktop | Claude Code |
-| **OpenAI** | OpenAI Agents SDK | Codex Desktop | Codex CLI |
-| **Google** | Antigravity SDK | Antigravity Desktop | Antigravity CLI |
+| `claude-code` | `claude` | `claude --print --output-format text "<p>"` | `/claude` |
+| `codex` | `codex` | `codex exec --sandbox workspace-write "<p>"` | `/codex` |
+| `gemini` | `gemini` | `gemini -p "<p>"` | `/gemini` |
+| `droid` | `droid` | `droid exec --auto low -o text "<p>"` | `/droid` |
+| `opencode` | `opencode` | `opencode run "<p>"` | `/opencode` |
+| `cursor-agent` | `cursor-agent` | `cursor-agent -p --output-format text "<p>"` | `/cursor` |
+| `qwen` | `qwen` | `qwen -p "<p>"` | `/qwen` |
+| `continue` | `cn` | `cn -p "<p>"` | `/continue-cli` |
+| `copilot` | `copilot` | `copilot -p --allow-all-tools "<p>"` | `/copilot` |
+| `aider` | `aider` | `aider --yes --no-stream --message "<p>"` | `/aider` |
+| `trae` | `trae-cli` | `trae-cli run "<p>"` | `/trae` |
+| `plandex` | `plandex` | `plandex tell --skip-menu --stop "<p>"` | `/plandex` |
+| `cody` | `cody` | `cody chat --message "<p>"` | `/cody` |
+
+`/gemini` 的别名 `/antigravity` 也已注册(Google 5/19 发布 Antigravity CLI 替代 Gemini CLI,别名前向兼容)。
 
 ## 安装
 

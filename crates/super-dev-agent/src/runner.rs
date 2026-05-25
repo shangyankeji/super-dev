@@ -40,6 +40,19 @@ pub struct RunOptions {
     pub slug: String,
     /// Model identifier passed to the runtime (provider-specific).
     pub model: String,
+    /// Backend id that's driving this run (e.g. `claude-code`, `codex`).
+    /// Empty when running offline templates. Persisted into the workflow
+    /// state so subsequent `continue` / `revise` calls can resume against
+    /// the same worker without a flag.
+    pub backend: String,
+    /// Active design system name (e.g. `modern-minimal`). When set, the
+    /// coach prompt injects the matching `knowledge/design-systems/<name>.md`
+    /// content so the worker binds tokens deterministically.
+    pub design_system: String,
+    /// Active seed template name (e.g. `dashboard`). When set, the coach
+    /// prompt references `knowledge/seed-templates/<name>.md` for the
+    /// page structure and quality gates.
+    pub seed_template: String,
 }
 
 impl RunOptions {
@@ -179,10 +192,15 @@ impl<R: Runtime> AgentRunner<R> {
             requirement: self.options.requirement.clone(),
             last_transition_at: Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string(),
             note: format!(
-                "Started run on {}: {}",
-                self.runtime_kind().id(),
+                "Started run with worker {}: {}",
+                if self.options.backend.is_empty() {
+                    "offline-templates"
+                } else {
+                    self.options.backend.as_str()
+                },
                 self.options.requirement
             ),
+            backend: self.options.backend.clone(),
             spec_version: SPEC_VERSION.to_string(),
         };
         write_workflow_state(&self.options.project_root, &state)?;
@@ -213,6 +231,29 @@ impl<R: Runtime> AgentRunner<R> {
         self.emit(EngineEvent::PhaseStarted {
             phase: Phase::Research,
         });
+        // Surface knowledge-retrieval to the UI: which knowledge/*.md
+        // files Super Dev decided to inject into the research prompt.
+        // Silent retrieval was a major "is this thing actually doing
+        // anything?" complaint from early users.
+        let (top_files, total) = crate::phases::knowledge_top_files(&self.options);
+        if !top_files.is_empty() {
+            let preview = top_files
+                .iter()
+                .take(3)
+                .map(|p| format!("`{p}`"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let more = if top_files.len() > 3 {
+                format!(" (+ {} more)", top_files.len() - 3)
+            } else {
+                String::new()
+            };
+            self.emit(EngineEvent::Note(format!(
+                "📚 knowledge: 选了 {} 个文档中的 {} 篇喂给 worker —— {preview}{more}",
+                total,
+                top_files.len(),
+            )));
+        }
         let research_text = if use_runtime {
             self.try_generate(
                 Phase::Research,
@@ -384,6 +425,7 @@ impl<R: Runtime> AgentRunner<R> {
             requirement: self.options.requirement.clone(),
             last_transition_at: Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string(),
             note: "Pipeline complete.".to_string(),
+            backend: self.options.backend.clone(),
             spec_version: SPEC_VERSION.to_string(),
         };
         write_workflow_state(&self.options.project_root, &done)?;
@@ -415,10 +457,15 @@ impl<R: Runtime> AgentRunner<R> {
             requirement: self.options.requirement.clone(),
             last_transition_at: Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string(),
             note: format!(
-                "Advanced to {} (runtime: {})",
+                "Advanced to {} (worker: {})",
                 next.id(),
-                self.runtime_kind().id()
+                if self.options.backend.is_empty() {
+                    "offline-templates"
+                } else {
+                    self.options.backend.as_str()
+                }
             ),
+            backend: self.options.backend.clone(),
             spec_version: SPEC_VERSION.to_string(),
         };
         write_workflow_state(&self.options.project_root, &state)?;
@@ -464,6 +511,9 @@ mod tests {
             requirement: "build a login page".into(),
             slug: "demo".into(),
             model: "stub".into(),
+            backend: String::new(),
+            design_system: String::new(),
+            seed_template: String::new(),
         }
     }
 
@@ -600,6 +650,61 @@ mod tests {
             events.first(),
             Some(EngineEvent::PipelineStarted { .. })
         ));
+    }
+
+    #[tokio::test]
+    async fn knowledge_note_emitted_when_knowledge_dir_present() {
+        use crate::events::{EngineEvent, RecordingSink};
+        use std::sync::Arc;
+
+        let tmp = TempDir::new().unwrap();
+        // Seed a tiny knowledge/ so the runner picks something.
+        let kd = tmp.path().join("knowledge").join("security");
+        std::fs::create_dir_all(&kd).unwrap();
+        std::fs::write(
+            kd.join("login-playbook.md"),
+            "# Login Playbook\nUse OAuth2 + PKCE.\n",
+        )
+        .unwrap();
+
+        let sink = RecordingSink::new();
+        let runner =
+            AgentRunner::new(FakeRuntime, opts(tmp.path())).with_event_sink(Arc::new(sink.clone()));
+        runner.start().unwrap();
+        runner.run_initial_block(false).await.unwrap();
+
+        let knowledge_notes: Vec<EngineEvent> = sink
+            .events()
+            .into_iter()
+            .filter(|e| matches!(e, EngineEvent::Note(s) if s.contains("knowledge")))
+            .collect();
+        assert_eq!(knowledge_notes.len(), 1);
+        if let EngineEvent::Note(text) = &knowledge_notes[0] {
+            assert!(text.contains("login-playbook"));
+        } else {
+            unreachable!("filtered for Note above")
+        }
+    }
+
+    #[tokio::test]
+    async fn no_knowledge_note_when_no_knowledge_dir() {
+        use crate::events::{EngineEvent, RecordingSink};
+        use std::sync::Arc;
+
+        let tmp = TempDir::new().unwrap();
+        // No knowledge/ subdir at all.
+        let sink = RecordingSink::new();
+        let runner =
+            AgentRunner::new(FakeRuntime, opts(tmp.path())).with_event_sink(Arc::new(sink.clone()));
+        runner.start().unwrap();
+        runner.run_initial_block(false).await.unwrap();
+
+        let knowledge_notes = sink
+            .events()
+            .iter()
+            .filter(|e| matches!(e, EngineEvent::Note(s) if s.contains("knowledge")))
+            .count();
+        assert_eq!(knowledge_notes, 0);
     }
 
     #[tokio::test]

@@ -1139,6 +1139,7 @@ name = "super-dev-host"
 version = "4.4.0"
 dependencies = [
  "async-trait",
+ "futures",
  "super-dev-runtime",
  "super-dev-spec",
  "tempfile",

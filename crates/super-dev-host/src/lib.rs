@@ -2,8 +2,9 @@
 //!
 //! Super Dev 4.x's primary execution mode does not call any LLM API and
 //! does not need an API key. Instead it spawns the host CLI the user has
-//! already installed and authenticated (`claude`, `codex`, …) in
-//! non-interactive mode and captures the response.
+//! already installed and authenticated (`claude`, `codex`, `gemini`,
+//! `droid`, `opencode`, `cursor-agent`, `qwen`, `cn`, `copilot`, `aider`)
+//! in non-interactive mode and captures the response.
 //!
 //! Each driver implements [`super_dev_runtime::Runtime`] so the existing
 //! `AgentRunner` machinery drives it unchanged — a host CLI is just
@@ -11,6 +12,28 @@
 //!
 //! Drivers additionally expose [`HostDriver::probe`] to report whether
 //! the underlying CLI is installed + reachable before a run starts.
+//!
+//! ## Backend matrix (13 hosts)
+//!
+//! | id              | binary           | non-interactive form                              |
+//! |-----------------|------------------|---------------------------------------------------|
+//! | `claude-code`   | `claude`         | `claude --print --output-format text "<p>"`       |
+//! | `codex`         | `codex`          | `codex exec --skip-git-repo-check --sandbox …`    |
+//! | `gemini`        | `gemini`         | `gemini -p "<prompt>"`                            |
+//! | `droid`         | `droid`          | `droid exec --auto low -o text "<p>"`             |
+//! | `opencode`      | `opencode`       | `opencode run "<prompt>"`                         |
+//! | `cursor-agent`  | `cursor-agent`   | `cursor-agent -p --output-format text "<p>"`      |
+//! | `qwen`          | `qwen`           | `qwen -p "<prompt>"`                              |
+//! | `continue`      | `cn`             | `cn -p "<prompt>"`                                |
+//! | `copilot`       | `copilot`        | `copilot -p --allow-all-tools "<p>"`              |
+//! | `aider`         | `aider`          | `aider --yes --no-stream --message "<p>"`         |
+//! | `trae`          | `trae-cli`       | `trae-cli run "<prompt>"`                         |
+//! | `plandex`       | `plandex`        | `plandex tell --skip-menu --stop "<p>"`           |
+//! | `cody`          | `cody`           | `cody chat --message "<prompt>"`                  |
+//!
+//! See [`SimpleHostDriver`] for the generic driver shared by every
+//! backend below the top two — and [`ClaudeCodeDriver`] /
+//! [`CodexDriver`] for the bespoke ones.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs, clippy::all, clippy::pedantic)]
@@ -18,6 +41,7 @@
 
 pub mod claude;
 pub mod codex;
+pub mod simple;
 
 use std::path::PathBuf;
 use std::process::Stdio;
@@ -29,6 +53,7 @@ use tokio::process::Command;
 
 pub use claude::ClaudeCodeDriver;
 pub use codex::CodexDriver;
+pub use simple::SimpleHostDriver;
 
 /// Outcome of probing a host CLI for availability.
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -245,12 +270,46 @@ pub fn driver_for(backend_id: &str) -> Option<Box<dyn HostDriver>> {
     match backend_id {
         "claude-code" => Some(Box::new(ClaudeCodeDriver::default())),
         "codex" => Some(Box::new(CodexDriver::default())),
+        "droid" => Some(Box::new(SimpleHostDriver::droid())),
+        "opencode" => Some(Box::new(SimpleHostDriver::opencode())),
+        "gemini" | "antigravity" => Some(Box::new(SimpleHostDriver::gemini())),
+        "cursor-agent" => Some(Box::new(SimpleHostDriver::cursor_agent())),
+        "qwen" => Some(Box::new(SimpleHostDriver::qwen())),
+        "continue" => Some(Box::new(SimpleHostDriver::continue_cli())),
+        "copilot" => Some(Box::new(SimpleHostDriver::copilot())),
+        "aider" => Some(Box::new(SimpleHostDriver::aider())),
+        "trae" => Some(Box::new(SimpleHostDriver::trae())),
+        "plandex" => Some(Box::new(SimpleHostDriver::plandex())),
+        "cody" => Some(Box::new(SimpleHostDriver::cody())),
+        "goose" => Some(Box::new(SimpleHostDriver::goose())),
+        "kimi" => Some(Box::new(SimpleHostDriver::kimi())),
+        "amp" => Some(Box::new(SimpleHostDriver::amp())),
+        "junie" => Some(Box::new(SimpleHostDriver::junie())),
+        "grok-build" => Some(Box::new(SimpleHostDriver::grok_build())),
+        "amazon-q" => Some(Box::new(SimpleHostDriver::amazon_q())),
+        "crush" => Some(Box::new(SimpleHostDriver::crush())),
+        "gptme" => Some(Box::new(SimpleHostDriver::gptme())),
+        "codebuddy" => Some(Box::new(SimpleHostDriver::codebuddy())),
+        "qoder" => Some(Box::new(SimpleHostDriver::qoder())),
         _ => None,
     }
 }
 
-/// All backend ids `driver_for` accepts.
-pub const BACKEND_IDS: &[&str] = &["claude-code", "codex"];
+/// All backend ids `driver_for` accepts. Order is the canonical display
+/// order for the TUI picker — flagship hosts first.
+pub const BACKEND_IDS: &[&str] = &[
+    "claude-code",
+    "codex",
+    "gemini",
+    "droid",
+    "opencode",
+    "qwen",
+    "copilot",
+    "trae",
+    "codebuddy",
+    "qoder",
+    "kimi",
+];
 
 /// Default per-call timeout for a host CLI invocation.
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(300);
@@ -270,21 +329,29 @@ pub struct BackendStatus {
 /// its "backends detected" panel — one `--version` check per host, run
 /// in parallel so a slow host never serialises startup.
 pub async fn probe_all() -> Vec<BackendStatus> {
-    let claude = ClaudeCodeDriver::default();
-    let codex = CodexDriver::default();
-    let (claude_probe, codex_probe) = tokio::join!(claude.probe(), codex.probe());
-    vec![
-        BackendStatus {
-            id: claude.backend_id(),
-            display_name: claude.display_name(),
-            probe: claude_probe,
-        },
-        BackendStatus {
-            id: codex.backend_id(),
-            display_name: codex.display_name(),
-            probe: codex_probe,
-        },
-    ]
+    // Probe backends in batches of 5 to avoid spawning too many
+    // subprocesses at once (each probe runs `<binary> --version`).
+    // 21 concurrent spawns can overwhelm the system on some machines.
+    let drivers: Vec<Box<dyn HostDriver>> =
+        BACKEND_IDS.iter().filter_map(|id| driver_for(id)).collect();
+
+    let mut results = Vec::with_capacity(drivers.len());
+    for chunk in drivers.chunks(5) {
+        let mut batch = Vec::with_capacity(chunk.len());
+        for d in chunk {
+            batch.push(async {
+                let probe = d.probe().await;
+                BackendStatus {
+                    id: d.backend_id(),
+                    display_name: d.display_name(),
+                    probe,
+                }
+            });
+        }
+        let batch_results = futures::future::join_all(batch).await;
+        results.extend(batch_results);
+    }
+    results
 }
 
 /// Resolve the workspace a driver should run in. Drivers default to the
@@ -346,9 +413,27 @@ mod tests {
 
     #[test]
     fn driver_for_known_and_unknown() {
-        assert!(driver_for("claude-code").is_some());
-        assert!(driver_for("codex").is_some());
+        for id in BACKEND_IDS {
+            assert!(
+                driver_for(id).is_some(),
+                "BACKEND_IDS contains `{id}` but driver_for can't build it"
+            );
+        }
         assert!(driver_for("nope").is_none());
+        assert!(driver_for("").is_none());
+    }
+
+    #[test]
+    fn backend_ids_are_unique() {
+        let mut seen = std::collections::HashSet::new();
+        for id in BACKEND_IDS {
+            assert!(seen.insert(*id), "duplicate id in BACKEND_IDS: {id}");
+        }
+    }
+
+    #[test]
+    fn backend_count_is_eleven() {
+        assert_eq!(BACKEND_IDS.len(), 11);
     }
 
     #[test]

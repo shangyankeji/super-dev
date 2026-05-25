@@ -35,6 +35,15 @@ pub struct UserConfig {
     /// Model identifier passed to the worker.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
+
+    /// Active design system name (e.g. `modern-minimal`, `tech-utility`).
+    /// Saved to config so subsequent runs reuse the same visual direction.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub design_system: Option<String>,
+
+    /// Active seed template (e.g. `saas-landing`, `dashboard`, `blog-content`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seed_template: Option<String>,
 }
 
 impl UserConfig {
@@ -121,6 +130,7 @@ mod tests {
         let original = UserConfig {
             backend: Some("claude-code".into()),
             model: Some("claude-sonnet-4-6".into()),
+            ..Default::default()
         };
         let written = save_to(&original, &path).unwrap();
         assert_eq!(written, path);
@@ -152,6 +162,7 @@ mod tests {
         let cfg = UserConfig {
             backend: Some("codex".into()),
             model: None,
+            ..Default::default()
         };
         save_to(&cfg, &deep).unwrap();
         assert!(deep.is_file());
@@ -164,6 +175,7 @@ mod tests {
         let cfg = UserConfig {
             backend: Some("claude-code".into()),
             model: None,
+            ..Default::default()
         };
         assert_eq!(cfg.backend_or_default(), "claude-code");
     }

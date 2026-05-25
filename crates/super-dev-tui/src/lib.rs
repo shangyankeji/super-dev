@@ -120,6 +120,12 @@ fn spawn_block(options: RunOptions, backend: Option<String>, sink: Arc<ChannelSi
                 return;
             }
         };
+        // `use_runtime=true` only when a real host CLI is configured.
+        // `Some("offline")` resolves to `OfflineRuntime` (empty bodies);
+        // calling `try_generate` there is wasteful — N empty LLM calls
+        // per run that all fall back to template anyway.
+        let use_runtime =
+            matches!(backend.as_deref(), Some(id) if id != "offline" && !id.is_empty());
         let runner = AgentRunner::new(brain, options).with_event_sink(sink.clone());
         let outcome = match block {
             Block::Initial => {
@@ -127,7 +133,7 @@ fn spawn_block(options: RunOptions, backend: Option<String>, sink: Arc<ChannelSi
                     sink.emit(EngineEvent::Note(format!("start failed: {e}")));
                     return;
                 }
-                runner.run_initial_block(backend.is_some()).await
+                runner.run_initial_block(use_runtime).await
             }
             Block::Continue(gate) => runner.continue_from_gate(gate).await,
         };
@@ -216,6 +222,9 @@ async fn event_loop(terminal: &mut Term, app: &mut App, opts: LaunchOptions) -> 
                                     requirement: req,
                                     slug: opts.slug.clone(),
                                     model: opts.model.clone(),
+                                    backend: app.backend.clone().unwrap_or_default(),
+                                    design_system: app.config.design_system.clone().unwrap_or_default(),
+                                    seed_template: app.config.seed_template.clone().unwrap_or_default(),
                                 };
                                 spawn_block(
                                     run_opts,
@@ -236,6 +245,9 @@ async fn event_loop(terminal: &mut Term, app: &mut App, opts: LaunchOptions) -> 
                                     requirement: app.requirement.clone(),
                                     slug: opts.slug.clone(),
                                     model: opts.model.clone(),
+                                    backend: app.backend.clone().unwrap_or_default(),
+                                    design_system: app.config.design_system.clone().unwrap_or_default(),
+                                    seed_template: app.config.seed_template.clone().unwrap_or_default(),
                                 };
                                 spawn_block(
                                     run_opts,
@@ -264,6 +276,9 @@ fn current_run_options(app: &App, opts: &LaunchOptions) -> RunOptions {
         requirement: app.requirement.clone(),
         slug: opts.slug.clone(),
         model: opts.model.clone(),
+        backend: app.backend.clone().unwrap_or_default(),
+        design_system: app.config.design_system.clone().unwrap_or_default(),
+        seed_template: app.config.seed_template.clone().unwrap_or_default(),
     }
 }
 
@@ -292,9 +307,18 @@ mod tests {
     }
 
     #[test]
-    fn build_brain_accepts_known_backends() {
-        assert!(build_brain(Some("claude-code")).is_ok());
-        assert!(build_brain(Some("codex")).is_ok());
+    fn build_brain_accepts_every_registered_backend() {
+        // Lock the TUI ↔ super-dev-host wiring. If `BACKEND_IDS` adds an
+        // entry but the TUI dispatch (`build_brain` → `driver_for`)
+        // doesn't reach it, the user picks the backend in the picker and
+        // it silently falls back to offline — this test makes that
+        // mismatch loud at test time.
+        for id in super_dev_host::BACKEND_IDS {
+            assert!(
+                build_brain(Some(id)).is_ok(),
+                "TUI cannot build brain for registered backend {id}"
+            );
+        }
     }
 
     #[test]

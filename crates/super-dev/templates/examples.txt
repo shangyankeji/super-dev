@@ -3,50 +3,86 @@ Super Dev — common workflows
 
 ★ First-time use (recommended)
 -------------------------------
-    super-dev                                 # launch the TUI, auto-detects claude / codex
-                                              # type your requirement, press Enter
-                                              # at each gate: read artifacts, press 'c'
+    super-dev                                 # launch the chat TUI
+                                              # first time: pick a worker
+                                              #   (claude-code / codex / offline)
+                                              # then type your requirement,
+                                              # watch the pipeline narrate,
+                                              # at each gate press 'c' (or /continue)
                                               # done → release/proof-pack-*.zip
 
-★ Scripted / CI form
---------------------
+★ Inside the TUI — chat & slash commands
+----------------------------------------
+    just type            send as a fresh requirement (or revision if a
+                         gate is open)
+    /claude /codex       switch the worker (saves to ~/.super-dev/config.toml)
+    /offline             switch to deterministic templates (demo / CI)
+    /continue            approve the active gate
+    /revise <text>       stay at gate, request changes
+    /spec                show the full SUPER_DEV_HOST_SPEC_V1 spec
+    /verify              workspace conformance report
+    /doctor              self-test (binary + manifest + probes)
+    /diff [name]         show an artifact (default: prd)
+    /history             show the full conversation history
+    /init                write super-dev.yaml manifest
+    /clear               clear chat history
+    /help or F1          help overlay (all keybindings)
+    /quit or Esc         exit (workflow state is saved)
+
+★ TUI keys
+----------
+    ↑↓ in palette       cycle slash-command matches
+    Tab                 autocomplete the selected slash command
+    ↑↓ in empty input    recall previous prompts (100-entry history)
+    Shift+Enter         insert a newline (build multi-line prompts)
+    ← →                 move cursor character-by-character
+    Home / End          jump cursor to start / end
+    Backspace / Delete  delete before / at cursor (CJK-safe)
+    Esc (when overlay)  close overlay
+    Esc (twice)         confirm quit while a pipeline is running
+
+★ Scripted / CI form (no TUI)
+------------------------------
     super-dev init                            # write super-dev.yaml manifest
     super-dev run "做一个登录系统" \
-                --backend claude-code         # drive Claude Code (no API key needed)
-    super-dev continue                        # approve docs_confirm gate
-    super-dev continue                        # approve preview_confirm gate
-    super-dev verify                          # check final workspace state
+                --backend claude-code         # drive Claude Code (no API key)
+    super-dev continue                        # approve docs_confirm (auto-reuses --backend)
+    super-dev continue                        # approve preview_confirm
+    super-dev verify                          # final workspace state + worker
+    super-dev report                          # SD-EVID-004 compliance map
 
-★ Iterating at a gate
----------------------
-    super-dev revise "把 OAuth 那段去掉,先做 MVP"     # record revision request
+    # explicit worker override at any continue (rarely needed):
+    super-dev continue --backend claude-code  # force Claude Code for this block
+    super-dev continue --backend codex        # switch worker partway through
+
+★ Iterating at a gate (scripted)
+--------------------------------
+    super-dev revise "把 OAuth 那段去掉,先做 MVP"
     # re-run last block, then:
     super-dev continue                        # once happy
 
-★ Switching the worker
-----------------------
-    super-dev run "..." --backend codex       # use Codex instead of Claude Code
-    super-dev run "..."                       # no --backend → offline templates (demo / CI)
+★ Switching the worker mid-conversation (TUI)
+----------------------------------------------
+    /claude                                   # Anthropic Claude Code
+    /codex                                    # OpenAI Codex
+    /gemini (or /antigravity)                 # Google Gemini / Antigravity
+    /droid                                    # Factory.ai Droid
+    /opencode                                 # OpenCode (open source)
+    /cursor                                   # Cursor Agent (headless)
+    /qwen                                     # Alibaba Qwen Code
+    /continue-cli                             # Continue (cn)
+    /copilot                                  # GitHub Copilot CLI
+    /aider                                    # Aider --message mode
+    /trae                                     # ByteDance Trae Agent
+    /plandex                                  # Plandex (2M token context)
+    /cody                                     # Sourcegraph Cody
+    /offline                                  # templates only
 
-★ Inspecting state
-------------------
-    super-dev verify                          # workflow state + evidence chain summary
+★ Inspecting state (no TUI needed)
+-----------------------------------
+    super-dev verify                          # workflow state + evidence chain
     super-dev doctor                          # binary / workspace self-test
     super-dev spec --clauses                  # the 25-clause table
-    super-dev report                          # SOC2 / ISO27001 / EU AI Act mapping
-
-★ TUI keybindings
------------------
-    Welcome screen:                  Pipeline running:
-      Enter   start                    c      approve gate
-      Tab     switch backend           b      backends overlay
-      F1      help                     q      quit (state saved)
-      Esc     quit                     F1/?   help
-
-★ Slash commands (TUI welcome only)
------------------------------------
-    /help     toggle help overlay
-    /quit     exit
 
 ★ Environment overrides
 -----------------------
@@ -55,6 +91,7 @@ Super Dev — common workflows
     SUPER_DEV_CODEX_BIN           path to the `codex` binary        (default: codex)
     SUPER_DEV_CODEX_EXEC_SUBCMD   non-interactive sub-command       (default: exec)
     SUPER_DEV_VERIFY_TIMEOUT_SECS verify-loop per-call timeout      (default: 120)
+    XDG_CONFIG_HOME               base for super-dev/config.toml    (default: $HOME)
 
 For the full spec: super-dev spec
 For a guided walkthrough: super-dev guide

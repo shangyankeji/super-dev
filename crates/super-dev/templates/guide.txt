@@ -16,31 +16,57 @@ THE PIPELINE (9 phases, 2 gates)
 
 YOUR ROLE
 ---------
-  1. Type a one-line requirement.
-  2. Wait while Super Dev drives the AI through the early phases.
-  3. At the first gate (docs_confirm): read the PRD / architecture / UIUX.
-       • happy?    press 'c'
-       • not yet?  press 'q', use `super-dev revise "..."`, then retry
-  4. Wait again, gate 2 (preview_confirm): review spec + frontend output.
-  5. Wait again, pipeline finishes → take the proof-pack zip in `release/`.
+  1. Type `super-dev` to enter the chat TUI.
+  2. First time: pick a worker (claude-code / codex / offline).
+  3. Type a one-line requirement (or press Shift+Enter for multi-line).
+  4. Watch the pipeline narrate. Worker output streams into the chat.
+  5. At the first gate (docs_confirm): read the PRD / architecture / UIUX.
+       • Happy?    `/continue` or just `c`
+       • Not yet?  `/revise <text>` keeps you at the gate
+  6. Same at preview_confirm. Then delivery → proof-pack zip in `release/`.
 
-THE 9 COMMANDS
---------------
-  super-dev                  launch the chat TUI (recommended; no subcommand = this)
-  super-dev init             write super-dev.yaml (run once per workspace)
-  super-dev run <req>        scripted form, no TUI
-  super-dev continue         approve the active gate
-  super-dev revise "<text>"  record a revision (stays at gate)
-  super-dev spec             print the SUPER_DEV_HOST_SPEC_V1 spec
-  super-dev verify           workspace conformance report
-  super-dev doctor           self-test
-  super-dev report           emit SOC2 / ISO27001 / EU AI Act mapping
-  super-dev examples         cheat-sheet (you're looking at the longer version)
-  super-dev guide            this walkthrough
+THE COMMAND SURFACE
+-------------------
+  Inside the TUI (recommended):
+    super-dev                          launch the chat
+    /claude /codex /gemini /droid …    switch worker (10 host CLIs supported)
+    /continue                          approve gate
+    /revise <text>                     gate-local revision
+    /spec /verify /doctor              open scrollable overlays
+    /diff [name]                       show an artifact
+    /history /help /clear /quit
+    type freely                        a fresh requirement, or a revision at a gate
+
+  Workers (every host below = your already-logged-in CLI, no API key):
+    claude-code  Anthropic Claude Code        droid        Factory.ai Droid
+    codex        OpenAI Codex                 opencode     OpenCode (OSS)
+    gemini       Google Gemini CLI            cursor-agent Cursor Agent
+    qwen         Alibaba Qwen Code            continue     Continue (cn)
+    copilot      GitHub Copilot CLI           aider        Aider
+    trae         ByteDance Trae Agent         plandex      Plandex
+    cody         Sourcegraph Cody
+    offline      deterministic templates (no AI; for CI / demos)
+
+  Scripted form (when you don't want a TUI):
+    super-dev init                     write super-dev.yaml (run once per workspace)
+    super-dev run <req>                non-interactive run, pauses at docs_confirm
+    super-dev run <req> --backend X    drive real worker (any of the 10 above)
+    super-dev continue                 approve active gate (auto-reuses --backend)
+    super-dev continue --backend X     override worker for this block
+    super-dev revise <text>            stay at gate, record a revision
+    super-dev spec             print the spec
+    super-dev verify           workspace conformance
+    super-dev doctor           self-test
+    super-dev report           SOC2/ISO27001/EU-AI-Act mapping
+    super-dev examples         the cheat-sheet
+    super-dev guide            this walkthrough
 
 WHAT GETS WRITTEN
 -----------------
-  output/                  AI-generated artifacts (PRD, architecture, UIUX, code)
+  ~/.super-dev/config.toml   your worker / model preference
+  super-dev.yaml             this workspace's spec manifest (SD-META-001)
+
+  output/                    AI-generated artifacts
     <slug>-prd.md
     <slug>-architecture.md
     <slug>-uiux.md
@@ -49,13 +75,14 @@ WHAT GETS WRITTEN
     <slug>-backend-notes.md
     <slug>-quality-gate.json
     <slug>-compliance-mapping.json
-  .super-dev/              state + audit (do not edit by hand)
-    workflow-state.json
+
+  .super-dev/                state + audit (do not edit by hand)
+    workflow-state.json         ← resumable on next launch
     audit/tool-calls.jsonl
-    audit/verify.jsonl        ← build / test outcomes per phase
-    decisions/<gate>.md       ← every revision request
-  super-dev.yaml           your spec manifest
-  release/                 final deliverable
+    audit/verify.jsonl          ← cargo / npm / python verify results
+    decisions/<gate>.md         ← every revision request
+
+  release/                   final deliverable
     proof-pack-<slug>-<ts>.zip   ← give this to your stakeholder
 
 GOVERNANCE RULES (always enforced)
@@ -66,14 +93,28 @@ GOVERNANCE RULES (always enforced)
   SD-CODE-004  tech-stack pre-research
   SD-FLOW-*    phase chain + 2 gates + revision semantics + session continuity
   SD-ART-*     6 mandatory artifacts (PRD / architecture / UIUX / spec / tasks / ADR)
-  SD-EVID-*    5-piece evidence chain (API + tool-call audit + quality + compliance + proof-pack)
+  SD-EVID-*    5-piece evidence chain (audit + quality + compliance + proof-pack)
   SD-META-*    spec manifest + version negotiation
 
   Verify loop runs `cargo check` / `npm install` / `python3` after every
-  code phase. Failures land in .super-dev/audit/verify.jsonl.
+  code-producing phase. Failures land in .super-dev/audit/verify.jsonl
+  so a non-technical user can ship stable code without writing any.
+
+INPUT BOX FEATURES
+------------------
+  ← →                cursor moves character-by-character (CJK-safe)
+  Home / End         jump to start / end
+  Backspace / Delete delete before / at cursor
+  Shift+Enter        insert newline (multi-line requirements)
+  ↑↓ (empty input)   recall previous prompts (last 100, de-duped)
+  /                  opens a typeahead popover for slash commands
+  Tab                autocomplete the highlighted slash verb
+  F1                 help overlay
+  Esc                close overlay (or quit, with confirmation
+                     when a pipeline is running)
 
 NEXT STEPS
 ----------
-  super-dev examples     # the cheat-sheet
+  super-dev examples     # cheat-sheet
   super-dev spec         # the formal spec
   super-dev              # just start using it
