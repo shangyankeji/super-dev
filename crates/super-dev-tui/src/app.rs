@@ -1559,6 +1559,17 @@ impl App {
                 }
             }
         }
+        // Knowledge RAG info — show which domains would be queried per phase
+        body.push_str("\n## Knowledge RAG mapping\n\n");
+        body.push_str("| Phase | Knowledge domains |\n|---|---|\n");
+        body.push_str("| research | ALL (308 files, keyword-ranked) |\n");
+        body.push_str("| docs | product, architecture, design, frontend, industries |\n");
+        body.push_str("| spec | development, governance, product |\n");
+        body.push_str("| frontend | frontend, design, design-systems, seed-templates |\n");
+        body.push_str("| backend | backend, api, database, security, cloud-native |\n");
+        body.push_str("| quality | testing, security, governance |\n");
+        body.push_str("| delivery | cicd, operations, governance, security |\n");
+
         self.overlay = Some(Overlay::from_body(" status — Esc close ", &body));
     }
 

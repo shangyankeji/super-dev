@@ -684,7 +684,31 @@ pub fn run_quality(opts: &RunOptions) -> io::Result<PhaseOutput> {
         weight: 1.5,
     });
 
+    // SD-CODE-003 — API URL frontend↔backend consistency
+    let api_consistency = check_api_url_consistency(opts, &slug);
+    checks.push(QualityCheck {
+        name: "API URL consistency".to_string(),
+        category: "code-rule".to_string(),
+        description: "SD-CODE-003 — frontend fetch URLs match architecture API surface".to_string(),
+        status: api_consistency.0.clone(),
+        score: api_consistency.1,
+        details: api_consistency.2,
+        weight: 2.0,
+    });
+
+    // Dark mode check — does the UIUX doc define dark mode tokens?
     let uiux_path = output_dir.join(format!("{slug}-uiux.md"));
+    let dark_mode = check_dark_mode_support(&uiux_path);
+    checks.push(QualityCheck {
+        name: "Dark mode support".to_string(),
+        category: "quality".to_string(),
+        description: "UIUX doc includes dark mode / prefers-color-scheme tokens".to_string(),
+        status: dark_mode.0.clone(),
+        score: dark_mode.1,
+        details: dark_mode.2,
+        weight: 1.0,
+    });
+
     let uiux_score = i32::try_from(score_uiux_completeness(&uiux_path)).unwrap_or(100);
     checks.push(QualityCheck {
         name: "Design system completeness".to_string(),
@@ -1065,6 +1089,116 @@ fn pick(override_text: &Option<String>, fallback: impl FnOnce() -> String) -> St
     match override_text {
         Some(text) if !text.trim().is_empty() => text.clone(),
         _ => fallback(),
+    }
+}
+
+/// Check API URL consistency: every path in the architecture API surface
+/// table should be referenced somewhere in the frontend code or notes.
+fn check_api_url_consistency(opts: &RunOptions, slug: &str) -> (String, i32, String) {
+    let arch_path = opts
+        .project_root
+        .join("output")
+        .join(format!("{slug}-architecture.md"));
+    let arch_content = fs::read_to_string(&arch_path).unwrap_or_default();
+
+    let mut api_paths: Vec<String> = Vec::new();
+    for line in arch_content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('|') && trimmed.contains('/') {
+            for part in trimmed.split('|') {
+                let p = part.trim();
+                if p.starts_with('/') && p.len() > 1 && !p.contains("---") {
+                    let path = p.split_whitespace().next().unwrap_or(p);
+                    if !api_paths.contains(&path.to_string()) {
+                        api_paths.push(path.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    if api_paths.is_empty() {
+        return (
+            "warning".to_string(),
+            70,
+            "No API paths found in architecture doc — cannot verify consistency".to_string(),
+        );
+    }
+
+    let fe_notes_path = opts
+        .project_root
+        .join("output")
+        .join(format!("{slug}-frontend-notes.md"));
+    let fe_content = fs::read_to_string(&fe_notes_path).unwrap_or_default();
+    let api_log = opts
+        .project_root
+        .join(".super-dev/audit/frontend-api-calls.jsonl");
+    let api_log_content = fs::read_to_string(&api_log).unwrap_or_default();
+    let combined = format!("{fe_content}\n{api_log_content}");
+
+    let mut missing: Vec<&str> = Vec::new();
+    for path in &api_paths {
+        if !combined.contains(path.as_str()) {
+            missing.push(path);
+        }
+    }
+
+    if missing.is_empty() {
+        (
+            "passed".to_string(),
+            100,
+            format!(
+                "All {} API paths from architecture doc are referenced in frontend",
+                api_paths.len()
+            ),
+        )
+    } else {
+        (
+            "warning".to_string(),
+            (100 - (i32::try_from(missing.len()).unwrap_or(5) * 15)).max(30),
+            format!(
+                "{}/{} API paths not found in frontend: {}",
+                missing.len(),
+                api_paths.len(),
+                missing
+                    .iter()
+                    .take(5)
+                    .copied()
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        )
+    }
+}
+
+/// Check if the UIUX document defines dark mode tokens.
+fn check_dark_mode_support(uiux_path: &Path) -> (String, i32, String) {
+    let content = fs::read_to_string(uiux_path).unwrap_or_default();
+    let lower = content.to_ascii_lowercase();
+    let has_dark = lower.contains("prefers-color-scheme")
+        || lower.contains("dark mode")
+        || lower.contains("dark-mode")
+        || (lower.contains("@media") && lower.contains("dark"));
+
+    if has_dark {
+        (
+            "passed".to_string(),
+            100,
+            "Dark mode tokens defined in UIUX document".to_string(),
+        )
+    } else if content.is_empty() {
+        (
+            "warning".to_string(),
+            50,
+            "UIUX document not yet created".to_string(),
+        )
+    } else {
+        (
+            "warning".to_string(),
+            70,
+            "No dark mode / prefers-color-scheme tokens found — consider adding for accessibility"
+                .to_string(),
+        )
     }
 }
 
