@@ -597,6 +597,8 @@ impl App {
             "pick a seed template (e.g. /template dashboard)",
         ),
         ("run", "start a new run (/run [slug] <requirement>)"),
+        ("redo", "re-run the current requirement from scratch"),
+        ("config", "show all current configuration"),
         ("init", "write super-dev.yaml manifest"),
         ("continue", "approve the active gate"),
         ("revise", "stay at gate, request changes"),
@@ -1267,6 +1269,11 @@ impl App {
                 self.open_knowledge_overlay();
                 Action::None
             }
+            "redo" => self.slash_redo(),
+            "config" => {
+                self.open_config_overlay();
+                Action::None
+            }
             "version" => {
                 self.open_version_overlay();
                 Action::None
@@ -1665,6 +1672,84 @@ impl App {
             body.push_str("  (no knowledge/ directory)\n");
         }
         self.overlay = Some(Overlay::from_body(" knowledge — Esc close ", &body));
+    }
+
+    fn slash_redo(&mut self) -> Action {
+        if self.requirement.is_empty() {
+            self.push(
+                ChatRole::System,
+                "还没有跑过任何需求 — 直接输入需求或用 /run 启动。",
+            );
+            return Action::None;
+        }
+        let req = self.requirement.clone();
+        self.reset_for_new_run();
+        self.push(
+            ChatRole::SuperDev,
+            format!("重新跑需求:\"{req}\"。流水线从 research 重新开始…"),
+        );
+        self.push_preflight(&req);
+        Action::StartRun(req)
+    }
+
+    fn open_config_overlay(&mut self) {
+        let mut body = String::from("super-dev config\n================\n\n");
+        body.push_str(&format!(
+            "worker:          {}\n",
+            self.config
+                .backend
+                .as_deref()
+                .unwrap_or("(use picker to select)")
+        ));
+        body.push_str(&format!(
+            "model:           {}\n",
+            self.config
+                .model
+                .as_deref()
+                .unwrap_or("(default for worker)")
+        ));
+        body.push_str(&format!(
+            "design system:   {}\n",
+            self.config
+                .design_system
+                .as_deref()
+                .unwrap_or("(none — /design to pick)")
+        ));
+        body.push_str(&format!(
+            "seed template:   {}\n",
+            self.config
+                .seed_template
+                .as_deref()
+                .unwrap_or("(auto-detect)")
+        ));
+        body.push_str(&format!(
+            "slug:            {}\n",
+            if self.slug.is_empty() {
+                "(auto from dir name)"
+            } else {
+                &self.slug
+            }
+        ));
+        body.push_str(&format!(
+            "workspace:       {}\n",
+            self.project_root.display()
+        ));
+        body.push_str(&format!(
+            "config file:     {}\n",
+            self.config_path.display()
+        ));
+        body.push_str(&format!(
+            "input history:   {}\n",
+            self.history_path().display()
+        ));
+        body.push_str(&format!("history entries: {}\n", self.input_history.len()));
+        body.push_str("\n## How to change\n\n");
+        body.push_str("  /claude /codex /gemini ...    switch worker\n");
+        body.push_str("  /model <id>                   switch model\n");
+        body.push_str("  /design <name>                switch design system\n");
+        body.push_str("  /template <name>              switch seed template\n");
+        body.push_str("  /run <slug> <req>             set slug + requirement\n");
+        self.overlay = Some(Overlay::from_body(" config — Esc close ", &body));
     }
 
     fn open_version_overlay(&mut self) {

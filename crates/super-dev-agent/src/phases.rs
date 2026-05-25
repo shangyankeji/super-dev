@@ -91,7 +91,10 @@ pub fn phase_knowledge_digest(opts: &RunOptions, phase: Phase) -> String {
     let keywords = extract_keywords(&opts.requirement);
     let mut scored: Vec<(usize, &String)> = all_paths
         .iter()
-        .map(|p| (score_path(p, &keywords), p))
+        .map(|p| {
+            let full = base.join(p).to_string_lossy().to_string();
+            (score_path(&full, &keywords), p)
+        })
         .collect();
     scored.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(b.1)));
 
@@ -1270,12 +1273,12 @@ fn count_slop_violations(output_dir: &Path) -> usize {
 /// color palette, typography, spacing, icon library, components,
 /// accessibility. Each section found = +16 points (max ~100).
 fn score_uiux_completeness(path: &Path) -> u32 {
-    let content = fs::read_to_string(path)
-        .unwrap_or_default()
-        .to_ascii_lowercase();
-    if content.is_empty() {
+    let content = fs::read_to_string(path).unwrap_or_default();
+    let lower = content.to_ascii_lowercase();
+    if lower.is_empty() {
         return 0;
     }
+    // Section presence (10 pts each, max 70)
     let sections = [
         "color",
         "typography",
@@ -1283,14 +1286,30 @@ fn score_uiux_completeness(path: &Path) -> u32 {
         "icon",
         "component",
         "accessibility",
+        "dark",
     ];
-    let found = sections.iter().filter(|s| content.contains(**s)).count();
-    let base = (found as u32 * 16).min(96);
-    if content.len() > 500 {
-        base + 4
+    let section_score =
+        (sections.iter().filter(|s| lower.contains(**s)).count() as u32 * 10).min(70);
+    // Token count bonus (count --color / --font / --space var declarations)
+    let token_count = content.matches("--").count() as u32;
+    let token_bonus = if token_count >= 50 {
+        20
+    } else if token_count >= 20 {
+        15
+    } else if token_count >= 10 {
+        10
     } else {
-        base
-    }
+        0
+    };
+    // Length bonus
+    let length_bonus = if content.len() > 2000 {
+        10
+    } else if content.len() > 500 {
+        5
+    } else {
+        0
+    };
+    (section_score + token_bonus + length_bonus).min(100)
 }
 
 /// When the worker returns text via stdout AND already wrote a file to

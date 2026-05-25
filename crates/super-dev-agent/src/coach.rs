@@ -134,36 +134,39 @@ rules:\n\n\
 fn render_research(slug: &str, req: &str, opts: &RunOptions) -> String {
     let knowledge = crate::phases::knowledge_digest(opts);
     format!(
-        "## Role\n\nSenior product researcher + design strategist.\n\n\
+        "## MUST-DO (read first)\n\n\
+         1. **Print the FULL research brief as your text reply.** Do NOT use Edit / Write \
+            tools to create the file — Super Dev captures your stdout.\n\
+         2. **Include a `## Discovery` section** with Target audience, Visual tone, \
+            Design direction (pick ONE of 5), Brand constraints, Platform, Complexity.\n\
+         3. **Include `## Design system recommendation`** with color/typography/spacing choices.\n\
+         4. Every section listed below is REQUIRED. Do not skip any.\n\n\
+         ## Role\n\nSenior product researcher + design strategist.\n\n\
          ## Task\n\nProduce a research brief that grounds PM / architect / UI work. \
          This is the FOUNDATION — every later phase reads this document.\n\n\
-         ## Required output\n\n\
-         - **Sections (in order):**\n\
-           - `# Research — {slug}`\n\
-           - `## Requirement` (echo verbatim)\n\
-           - `## Discovery` (REQUIRED — do NOT skip this section) — answer these design-grounding questions:\n\
-             - **Target audience**: who uses this product? (developers / consumers / enterprise / internal team)\n\
-             - **Visual tone**: which fits best? (professional / playful / technical / editorial / bold)\n\
-             - **Design direction**: pick ONE from: Modern Minimal / Editorial Clean / Tech Utility / Soft Warm / Bold Geometric\n\
-             - **Brand constraints**: any existing colors / fonts / logos to respect? If none, state \"greenfield — design from scratch\"\n\
-             - **Platform**: web / mobile / desktop / CLI companion\n\
-             - **Complexity**: simple (1-3 screens) / medium (4-8 screens) / complex (9+ screens)\n\
-           - `## Similar products` — cite 5 real products with one-line design takeaways (how they look, not just what they do)\n\
-           - `## Domain risks` — 5 risks the architecture must mitigate\n\
-           - `## UI / UX must-haves` — 5 non-negotiable UI patterns in this domain, with concrete implementation notes\n\
-           - `## Design system recommendation` — based on the discovery answers, recommend:\n\
-             - Color palette direction (warm / cool / neutral / high-contrast)\n\
-             - Typography approach (serif accent / geometric sans / monospace accent / humanist)\n\
-             - Spacing philosophy (airy / compact / mixed)\n\
-             - One \"signature detail\" that makes this product visually distinct from competitors\n\
-           - `## Open questions`\n\n\
+         ## Sections (in order, ALL required)\n\n\
+         - `# Research — {slug}`\n\
+         - `## Requirement` (echo verbatim)\n\
+         - `## Discovery`:\n\
+           - **Target audience**: developers / consumers / enterprise / internal team\n\
+           - **Visual tone**: professional / playful / technical / editorial / bold\n\
+           - **Design direction**: ONE of: Modern Minimal / Editorial Clean / Tech Utility / Soft Warm / Bold Geometric\n\
+           - **Brand constraints**: existing colors/fonts/logos, or \"greenfield\"\n\
+           - **Platform**: web / mobile / desktop / CLI companion\n\
+           - **Complexity**: simple (1-3) / medium (4-8) / complex (9+)\n\
+         - `## Similar products` — 5 real products with design takeaways\n\
+         - `## Domain risks` — 5 risks with mitigation strategies\n\
+         - `## UI / UX must-haves` — 5 non-negotiable patterns\n\
+         - `## Design system recommendation` — palette direction, typography, spacing, signature detail\n\
+         - `## Open questions`\n\n\
+         ## Self-check before submitting\n\n\
+         - [ ] Discovery section present with all 6 fields answered?\n\
+         - [ ] Design direction chosen (ONE of the 5 archetypes)?\n\
+         - [ ] 5 similar products cited with design-specific (not feature-specific) takeaways?\n\
+         - [ ] Content is in your text reply, NOT written to a file on disk?\n\n\
          ## Input\n\n\
          ### Requirement\n\n{req}\n\n\
-         ### Local knowledge files available\n\n{knowledge}\n\n\
-         ## CRITICAL output instruction\n\n\
-         **Print the FULL research brief as your text reply.** \
-         Do NOT use Edit / Write tools to create the file — Super Dev \
-         captures your stdout and writes the file itself.\n",
+         ### Local knowledge files available\n\n{knowledge}\n",
     )
 }
 
@@ -206,18 +209,18 @@ fn load_design_system_inject(opts: &RunOptions) -> String {
 
 fn render_docs(slug: &str, req: &str, design_inject: &str) -> String {
     format!(
-        "## Role\n\nThree domain experts execute in sequence. Each reads the prior \
-         expert's output before writing. Think of this as a cross-functional \
-         design review where each expert brings their professional standards:\n\n\
-         1. **Senior Product Manager** — 10+ years in B2B/B2C SaaS. Writes PRDs that \
-            engineers can implement without ambiguity. Every acceptance criterion is testable.\n\
-         2. **Senior Software Architect** — systems-level thinker. API surfaces are \
-            consistent, data models are normalized, tech choices are justified by constraints.\n\
-         3. **Senior UI/UX Designer** — creates design systems, not mockups. Tokens, type \
-            scales, component inventories with state matrices, accessibility baked in.\n\n\
-         ## Task\n\nProduce the three core documents. Each expert builds on the \
-         previous artifact — read the research brief and the prior doc before \
-         writing the next.\n\n\
+        "## MUST-DO (read first)\n\n\
+         1. **Print ALL THREE documents as your text reply.** Do NOT use Edit/Write tools.\n\
+         2. **Read `output/{slug}-research.md` FIRST** — especially the Discovery section \
+            and Design system recommendation. Bind your UIUX tokens to the direction chosen there.\n\
+         3. **UIUX MUST include `@media (prefers-color-scheme: dark)` block** — dark mode is REQUIRED.\n\
+         4. **Separate the three documents with `---` on its own line.**\n\n\
+         ## Role\n\nThree domain experts in sequence:\n\n\
+         1. **Senior Product Manager** — testable acceptance criteria, no ambiguity.\n\
+         2. **Senior Software Architect** — consistent API surface, justified tech choices.\n\
+         3. **Senior UI/UX Designer** — full design system (tokens + dark mode + components + states).\n\n\
+         ## Task\n\nProduce the three core documents. Read the research brief FIRST, \
+         then build each doc on the previous one.\n\n\
          ## Required outputs\n\n\
          ### 1. PRD — `output/{slug}-prd.md`\n\
          - `# PRD — {slug}`\n\
@@ -289,16 +292,15 @@ fn render_docs(slug: &str, req: &str, design_inject: &str) -> String {
          ### Requirement\n\n{req}\n\n\
          ### Research brief\n\n\
          Read `output/{slug}-research.md` for context.\n\n\
-         ## CRITICAL output instruction\n\n\
-         **Print the FULL content of each document as your text reply.** \
-         Do NOT use Edit / Write / Create tools to write the files — \
-         Super Dev's pipeline captures your stdout and writes the files \
-         itself. If you write the files AND return a summary, the \
-         pipeline will overwrite your files with the summary, losing \
-         the real content.\n\n\
-         For each document, output the complete markdown body starting \
-         with the `#` heading. Separate the three documents with \
-         `---` on its own line.\n\n\
+         ## Self-check before submitting\n\n\
+         - [ ] All 3 documents present in your reply (PRD, Architecture, UIUX)?\n\
+         - [ ] UIUX has `:root` CSS block with 10+ semantic color tokens?\n\
+         - [ ] UIUX has `@media (prefers-color-scheme: dark)` block?\n\
+         - [ ] UIUX has typography system (font stack + 5+ size levels)?\n\
+         - [ ] Architecture has API surface table with ≥5 rows?\n\
+         - [ ] PRD has ≥5 testable acceptance criteria?\n\
+         - [ ] Content is in your text reply, NOT written to files?\n\
+         - [ ] Three docs separated by `---` on its own line?\n\n\
          ## After you finish\n\n\
          Run `super-dev continue` and approve the `docs_confirm` gate only after the user has reviewed.\n\
          {design_inject}",
@@ -527,7 +529,8 @@ mod tests {
         assert!(body.contains("Discovery"));
         assert!(body.contains("Target audience"));
         assert!(body.contains("Design direction"));
-        assert!(body.contains("CRITICAL output instruction"));
+        assert!(body.contains("MUST-DO"));
+        assert!(body.contains("Self-check"));
     }
 
     #[test]
