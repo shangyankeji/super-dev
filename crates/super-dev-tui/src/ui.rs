@@ -333,11 +333,12 @@ fn render_chat_input(frame: &mut Frame, area: Rect, app: &App) {
     } else if !app.input.is_empty() {
         " Enter submit · Shift+Enter newline · ↑↓ recall history ".to_string()
     } else if app.finished {
-        " ✓ pipeline complete — type a new requirement to start another, or /quit ".to_string()
+        " ✓ complete — new requirement to start, /redo to rerun, /export for proof-pack "
+            .to_string()
     } else if app.run_started {
         " ⏳ pipeline running — wait for the next gate, or /quit to exit ".to_string()
     } else {
-        " type your reply · /help for slash commands · ↑↓ recall history ".to_string()
+        " type requirement · /design to pick style · /help for all commands ".to_string()
     };
     let para = Paragraph::new(display)
         .block(
@@ -658,9 +659,8 @@ mod tests {
     #[test]
     fn chat_input_box_title_changes_with_state() {
         let mut app = app_with(Some("offline"));
-        // Empty buffer → "type your reply" hint.
         let empty = render_to_string(&app);
-        assert!(empty.contains("type your reply"));
+        assert!(empty.contains("type requirement"));
         // Some normal text → "Enter submit · Shift+Enter newline · ↑↓ recall".
         for c in "hello".chars() {
             let _ = app.apply_key(KeyCode::Char(c));

@@ -360,7 +360,8 @@ impl App {
             self.push(
                 ChatRole::System,
                 format!(
-                    "📂 workspace 检测到未完成的会话(phase={}, 需求:\"{req}\")。\n  直接输入新需求会重新开始,或在另一个终端跑 `super-dev continue` 推进上次。",
+                    "📂 检测到未完成的会话(phase={}, 需求:\"{req}\")。\n  \
+                     输入 /continue 推进上次 · 输入新需求会重新开始 · /status 查看详情",
                     state.phase,
                 ),
             );
@@ -1567,7 +1568,7 @@ impl App {
     }
 
     fn open_status_overlay(&mut self) {
-        let mut body = String::from("super-dev status\n================\n\n");
+        let mut body = String::from("Pipeline Status\n===============\n\n");
         body.push_str(&format!("worker:        {}\n", self.backend_label));
         body.push_str(&format!(
             "design system: {}\n",
@@ -1773,7 +1774,7 @@ impl App {
     }
 
     fn open_config_overlay(&mut self) {
-        let mut body = String::from("super-dev config\n================\n\n");
+        let mut body = String::from("Configuration\n=============\n\n");
         body.push_str(&format!(
             "worker:          {}\n",
             self.config
@@ -1985,8 +1986,8 @@ impl App {
 
     fn open_doctor_overlay(&mut self) {
         let mut body = String::from(
-            "super-dev doctor\n\
-             ================\n\n",
+            "Doctor\n\
+             ======\n\n",
         );
         body.push_str(&format!(
             "binary       super-dev {} (spec {})\n",
@@ -2050,7 +2051,7 @@ impl App {
 
     fn open_verify_overlay(&mut self) {
         let mut body = String::from(
-            "super-dev verify\n\
+            "Workspace Verify\n\
              ================\n\n",
         );
         body.push_str(&format!("workspace: {}\n\n", self.project_root.display()));
