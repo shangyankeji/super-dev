@@ -378,7 +378,7 @@ impl App {
     }
 
     fn push_greeting(&mut self) {
-        let ds_label = self.config.design_system.as_deref().unwrap_or("(未选择)");
+        let ds_label = self.config.design_system.as_deref().unwrap_or("(未选)");
         let tpl_label = self.config.seed_template.as_deref().unwrap_or("(自动)");
         self.push(
             ChatRole::SuperDev,
@@ -389,16 +389,31 @@ impl App {
                 self.backend_label,
             ),
         );
+        let ds_list = self.list_design_systems();
+        let ds_hint = if ds_list.is_empty() {
+            String::new()
+        } else {
+            format!("\n  · /design <名字> — 选设计风格: {}", ds_list.join(" / "))
+        };
+        let tpl_list = self.list_seed_templates();
+        let tpl_hint = if tpl_list.is_empty() {
+            String::new()
+        } else {
+            format!(
+                "\n  · /template <名字> — 选页面模板: {}",
+                tpl_list.join(" / ")
+            )
+        };
         self.push(
             ChatRole::System,
-            "试试这种问法:\n  \
-             · 做一个登录系统,支持邮箱+OAuth+MFA\n  \
-             · 帮我做一个 SaaS 数据分析仪表盘\n  \
-             · 给现有项目加二步验证(TOTP + 备用码)\n\n\
-             开始前可选:\n  \
-             · /design modern-minimal — 选设计风格(5 种方向可选)\n  \
-             · /template dashboard — 选页面模板(landing / dashboard / blog)\n  \
-             · /help — 看全部命令",
+            format!(
+                "试试这种问法:\n  \
+                 · 做一个登录系统,支持邮箱+OAuth+MFA\n  \
+                 · 帮我做一个 SaaS 数据分析仪表盘\n  \
+                 · 给现有项目加二步验证(TOTP + 备用码)\n\n\
+                 开始前可选:{ds_hint}{tpl_hint}\n  \
+                 · /config — 看当前配置 · /help — 看全部命令"
+            ),
         );
     }
 
@@ -754,9 +769,37 @@ impl App {
                 if paused_at.is_none() && final_phase == Phase::Delivery {
                     self.finished = true;
                     self.active_gate = None;
+                    let release = self.project_root.join("release");
+                    let zip_info = std::fs::read_dir(&release)
+                        .ok()
+                        .and_then(|rd| {
+                            let mut zips: Vec<_> = rd
+                                .filter_map(Result::ok)
+                                .filter(|e| {
+                                    e.path().extension().and_then(|s| s.to_str()) == Some("zip")
+                                })
+                                .collect();
+                            zips.sort_by_key(std::fs::DirEntry::file_name);
+                            zips.last().map(|z| {
+                                let size =
+                                    std::fs::metadata(z.path()).map_or(0, |m| m.len() / 1024);
+                                format!(
+                                    "\n  最新: {} ({size} KiB)",
+                                    z.file_name().to_string_lossy()
+                                )
+                            })
+                        })
+                        .unwrap_or_default();
                     self.push(
                         ChatRole::SuperDev,
-                        "✓ 流水线完成。proof-pack 已在 release/ 目录。",
+                        format!(
+                            "✓ 流水线完成!{zip_info}\n\n\
+                             下一步:\n  \
+                             · 输入新需求 → 开新一轮\n  \
+                             · /redo → 重跑当前需求\n  \
+                             · /export → 查看 proof-pack 详情\n  \
+                             · /status → 查看完整状态"
+                        ),
                     );
                 }
             }
@@ -1399,6 +1442,7 @@ impl App {
                 "设计系统切换为 `{arg}` — 下一个 run 的 UIUX 阶段将以此为基准生成色板、字体、组件。"
             ),
         );
+        self.refresh_status();
         Action::None
     }
 
@@ -1444,6 +1488,7 @@ impl App {
                 "种子模板切换为 `{arg}` — 下一个 run 的 frontend 阶段将参考此模板的页面结构和质量标准。"
             ),
         );
+        self.refresh_status();
         Action::None
     }
 
@@ -1495,6 +1540,13 @@ impl App {
             (String::new(), arg.to_string())
         };
         if !slug.is_empty() {
+            if slug.contains(|c: char| !c.is_ascii_alphanumeric() && c != '-' && c != '_') {
+                self.push(
+                    ChatRole::System,
+                    format!("slug `{slug}` 包含非法字符。只允许字母、数字、`-`、`_`。"),
+                );
+                return Action::None;
+            }
             self.slug = slug;
         }
         if self.run_started {
@@ -1566,6 +1618,25 @@ impl App {
                 }
             }
         }
+        // Quality gate results
+        let qg_path = output_dir.join(format!("{}-quality-gate.json", self.slug));
+        if qg_path.is_file() {
+            body.push_str("\n## Quality gate\n\n");
+            if let Ok(qg_content) = std::fs::read_to_string(&qg_path) {
+                let score = crate::app::extract_json_number(&qg_content, "score");
+                let passed = crate::app::extract_json_bool(&qg_content, "passed");
+                body.push_str(&format!(
+                    "  Score: {}/100 · {}\n",
+                    score.map_or("?".to_string(), |n| n.to_string()),
+                    match passed {
+                        Some(true) => "PASSED ✓",
+                        Some(false) => "BLOCKED ✗",
+                        None => "?",
+                    }
+                ));
+            }
+        }
+
         // Knowledge RAG info — show which domains would be queried per phase
         body.push_str("\n## Knowledge RAG mapping\n\n");
         body.push_str("| Phase | Knowledge domains |\n|---|---|\n");
@@ -2122,15 +2193,17 @@ impl App {
 /// The fixed set of options the picker shows. Probe results refine the
 /// labels at runtime.
 fn default_picker_items() -> Vec<PickerItem> {
-    // Mirrors `super_dev_host::BACKEND_IDS` order. Each row stays in
-    // the "detecting…" state until `apply_engine(BackendProbed)` lands.
     let mut items: Vec<PickerItem> = super_dev_host::BACKEND_IDS
         .iter()
-        .map(|id| PickerItem {
-            backend_id: Some((*id).to_string()),
-            label: (*id).to_string(),
-            ready: false,
-            detail: "detecting…".to_string(),
+        .map(|id| {
+            let display = super_dev_host::driver_for(id)
+                .map_or_else(|| (*id).to_string(), |d| d.display_name().to_string());
+            PickerItem {
+                backend_id: Some((*id).to_string()),
+                label: display,
+                ready: false,
+                detail: "detecting…".to_string(),
+            }
         })
         .collect();
     items.push(PickerItem {
@@ -2236,7 +2309,7 @@ fn gate_card(gate: Gate, slug: &str) -> String {
     out.push_str("  下一步:\n");
     out.push_str("    · /continue 或回车 c    → 通过这道 gate,继续流水线\n");
     out.push_str("    · /revise <修订说明>     → 把反馈喂回 worker 重做\n");
-    out.push_str("    · /diff <工件>           → 查看刚才生成的内容\n");
+    out.push_str("    · /diff <工件>           → 查看内容 (例: /diff prd · /diff architecture · /diff uiux)\n");
     out.push_str(&format!("  指引: {next}"));
     out
 }

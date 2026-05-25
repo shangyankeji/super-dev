@@ -476,8 +476,9 @@ fn render_help_overlay(frame: &mut Frame, app: &App) {
                     ("/continue or c", "approve the active gate"),
                     ("/revise <txt>", "stay at gate, request changes"),
                     ("/diff [artifact]", "show an artifact (default: PRD)"),
-                    ("/run [slug] <req>", "start a new run with explicit slug"),
-                    ("/init", "write super-dev.yaml manifest"),
+                    ("/run [slug] <req>", "start a new run"),
+                    ("/redo", "re-run current requirement"),
+                    ("/init", "write super-dev.yaml"),
                 ],
             );
             push_help_group(
@@ -491,6 +492,7 @@ fn render_help_overlay(frame: &mut Frame, app: &App) {
                     ("/knowledge", "list knowledge + design files"),
                     ("/spec", "show spec clauses"),
                     ("/verify", "workspace conformance"),
+                    ("/config", "all current configuration"),
                     ("/doctor", "self-test"),
                     ("/history", "conversation history"),
                     ("/version", "versions"),
@@ -599,13 +601,13 @@ mod tests {
     // --- Picker ---
 
     #[test]
-    fn picker_renders_three_workers() {
+    fn picker_renders_all_workers() {
         let app = app_with(None);
         let out = render_to_string(&app);
         assert!(out.contains("first launch"));
         assert!(out.contains("Workers"));
-        assert!(out.contains("claude-code"));
-        assert!(out.contains("codex"));
+        assert!(out.contains("Claude Code CLI"));
+        assert!(out.contains("Codex CLI"));
         assert!(out.contains("offline"));
     }
 
