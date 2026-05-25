@@ -3,11 +3,11 @@ Super Dev — common workflows
 
 ★ First-time use (recommended)
 -------------------------------
+    super-dev init                            # scaffold workspace (design systems + templates)
     super-dev                                 # launch the chat TUI
-                                              # first time: pick a worker
-                                              #   (claude-code / codex / offline)
-                                              # then type your requirement,
-                                              # watch the pipeline narrate,
+                                              # first time: pick from 11 workers
+                                              # then /design modern-minimal (optional)
+                                              # type your requirement → pipeline runs
                                               # at each gate press 'c' (or /continue)
                                               # done → release/proof-pack-*.zip
 

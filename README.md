@@ -9,7 +9,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.75%2B-orange)](https://www.rust-lang.org/)
 [![Spec](https://img.shields.io/badge/spec-SUPER__DEV__HOST__SPEC__V1-blue)](spec/SUPER_DEV_HOST_SPEC_V1.md)
-[![Version](https://img.shields.io/badge/version-4.4.0-success)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-4.5.0-success)](CHANGELOG.md)
 
 [English](README_EN.md) | 简体中文
 

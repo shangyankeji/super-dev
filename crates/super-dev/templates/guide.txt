@@ -4,7 +4,9 @@ Super Dev — 60-second walkthrough
 WHAT IS SUPER DEV?
 ------------------
   Super Dev is the **project manager** for AI coding. It does NOT call
-  any LLM — it drives the Claude Code / Codex you already logged into.
+  any LLM — it drives the AI coding CLI you already logged into (11
+  backends: Claude Code, Codex, Gemini, Droid, OpenCode, Qwen Code,
+  Copilot, Trae, CodeBuddy, Qoder, Kimi Code).
   Result: zero API key, deterministic process, full audit trail.
 
 THE PIPELINE (9 phases, 2 gates)

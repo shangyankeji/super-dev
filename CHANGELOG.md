@@ -2,7 +2,7 @@
 
 本文件记录 Super Dev 的所有重要变更。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
-## [Unreleased]
+## [4.5.0] - 2026-05-25
 
 ### 新增 — 3 个主流 backend(13 个 worker 总覆盖)
 

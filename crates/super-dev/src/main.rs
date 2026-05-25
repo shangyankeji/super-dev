@@ -53,7 +53,7 @@ use super_dev_spec::{CLAUSES, PHASE_CHAIN, SPEC_VERSION};
 #[command(
     name = "super-dev",
     version,
-    about = "AI 编码的项目经理 — drives your logged-in Claude Code / Codex through a 9-phase commercial delivery pipeline. No API key needed.",
+    about = "AI 编码的项目经理 — drives your logged-in AI coding CLI (11 backends supported) through a 9-phase commercial delivery pipeline. No API key needed.",
     long_about = None,
 )]
 struct Cli {

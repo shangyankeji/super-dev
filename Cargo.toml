@@ -1,8 +1,8 @@
 # Super Dev — workspace manifest.
 #
 # Super Dev is a coach for AI coding hosts. One specification, one
-# binary, three SDK runtimes (Anthropic / OpenAI / Google Antigravity).
-# This workspace ships as a single static binary.
+# binary, 11 host CLI backends. No API key — drives your already
+# logged-in coding CLI as a subprocess.
 
 [workspace]
 resolver = "2"
@@ -17,7 +17,7 @@ members = [
 ]
 
 [workspace.package]
-version = "4.4.0"
+version = "4.5.0"
 edition = "2021"
 rust-version = "1.75"
 license = "MIT"
@@ -70,12 +70,12 @@ insta = { version = "1.41", features = ["json", "yaml"] }
 pretty_assertions = "1"
 
 # --- internal ---
-super-dev-spec = { path = "crates/super-dev-spec", version = "4.4.0" }
-super-dev-governance = { path = "crates/super-dev-governance", version = "4.4.0" }
-super-dev-agent = { path = "crates/super-dev-agent", version = "4.4.0" }
-super-dev-runtime = { path = "crates/super-dev-runtime", version = "4.4.0" }
-super-dev-host = { path = "crates/super-dev-host", version = "4.4.0" }
-super-dev-tui = { path = "crates/super-dev-tui", version = "4.4.0" }
+super-dev-spec = { path = "crates/super-dev-spec", version = "4.5.0" }
+super-dev-governance = { path = "crates/super-dev-governance", version = "4.5.0" }
+super-dev-agent = { path = "crates/super-dev-agent", version = "4.5.0" }
+super-dev-runtime = { path = "crates/super-dev-runtime", version = "4.5.0" }
+super-dev-host = { path = "crates/super-dev-host", version = "4.5.0" }
+super-dev-tui = { path = "crates/super-dev-tui", version = "4.5.0" }
 
 [profile.release]
 lto = "fat"

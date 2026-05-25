@@ -1082,7 +1082,7 @@ dependencies = [
 
 [[package]]
 name = "super-dev"
-version = "4.4.0"
+version = "4.5.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -1102,7 +1102,7 @@ dependencies = [
 
 [[package]]
 name = "super-dev-agent"
-version = "4.4.0"
+version = "4.5.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1121,7 +1121,7 @@ dependencies = [
 
 [[package]]
 name = "super-dev-governance"
-version = "4.4.0"
+version = "4.5.0"
 dependencies = [
  "chrono",
  "pretty_assertions",
@@ -1136,7 +1136,7 @@ dependencies = [
 
 [[package]]
 name = "super-dev-host"
-version = "4.4.0"
+version = "4.5.0"
 dependencies = [
  "async-trait",
  "futures",
@@ -1150,7 +1150,7 @@ dependencies = [
 
 [[package]]
 name = "super-dev-runtime"
-version = "4.4.0"
+version = "4.5.0"
 dependencies = [
  "async-trait",
  "serde",
@@ -1161,7 +1161,7 @@ dependencies = [
 
 [[package]]
 name = "super-dev-spec"
-version = "4.4.0"
+version = "4.5.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -1169,7 +1169,7 @@ dependencies = [
 
 [[package]]
 name = "super-dev-tui"
-version = "4.4.0"
+version = "4.5.0"
 dependencies = [
  "anyhow",
  "crossterm",
