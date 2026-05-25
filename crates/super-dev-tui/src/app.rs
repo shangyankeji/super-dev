@@ -1420,19 +1420,8 @@ impl App {
     fn slash_design(&mut self, arg: &str) -> Action {
         let available = self.list_design_systems();
         if arg.is_empty() {
-            let current = self.config.design_system.as_deref().unwrap_or("(none)");
-            let list = if available.is_empty() {
-                "(no design systems found in knowledge/design-systems/)".to_string()
-            } else {
-                available.join(" · ")
-            };
-            self.push(
-                ChatRole::System,
-                format!(
-                    "用法:/design <name>。当前: {current}。\n  可选: {list}\n  \
-                     示例:/design modern-minimal · /design tech-utility · /design soft-warm"
-                ),
-            );
+            // No arg → open overlay listing all design systems with previews
+            self.open_design_picker_overlay(&available);
             return Action::None;
         }
         if !available.contains(&arg.to_string()) && !available.is_empty() {
@@ -1449,12 +1438,9 @@ impl App {
                 format!("(无法写入 {}: {e})", self.config_path.display()),
             );
         }
-        self.push(
-            ChatRole::SuperDev,
-            format!(
-                "设计系统切换为 `{arg}` — 下一个 run 的 UIUX 阶段将以此为基准生成色板、字体、组件。"
-            ),
-        );
+        // Show a rich preview of the selected design system
+        let preview = self.read_design_system_preview(arg);
+        self.push(ChatRole::SuperDev, format!("设计系统: `{arg}`\n{preview}"));
         self.refresh_status();
         Action::None
     }
@@ -1503,6 +1489,114 @@ impl App {
         );
         self.refresh_status();
         Action::None
+    }
+
+    fn open_design_picker_overlay(&mut self, available: &[String]) {
+        let current = self.config.design_system.as_deref().unwrap_or("");
+        let mut body = String::from("Design Systems\n==============\n\n");
+        if available.is_empty() {
+            body.push_str("No design systems found.\nRun /init to scaffold them into knowledge/design-systems/\n");
+        } else {
+            body.push_str("Usage: /design <name>\n\n");
+            for name in available {
+                let mark = if name == current { "●" } else { "○" };
+                let path = self
+                    .project_root
+                    .join("knowledge/design-systems")
+                    .join(format!("{name}.md"));
+                let preview = Self::extract_design_preview_static(&path);
+                body.push_str(&format!("{mark} {name}\n{preview}\n\n"));
+            }
+        }
+        self.overlay = Some(Overlay::from_body(
+            " /design — pick a design system · Esc close ",
+            &body,
+        ));
+    }
+
+    fn read_design_system_preview(&self, name: &str) -> String {
+        let path = self
+            .project_root
+            .join("knowledge/design-systems")
+            .join(format!("{name}.md"));
+        Self::extract_design_preview_static(&path)
+    }
+
+    fn extract_design_preview_static(path: &std::path::Path) -> String {
+        let content = match std::fs::read_to_string(path) {
+            Ok(c) => c,
+            Err(_) => return "  (file not readable)".to_string(),
+        };
+        let mut preview = String::new();
+
+        // Extract description (first > blockquote line)
+        for line in content.lines() {
+            if line.starts_with("> ") {
+                preview.push_str(&format!("  {}\n", &line[2..]));
+                break;
+            }
+        }
+
+        // Extract "When to use" section
+        let mut in_when = false;
+        for line in content.lines() {
+            if line.starts_with("## When to use") {
+                in_when = true;
+                continue;
+            }
+            if in_when {
+                if line.starts_with("## ") {
+                    break;
+                }
+                let trimmed = line.trim();
+                if !trimmed.is_empty() {
+                    preview.push_str(&format!("  Use: {trimmed}\n"));
+                    break;
+                }
+            }
+        }
+
+        // Extract key colors from :root block
+        let mut colors = Vec::new();
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("--color-bg:")
+                || trimmed.starts_with("--color-primary:")
+                || trimmed.starts_with("--color-text:")
+                || trimmed.starts_with("--color-accent:")
+            {
+                if let Some(val) = trimmed.split(':').nth(1) {
+                    let hex = val.trim().trim_end_matches(';').trim();
+                    let name = trimmed
+                        .split(':')
+                        .next()
+                        .unwrap_or("")
+                        .trim()
+                        .trim_start_matches('-');
+                    colors.push(format!("{name}: {hex}"));
+                }
+            }
+            if colors.len() >= 4 {
+                break;
+            }
+        }
+        if !colors.is_empty() {
+            preview.push_str(&format!("  Palette: {}\n", colors.join(" · ")));
+        }
+
+        // Extract font families
+        for line in content.lines() {
+            if line.contains("**Headings**:") || line.contains("**Body**:") {
+                let trimmed = line.trim().trim_start_matches("- ");
+                preview.push_str(&format!("  {trimmed}\n"));
+            }
+        }
+
+        // Count total tokens
+        let token_count = content.matches("--").count();
+        preview.push_str(&format!("  Tokens: {token_count} CSS variables"));
+
+        preview
     }
 
     fn list_design_systems(&self) -> Vec<String> {
