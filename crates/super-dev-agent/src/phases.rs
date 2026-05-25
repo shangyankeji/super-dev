@@ -258,10 +258,28 @@ fn extract_keywords(requirement: &str) -> Vec<String> {
         .collect()
 }
 
-/// Count keyword hits anywhere in the path (case-insensitive).
+/// Score a knowledge file against the requirement keywords.
+/// Checks both the file path AND the first 500 chars of content.
+/// Path hits are weighted 2x (filename is a strong signal).
 fn score_path(path: &str, keywords: &[String]) -> usize {
     let p = path.to_ascii_lowercase();
-    keywords.iter().filter(|k| p.contains(k.as_str())).count()
+    let path_hits = keywords.iter().filter(|k| p.contains(k.as_str())).count();
+    // Content-level check: read first 500 chars for keyword matches.
+    let content_hits = std::fs::read_to_string(path)
+        .ok()
+        .map(|body| {
+            let lower: String = body
+                .chars()
+                .take(500)
+                .collect::<String>()
+                .to_ascii_lowercase();
+            keywords
+                .iter()
+                .filter(|k| lower.contains(k.as_str()))
+                .count()
+        })
+        .unwrap_or(0);
+    path_hits * 2 + content_hits
 }
 
 /// Read the first `limit` chars from `file`, trimmed and cleaned.
@@ -1602,8 +1620,16 @@ mod tests {
     #[test]
     fn score_path_counts_keyword_hits() {
         let kws = vec!["login".to_string(), "oauth".to_string()];
-        assert_eq!(score_path("security/login-oauth-playbook.md", &kws), 2);
-        assert_eq!(score_path("auth/login.md", &kws), 1);
+        // Path hits are weighted 2x. Files that don't exist get 0
+        // content hits, so score = path_hits * 2 + 0.
+        assert_eq!(
+            score_path("security/login-oauth-playbook.md", &kws),
+            4 // 2 path hits * 2
+        );
+        assert_eq!(
+            score_path("auth/login.md", &kws),
+            2 // 1 path hit * 2
+        );
         assert_eq!(score_path("docs/contributing.md", &kws), 0);
     }
 
