@@ -1072,6 +1072,13 @@ fn build_and_zip_proof_pack(
             targets.push(p);
         }
     }
+    // Include design system + seed template files if present
+    for dir in ["knowledge/design-systems", "knowledge/seed-templates"] {
+        let d = project_root.join(dir);
+        if d.is_dir() {
+            walk_files(&d, &mut targets, 0);
+        }
+    }
     // recursively include .super-dev/changes/ and .super-dev/decisions/
     for dir in [".super-dev/changes", ".super-dev/decisions"] {
         let d = project_root.join(dir);
@@ -1310,6 +1317,26 @@ fn score_uiux_completeness(path: &Path) -> u32 {
         0
     };
     (section_score + token_bonus + length_bonus).min(100)
+}
+
+/// Extract score + passed from quality gate JSON. Used by the runner
+/// to emit a quality summary to the TUI.
+pub fn extract_quality_score(json: &str) -> (String, bool) {
+    let score = json
+        .split("\"score\"")
+        .nth(1)
+        .and_then(|s| s.split(':').nth(1))
+        .and_then(|s| {
+            s.trim()
+                .chars()
+                .take_while(char::is_ascii_digit)
+                .collect::<String>()
+                .parse::<u32>()
+                .ok()
+        })
+        .map_or("?".to_string(), |n| n.to_string());
+    let passed = json.contains("\"passed\": true") || json.contains("\"passed\":true");
+    (score, passed)
 }
 
 /// When the worker returns text via stdout AND already wrote a file to

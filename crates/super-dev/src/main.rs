@@ -420,6 +420,12 @@ fn cmd_init(slug: Option<String>, project_root: Option<PathBuf>, force: bool) ->
     let path = manifest
         .write_to(&workspace, force)
         .with_context(|| format!("write {}", workspace.join("super-dev.yaml").display()))?;
+
+    // Scaffold design infrastructure into the workspace so RAG and
+    // /design work out of the box. Uses include_str! so the files are
+    // embedded in the binary — no external data directory needed.
+    let scaffolded = scaffold_design_infrastructure(&workspace);
+
     println!("Super Dev workspace initialised.");
     println!("  manifest: {}", path.display());
     println!(
@@ -428,10 +434,84 @@ fn cmd_init(slug: Option<String>, project_root: Option<PathBuf>, force: bool) ->
         manifest.level.as_str(),
         manifest.profile.as_str(),
     );
+    if scaffolded > 0 {
+        println!("  design: {scaffolded} files scaffolded into knowledge/");
+    }
     println!("\nNext steps:");
     println!("  super-dev                          # launch the TUI");
     println!("  super-dev run \"<requirement>\"      # or scripted form");
     Ok(())
+}
+
+fn scaffold_design_infrastructure(workspace: &Path) -> usize {
+    let files: &[(&str, &str)] = &[
+        (
+            "knowledge/design-systems/modern-minimal.md",
+            include_str!("../../../knowledge/design-systems/modern-minimal.md"),
+        ),
+        (
+            "knowledge/design-systems/editorial-clean.md",
+            include_str!("../../../knowledge/design-systems/editorial-clean.md"),
+        ),
+        (
+            "knowledge/design-systems/tech-utility.md",
+            include_str!("../../../knowledge/design-systems/tech-utility.md"),
+        ),
+        (
+            "knowledge/design-systems/soft-warm.md",
+            include_str!("../../../knowledge/design-systems/soft-warm.md"),
+        ),
+        (
+            "knowledge/design-systems/bold-geometric.md",
+            include_str!("../../../knowledge/design-systems/bold-geometric.md"),
+        ),
+        (
+            "knowledge/design-systems/00-craft-rules.md",
+            include_str!("../../../knowledge/design-systems/00-craft-rules.md"),
+        ),
+        (
+            "knowledge/seed-templates/saas-landing.md",
+            include_str!("../../../knowledge/seed-templates/saas-landing.md"),
+        ),
+        (
+            "knowledge/seed-templates/dashboard.md",
+            include_str!("../../../knowledge/seed-templates/dashboard.md"),
+        ),
+        (
+            "knowledge/seed-templates/blog-content.md",
+            include_str!("../../../knowledge/seed-templates/blog-content.md"),
+        ),
+        (
+            "knowledge/seed-templates/e-commerce.md",
+            include_str!("../../../knowledge/seed-templates/e-commerce.md"),
+        ),
+        (
+            "knowledge/seed-templates/auth-system.md",
+            include_str!("../../../knowledge/seed-templates/auth-system.md"),
+        ),
+        (
+            "knowledge/seed-templates/settings-page.md",
+            include_str!("../../../knowledge/seed-templates/settings-page.md"),
+        ),
+        (
+            "knowledge/seed-templates/docs-site.md",
+            include_str!("../../../knowledge/seed-templates/docs-site.md"),
+        ),
+    ];
+    let mut count = 0;
+    for (rel, content) in files {
+        let target = workspace.join(rel);
+        if target.exists() {
+            continue;
+        }
+        if let Some(parent) = target.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        if std::fs::write(&target, content).is_ok() {
+            count += 1;
+        }
+    }
+    count
 }
 
 /// Launch the conversational TUI. With no CLI flags this is the

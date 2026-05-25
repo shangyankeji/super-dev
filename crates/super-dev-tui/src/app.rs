@@ -1204,7 +1204,6 @@ impl App {
             "kimi" => self.slash_backend(Some("kimi")),
             "offline" => self.slash_backend(None),
             "init" => {
-                // Write the SD-META-001 manifest directly from the TUI.
                 let slug = if self.slug.is_empty() {
                     self.project_root
                         .file_name()
@@ -1216,23 +1215,33 @@ impl App {
                 };
                 let manifest = super_dev_agent::SpecManifest::new(&slug);
                 match manifest.write_to(&self.project_root, false) {
-                    Ok(path) => self.push(
-                        ChatRole::SuperDev,
-                        format!(
-                            "✓ super-dev.yaml 写入 {}\n  level={} profile={} slug={slug}",
-                            path.display(),
-                            manifest.level.as_str(),
-                            manifest.profile.as_str(),
-                        ),
-                    ),
-                    Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => self.push(
-                        ChatRole::System,
-                        "super-dev.yaml 已存在且与模板不同——保留你的编辑。需要重写请加 /init --force(待支持)。",
-                    ),
-                    Err(e) => self.push(
-                        ChatRole::System,
-                        format!("/init 失败:{e}"),
-                    ),
+                    Ok(path) => {
+                        let ds_count = self.scaffold_design_files();
+                        let ds_msg = if ds_count > 0 {
+                            format!("\n  设计基础设施: {ds_count} 文件写入 knowledge/")
+                        } else {
+                            String::new()
+                        };
+                        self.push(
+                            ChatRole::SuperDev,
+                            format!(
+                                "✓ super-dev.yaml 写入 {}\n  level={} profile={} slug={slug}{ds_msg}",
+                                path.display(),
+                                manifest.level.as_str(),
+                                manifest.profile.as_str(),
+                            ),
+                        );
+                    }
+                    Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                        let ds_count = self.scaffold_design_files();
+                        let ds_msg = if ds_count > 0 {
+                            format!("设计基础设施: {ds_count} 新文件写入 knowledge/")
+                        } else {
+                            "super-dev.yaml 已存在。设计文件也已就绪。".to_string()
+                        };
+                        self.push(ChatRole::System, ds_msg);
+                    }
+                    Err(e) => self.push(ChatRole::System, format!("/init 失败:{e}")),
                 }
                 Action::None
             }
@@ -1821,6 +1830,77 @@ impl App {
         body.push_str("  /template <name>              switch seed template\n");
         body.push_str("  /run <slug> <req>             set slug + requirement\n");
         self.overlay = Some(Overlay::from_body(" config — Esc close ", &body));
+    }
+
+    fn scaffold_design_files(&self) -> usize {
+        let files: &[(&str, &str)] = &[
+            (
+                "knowledge/design-systems/modern-minimal.md",
+                include_str!("../../../knowledge/design-systems/modern-minimal.md"),
+            ),
+            (
+                "knowledge/design-systems/editorial-clean.md",
+                include_str!("../../../knowledge/design-systems/editorial-clean.md"),
+            ),
+            (
+                "knowledge/design-systems/tech-utility.md",
+                include_str!("../../../knowledge/design-systems/tech-utility.md"),
+            ),
+            (
+                "knowledge/design-systems/soft-warm.md",
+                include_str!("../../../knowledge/design-systems/soft-warm.md"),
+            ),
+            (
+                "knowledge/design-systems/bold-geometric.md",
+                include_str!("../../../knowledge/design-systems/bold-geometric.md"),
+            ),
+            (
+                "knowledge/design-systems/00-craft-rules.md",
+                include_str!("../../../knowledge/design-systems/00-craft-rules.md"),
+            ),
+            (
+                "knowledge/seed-templates/saas-landing.md",
+                include_str!("../../../knowledge/seed-templates/saas-landing.md"),
+            ),
+            (
+                "knowledge/seed-templates/dashboard.md",
+                include_str!("../../../knowledge/seed-templates/dashboard.md"),
+            ),
+            (
+                "knowledge/seed-templates/blog-content.md",
+                include_str!("../../../knowledge/seed-templates/blog-content.md"),
+            ),
+            (
+                "knowledge/seed-templates/e-commerce.md",
+                include_str!("../../../knowledge/seed-templates/e-commerce.md"),
+            ),
+            (
+                "knowledge/seed-templates/auth-system.md",
+                include_str!("../../../knowledge/seed-templates/auth-system.md"),
+            ),
+            (
+                "knowledge/seed-templates/settings-page.md",
+                include_str!("../../../knowledge/seed-templates/settings-page.md"),
+            ),
+            (
+                "knowledge/seed-templates/docs-site.md",
+                include_str!("../../../knowledge/seed-templates/docs-site.md"),
+            ),
+        ];
+        let mut count = 0;
+        for (rel, content) in files {
+            let target = self.project_root.join(rel);
+            if target.exists() {
+                continue;
+            }
+            if let Some(parent) = target.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            if std::fs::write(&target, content).is_ok() {
+                count += 1;
+            }
+        }
+        count
     }
 
     fn open_version_overlay(&mut self) {

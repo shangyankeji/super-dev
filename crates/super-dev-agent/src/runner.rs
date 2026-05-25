@@ -322,6 +322,11 @@ impl<R: Runtime> AgentRunner<R> {
             }
             Ok(_) => {
                 tracing::warn!(runtime = %self.runtime.kind().id(), "runtime returned empty body — falling back to template");
+                self.emit(EngineEvent::Note(format!(
+                    "⚠ Worker 返回空内容({} 阶段)— 使用 offline 模板替代。\
+                     产出标记为 [offline scaffold],内容需要手动补充。",
+                    phase.id()
+                )));
                 None
             }
             Err(err) => {
@@ -330,6 +335,10 @@ impl<R: Runtime> AgentRunner<R> {
                     error = %err,
                     "runtime call failed — falling back to template"
                 );
+                self.emit(EngineEvent::Note(format!(
+                    "⚠ Worker 调用失败({} 阶段): {err}\n  使用 offline 模板替代。",
+                    phase.id()
+                )));
                 None
             }
         }
@@ -410,6 +419,23 @@ impl<R: Runtime> AgentRunner<R> {
         });
         completed.push(self.record_phase(Phase::Quality, run_quality(&self.options))?);
         self.maybe_verify(Phase::Quality).await;
+
+        let qg_path = self.options.project_root.join("output").join(format!(
+            "{}-quality-gate.json",
+            self.options.effective_slug()
+        ));
+        if let Ok(qg) = std::fs::read_to_string(&qg_path) {
+            let score = crate::phases::extract_quality_score(&qg);
+            self.emit(EngineEvent::Note(format!(
+                "质量门结果: {}/100 · {}",
+                score.0,
+                if score.1 {
+                    "PASSED ✓"
+                } else {
+                    "BLOCKED ✗ — 需修复后再 delivery"
+                }
+            )));
+        }
 
         self.transition(Phase::Delivery, "")?;
         self.emit(EngineEvent::PhaseStarted {
