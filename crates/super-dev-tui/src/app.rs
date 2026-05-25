@@ -1523,16 +1523,14 @@ impl App {
     }
 
     fn extract_design_preview_static(path: &std::path::Path) -> String {
-        let content = match std::fs::read_to_string(path) {
-            Ok(c) => c,
-            Err(_) => return "  (file not readable)".to_string(),
+        let Ok(content) = std::fs::read_to_string(path) else {
+            return "  (file not readable)".to_string();
         };
         let mut preview = String::new();
 
-        // Extract description (first > blockquote line)
         for line in content.lines() {
-            if line.starts_with("> ") {
-                preview.push_str(&format!("  {}\n", &line[2..]));
+            if let Some(desc) = line.strip_prefix("> ") {
+                preview.push_str(&format!("  {desc}\n"));
                 break;
             }
         }

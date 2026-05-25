@@ -255,13 +255,15 @@ impl<R: Runtime> AgentRunner<R> {
             )));
         }
         let research_text = if use_runtime {
-            self.try_generate(
+            self.generate_with_review(
                 Phase::Research,
                 research_prompt(
                     &self.options.effective_slug(),
                     &self.options.requirement,
                     &knowledge_digest(&self.options),
                 ),
+                Self::review_research,
+                3,
             )
             .await
         } else {
@@ -304,6 +306,147 @@ impl<R: Runtime> AgentRunner<R> {
     ///
     /// `phase` tags `HostOutput` events the UI uses to render the host's
     /// response as it streams past.
+    /// Generate content with review→fix loop.
+    ///
+    /// 1. Generate initial draft via worker
+    /// 2. Run review checks (closure returns list of defects)
+    /// 3. If defects found and attempts < max, send fix prompt
+    /// 4. Repeat until clean or max attempts reached
+    ///
+    /// `reviewer` takes the generated text and returns a list of
+    /// defect descriptions. Empty list = pass.
+    async fn generate_with_review(
+        &self,
+        phase: Phase,
+        prompt: Prompt,
+        reviewer: impl Fn(&str) -> Vec<String>,
+        max_attempts: usize,
+    ) -> Option<String> {
+        let mut text = self.try_generate(phase, prompt).await?;
+
+        for attempt in 1..max_attempts {
+            let defects = reviewer(&text);
+            if defects.is_empty() {
+                break;
+            }
+            let defect_list = defects.join("\n- ");
+            self.emit(EngineEvent::Note(format!(
+                "⚠ Review round {attempt}: {} defect(s) found. Auto-fixing...\n- {defect_list}",
+                defects.len()
+            )));
+            let fix_prompt = Prompt {
+                system: format!(
+                    "The document below has quality defects. Fix ONLY the listed \
+                     issues. Output the COMPLETE corrected document, not just the \
+                     fixed parts.\n\nDefects:\n- {defect_list}"
+                ),
+                user: text.clone(),
+            };
+            match self.try_generate(phase, fix_prompt).await {
+                Some(fixed) => text = fixed,
+                None => break,
+            }
+        }
+
+        Some(text)
+    }
+
+    /// Review a research document for structural completeness.
+    fn review_research(text: &str) -> Vec<String> {
+        let lower = text.to_ascii_lowercase();
+        let mut defects = Vec::new();
+        if !lower.contains("## discovery") && !lower.contains("target audience") {
+            defects.push("Missing ## Discovery section (audience/tone/direction)".into());
+        }
+        if !lower.contains("## similar products") {
+            defects.push("Missing ## Similar products section".into());
+        }
+        if !lower.contains("## domain risks") {
+            defects.push("Missing ## Domain risks section".into());
+        }
+        if !lower.contains("## design system recommendation")
+            && !lower.contains("## design recommendation")
+        {
+            defects.push("Missing ## Design system recommendation section".into());
+        }
+        defects
+    }
+
+    /// Review a PRD for structural completeness.
+    fn review_prd(text: &str) -> Vec<String> {
+        let lower = text.to_ascii_lowercase();
+        let mut defects = Vec::new();
+        if !lower.contains("## goal") {
+            defects.push("Missing ## Goal section".into());
+        }
+        if !lower.contains("## scope") {
+            defects.push("Missing ## Scope section (in/out)".into());
+        }
+        if !lower.contains("## acceptance criteria")
+            && !lower.contains("## acceptance")
+            && !lower.contains("- [ ]")
+        {
+            defects.push("Missing acceptance criteria (need testable checkbox items)".into());
+        }
+        if text.matches("- [ ]").count() < 3 {
+            defects.push("Need at least 3 testable acceptance criteria checkboxes".into());
+        }
+        defects
+    }
+
+    /// Review an architecture doc for structural completeness.
+    fn review_architecture(text: &str) -> Vec<String> {
+        let lower = text.to_ascii_lowercase();
+        let mut defects = Vec::new();
+        if !lower.contains("## api surface") && !lower.contains("## api") {
+            defects.push("Missing ## API surface section".into());
+        }
+        let api_rows = text
+            .lines()
+            .filter(|l| {
+                let t = l.trim();
+                t.starts_with('|') && t.contains('/') && !t.contains("---")
+            })
+            .count();
+        if api_rows < 3 {
+            defects.push(format!(
+                "API surface table has only {api_rows} routes (need ≥5)"
+            ));
+        }
+        if !lower.contains("## data model") && !lower.contains("## schema") {
+            defects.push("Missing ## Data model / Schema section".into());
+        }
+        if !lower.contains("## tech") {
+            defects.push("Missing ## Tech-stack rationale section".into());
+        }
+        defects
+    }
+
+    /// Review a UIUX doc for structural completeness.
+    fn review_uiux(text: &str) -> Vec<String> {
+        let lower = text.to_ascii_lowercase();
+        let mut defects = Vec::new();
+        let token_count = text.matches("--").count();
+        if token_count < 10 {
+            defects.push(format!(
+                "Only {token_count} CSS tokens (need ≥10 semantic color tokens)"
+            ));
+        }
+        if !lower.contains("prefers-color-scheme") && !lower.contains("dark mode") {
+            defects.push("Missing dark mode (@media prefers-color-scheme) block".into());
+        }
+        if !lower.contains("font-family") && !lower.contains("--font") && !lower.contains("inter") {
+            defects.push("Missing typography system (font stack + size scale)".into());
+        }
+        if !lower.contains("icon") {
+            defects.push("Missing icon library declaration".into());
+        }
+        if !lower.contains("hover") && !lower.contains("states") {
+            defects.push("Missing component states (hover/focus/disabled)".into());
+        }
+        defects
+    }
+
     async fn try_generate(&self, phase: Phase, prompt: Prompt) -> Option<String> {
         let req = prompt.into_request(&self.options.model, 4096);
         match self.runtime.complete(req).await {
@@ -351,57 +494,43 @@ impl<R: Runtime> AgentRunner<R> {
         let req = &self.options.requirement;
         let research_excerpt = excerpt(research.unwrap_or(""), 1500);
 
+        // PRD: generate → review (goal + scope + acceptance criteria) → fix
         self.emit(EngineEvent::Note("📋 Generating PRD...".to_string()));
         let prd = self
-            .try_generate(Phase::Docs, prd_prompt(&slug, req, &research_excerpt))
+            .generate_with_review(
+                Phase::Docs,
+                prd_prompt(&slug, req, &research_excerpt),
+                Self::review_prd,
+                3,
+            )
             .await;
         let prd_excerpt = excerpt(prd.as_deref().unwrap_or(""), 1500);
 
+        // Architecture: generate → review (API table + data model) → fix
         self.emit(EngineEvent::Note(
             "🏗 Generating Architecture...".to_string(),
         ));
         let architecture = self
-            .try_generate(Phase::Docs, architecture_prompt(&slug, req, &prd_excerpt))
+            .generate_with_review(
+                Phase::Docs,
+                architecture_prompt(&slug, req, &prd_excerpt),
+                Self::review_architecture,
+                3,
+            )
             .await;
 
+        // UIUX: generate → review (tokens + dark mode + typography + states) → fix
         self.emit(EngineEvent::Note(
             "🎨 Generating UI/UX design system...".to_string(),
         ));
-        let mut uiux = self
-            .try_generate(Phase::Docs, uiux_prompt(&slug, req, &prd_excerpt))
+        let uiux = self
+            .generate_with_review(
+                Phase::Docs,
+                uiux_prompt(&slug, req, &prd_excerpt),
+                Self::review_uiux,
+                3,
+            )
             .await;
-
-        // Post-check: if UIUX was generated but lacks dark mode, do one
-        // focused follow-up call to add it. This catches the most common
-        // omission without re-running the entire UIUX generation.
-        if let Some(ref text) = uiux {
-            let lower = text.to_ascii_lowercase();
-            if !lower.contains("prefers-color-scheme") && !lower.contains("dark mode") {
-                self.emit(EngineEvent::Note(
-                    "⚠ UIUX missing dark mode — running follow-up...".to_string(),
-                ));
-                let dark_fix = self
-                    .try_generate(
-                        Phase::Docs,
-                        Prompt {
-                            system: "You wrote a UI/UX spec but forgot the dark mode section. \
-                                 Add ONLY a `## Dark mode` section with a complete \
-                                 `@media (prefers-color-scheme: dark)` CSS block that \
-                                 overrides the light-mode tokens. Output ONLY the new \
-                                 section, nothing else."
-                                .to_string(),
-                            user: format!("Here is the current spec:\n\n{text}"),
-                        },
-                    )
-                    .await;
-                if let Some(dark_section) = dark_fix {
-                    let mut combined = text.clone();
-                    combined.push_str("\n\n");
-                    combined.push_str(&dark_section);
-                    uiux = Some(combined);
-                }
-            }
-        }
 
         DocsContent {
             prd,
