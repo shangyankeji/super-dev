@@ -113,24 +113,27 @@ enum Block {
 
 fn spawn_block(options: RunOptions, backend: Option<String>, sink: Arc<ChannelSink>, block: Block) {
     tokio::spawn(async move {
+        let backend_label = backend.as_deref().unwrap_or("offline").to_string();
         let brain = match build_brain(backend.as_deref()) {
             Ok(b) => b,
             Err(e) => {
-                sink.emit(EngineEvent::Note(format!("backend error: {e}")));
+                sink.emit(EngineEvent::Note(format!(
+                    "⚠ 无法初始化 worker `{backend_label}`: {e}\n  \
+                     请检查: 该 CLI 是否已安装? 是否已登录? 用 /doctor 查看可用 worker。"
+                )));
                 return;
             }
         };
-        // `use_runtime=true` only when a real host CLI is configured.
-        // `Some("offline")` resolves to `OfflineRuntime` (empty bodies);
-        // calling `try_generate` there is wasteful — N empty LLM calls
-        // per run that all fall back to template anyway.
         let use_runtime =
             matches!(backend.as_deref(), Some(id) if id != "offline" && !id.is_empty());
         let runner = AgentRunner::new(brain, options).with_event_sink(sink.clone());
         let outcome = match block {
             Block::Initial => {
                 if let Err(e) = runner.start() {
-                    sink.emit(EngineEvent::Note(format!("start failed: {e}")));
+                    sink.emit(EngineEvent::Note(format!(
+                        "⚠ 流水线启动失败: {e}\n  \
+                         请检查: 工作目录是否可写? 磁盘空间是否充足?"
+                    )));
                     return;
                 }
                 runner.run_initial_block(use_runtime).await
@@ -138,7 +141,17 @@ fn spawn_block(options: RunOptions, backend: Option<String>, sink: Arc<ChannelSi
             Block::Continue(gate) => runner.continue_from_gate(gate).await,
         };
         if let Err(e) = outcome {
-            sink.emit(EngineEvent::Note(format!("pipeline error: {e}")));
+            let err_str = e.to_string();
+            let hint = if err_str.contains("timed out") {
+                "Worker 调用超时(5 分钟)。可能原因: 网络慢、模型过载、或 CLI 需要重新登录。"
+            } else if err_str.contains("not found on PATH") {
+                "Worker CLI 不在 PATH 里。请安装对应工具或用 /doctor 检查。"
+            } else if err_str.contains("exited with code") {
+                "Worker 进程异常退出。查看上方 worker 输出了解详情。"
+            } else {
+                "流水线遇到错误。已回退到 offline 模板继续(如适用)。"
+            };
+            sink.emit(EngineEvent::Note(format!("⚠ 流水线错误: {e}\n  {hint}")));
         }
     });
 }
