@@ -265,8 +265,10 @@ fn render_docs(slug: &str, req: &str, design_inject: &str) -> String {
            Require at minimum: `--color-bg`, `--color-surface`, `--color-text`, \
            `--color-text-secondary`, `--color-primary`, `--color-primary-hover`, \
            `--color-accent`, `--color-border`, `--color-error`, `--color-success`. \
-           Must include dark-mode overrides via `@media (prefers-color-scheme: dark)`. \
            NO purple/pink gradients unless the product domain demands it.\n\
+         - `## Dark mode` (put this RIGHT AFTER color palette) — a complete \
+           `@media (prefers-color-scheme: dark)` block that overrides \
+           bg/surface/text/border/shadow tokens. This is NOT optional.\n\
          - `## Typography system` — font stack (2 families max: one for headings, \
            one for body), type scale (7 steps: `--text-xs` through `--text-3xl`), \
            line-height tokens, font-weight tokens. NO system-font-only.\n\
@@ -284,9 +286,6 @@ fn render_docs(slug: &str, req: &str, design_inject: &str) -> String {
          - `## Self-critique` — score this design on 5 dimensions (1-10 each): \
            Hierarchy clarity / Visual distinctiveness / Detail polish / \
            Functional completeness / Innovation. If any ≤ 6, revise before submitting.\n\
-         - `## Dark mode` (REQUIRED) — a complete `@media (prefers-color-scheme: dark)` \
-           block overriding bg/surface/text/border/shadow tokens. Test that it actually \
-           works before submitting.\n\
          - `## Accessibility notes` — contrast ratios, focus rings, ARIA landmarks.\n\n\
          ## Input\n\n\
          ### Requirement\n\n{req}\n\n\
