@@ -761,7 +761,10 @@ impl App {
             }
             EngineEvent::GateOpened { gate } => {
                 self.active_gate = Some(gate);
-                self.push(ChatRole::Gate, gate_card(gate, &self.slug));
+                self.push(
+                    ChatRole::Gate,
+                    gate_card(gate, &self.slug, &self.project_root),
+                );
             }
             EngineEvent::BlockCompleted {
                 final_phase,
@@ -2359,7 +2362,7 @@ fn lev(a: &str, b: &str) -> usize {
 /// user's eyes and which slash commands move it forward — so the user
 /// doesn't have to remember what `docs_confirm` vs `preview_confirm`
 /// actually means.
-fn gate_card(gate: Gate, slug: &str) -> String {
+fn gate_card(gate: Gate, slug: &str, project_root: &std::path::Path) -> String {
     let slug = if slug.is_empty() { "<slug>" } else { slug };
     let (title, artifacts, next) = match gate {
         Gate::DocsConfirm => (
@@ -2383,14 +2386,37 @@ fn gate_card(gate: Gate, slug: &str) -> String {
 
     let mut out = String::new();
     out.push_str(&format!("⏸ {title}\n"));
-    out.push_str("  待审稿工件:\n");
-    for a in artifacts {
-        out.push_str(&format!("    · {a}\n"));
+    out.push_str("  工件摘要:\n");
+    for a in &artifacts {
+        let path = project_root.join(a);
+        let lines = std::fs::read_to_string(&path).map_or(0, |s| s.lines().count());
+        let detail = if lines > 0 {
+            format!("{lines} lines")
+        } else {
+            "missing".to_string()
+        };
+        out.push_str(&format!("    · {a} ({detail})\n"));
     }
-    out.push_str("  下一步:\n");
-    out.push_str("    · /continue 或回车 c    → 通过这道 gate,继续流水线\n");
-    out.push_str("    · /revise <修订说明>     → 把反馈喂回 worker 重做\n");
-    out.push_str("    · /diff <工件>           → 查看内容 (例: /diff prd · /diff architecture · /diff uiux)\n");
+    // Quick quality indicators for docs_confirm
+    if matches!(gate, Gate::DocsConfirm) {
+        let uiux_path = project_root.join(format!("output/{slug}-uiux.md"));
+        if let Ok(content) = std::fs::read_to_string(&uiux_path) {
+            let tokens = content.matches("--").count();
+            let has_dark = content
+                .to_ascii_lowercase()
+                .contains("prefers-color-scheme");
+            out.push_str(&format!(
+                "  质量: {tokens} CSS tokens · dark mode: {}\n",
+                if has_dark { "✓" } else { "✗ missing" }
+            ));
+        }
+    }
+    out.push_str("  操作:\n");
+    out.push_str("    · /continue 或 c        → 通过 gate\n");
+    out.push_str("    · /revise <修订说明>     → worker 重做\n");
+    out.push_str("    · /diff prd             → 查看 PRD\n");
+    out.push_str("    · /diff architecture    → 查看架构\n");
+    out.push_str("    · /diff uiux            → 查看设计系统\n");
     out.push_str(&format!("  指引: {next}"));
     out
 }

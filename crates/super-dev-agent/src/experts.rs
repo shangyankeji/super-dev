@@ -61,18 +61,23 @@ top-level sections, fill the ones the user asks for.\n";
 pub fn research_prompt(slug: &str, requirement: &str, knowledge_digest: &str) -> Prompt {
     let system = format!(
         "{SPEC_PREAMBLE}\n\
-         Role: senior product researcher.\n\
-         Task: produce a concise research brief that lets the rest of \
-         the pipeline (PM / architect / UI lead) ground their work. \
-         Cite up to 5 similar products with one-line takeaways each. \
-         Surface 5 risks the architecture must mitigate. List 5 \
-         UI / UX patterns that are non-negotiable in this domain.\n\
-         Output: pure markdown. Required sections (in order):\n\
+         Role: senior product researcher + design strategist.\n\n\
+         MUST-DO:\n\
+         1. Include a `## Discovery` section with ALL 6 fields answered.\n\
+         2. Include `## Design system recommendation`.\n\
+         3. Cite 5 REAL products (not made up) with design-specific takeaways.\n\n\
+         Required sections (in this EXACT order, ALL mandatory):\n\
          - # Research — {slug}\n\
-         - ## Requirement (echo the requirement verbatim)\n\
-         - ## Similar products\n\
-         - ## Domain risks\n\
-         - ## UI / UX must-haves\n\
+         - ## Requirement (echo verbatim)\n\
+         - ## Discovery (answer ALL): Target audience, Visual tone, \
+           Design direction (ONE of: Modern Minimal / Editorial Clean / \
+           Tech Utility / Soft Warm / Bold Geometric), Brand constraints, \
+           Platform, Complexity\n\
+         - ## Similar products — 5 real products with design takeaways\n\
+         - ## Domain risks — 5 risks with mitigation strategies\n\
+         - ## UI / UX must-haves — 5 non-negotiable patterns\n\
+         - ## Design system recommendation — palette direction, \
+           typography approach, spacing philosophy, signature detail\n\
          - ## Open questions"
     );
     let user = format!(
@@ -142,23 +147,35 @@ pub fn architecture_prompt(slug: &str, requirement: &str, prd_excerpt: &str) -> 
 pub fn uiux_prompt(slug: &str, requirement: &str, prd_excerpt: &str) -> Prompt {
     let system = format!(
         "{SPEC_PREAMBLE}\n\
-         Role: senior UI/UX lead.\n\
-         Task: write the UI/UX specification. The design-token block \
-         MUST be a valid CSS `:root` declaration. The icon library is \
-         a hard constraint — pick exactly one of Lucide / Heroicons / \
-         Tabler and stick to it across the whole spec.\n\
-         Output: pure markdown. Required sections (in order):\n\
+         Role: senior UI/UX designer — creates design SYSTEMS, not mockups.\n\n\
+         MUST-DO:\n\
+         1. Output pure markdown with ALL sections below. Do NOT skip any.\n\
+         2. The `:root` CSS block must have 10+ semantic color tokens.\n\
+         3. Dark mode `@media (prefers-color-scheme: dark)` is REQUIRED — put it \
+            right after the light-mode `:root` block.\n\n\
+         Required sections (in this EXACT order):\n\
          - # UI/UX — {slug}\n\
-         - ## Design tokens (a single ```css fenced block with `:root` rules)\n\
-         - ## Icon library (one of Lucide / Heroicons / Tabler — declare it)\n\
-         - ## Page hierarchy (nested list)\n\
-         - ## Component skeleton (key components with their states)\n\
-         - ## Accessibility notes (WCAG-grade checkpoints)"
+         - ## Color palette — `:root` CSS block with: --color-bg, --color-surface, \
+           --color-text, --color-text-secondary, --color-primary, --color-primary-hover, \
+           --color-accent, --color-border, --color-error, --color-success (minimum 10).\n\
+         - ## Dark mode — `@media (prefers-color-scheme: dark)` overriding \
+           bg/surface/text/border tokens. NOT optional.\n\
+         - ## Typography system — font stack (2 families max), 7-step type scale \
+           (--text-xs through --text-3xl), line-height + weight tokens.\n\
+         - ## Spacing scale — 4px base, 8+ steps.\n\
+         - ## Icon library — exactly ONE: Lucide / Heroicons / Tabler.\n\
+         - ## Page hierarchy — nested list with route paths.\n\
+         - ## Component inventory — every component with states: \
+           default / hover / active / disabled / loading / error.\n\
+         - ## Motion guidelines — transition tokens.\n\
+         - ## Accessibility notes — contrast, focus rings, ARIA.\n\n\
+         Self-check: color palette has 10+ tokens? Dark mode block present? \
+         Typography has 7 sizes? Every component has states?"
     );
     let user = format!(
         "## Requirement\n\n{requirement}\n\n\
          ## PRD (excerpt)\n\n{prd_excerpt}\n\n\
-         Write the UI/UX spec now."
+         Write the complete UI/UX spec now."
     );
     Prompt { system, user }
 }

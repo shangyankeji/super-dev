@@ -351,17 +351,57 @@ impl<R: Runtime> AgentRunner<R> {
         let req = &self.options.requirement;
         let research_excerpt = excerpt(research.unwrap_or(""), 1500);
 
+        self.emit(EngineEvent::Note("📋 Generating PRD...".to_string()));
         let prd = self
             .try_generate(Phase::Docs, prd_prompt(&slug, req, &research_excerpt))
             .await;
         let prd_excerpt = excerpt(prd.as_deref().unwrap_or(""), 1500);
 
+        self.emit(EngineEvent::Note(
+            "🏗 Generating Architecture...".to_string(),
+        ));
         let architecture = self
             .try_generate(Phase::Docs, architecture_prompt(&slug, req, &prd_excerpt))
             .await;
-        let uiux = self
+
+        self.emit(EngineEvent::Note(
+            "🎨 Generating UI/UX design system...".to_string(),
+        ));
+        let mut uiux = self
             .try_generate(Phase::Docs, uiux_prompt(&slug, req, &prd_excerpt))
             .await;
+
+        // Post-check: if UIUX was generated but lacks dark mode, do one
+        // focused follow-up call to add it. This catches the most common
+        // omission without re-running the entire UIUX generation.
+        if let Some(ref text) = uiux {
+            let lower = text.to_ascii_lowercase();
+            if !lower.contains("prefers-color-scheme") && !lower.contains("dark mode") {
+                self.emit(EngineEvent::Note(
+                    "⚠ UIUX missing dark mode — running follow-up...".to_string(),
+                ));
+                let dark_fix = self
+                    .try_generate(
+                        Phase::Docs,
+                        Prompt {
+                            system: "You wrote a UI/UX spec but forgot the dark mode section. \
+                                 Add ONLY a `## Dark mode` section with a complete \
+                                 `@media (prefers-color-scheme: dark)` CSS block that \
+                                 overrides the light-mode tokens. Output ONLY the new \
+                                 section, nothing else."
+                                .to_string(),
+                            user: format!("Here is the current spec:\n\n{text}"),
+                        },
+                    )
+                    .await;
+                if let Some(dark_section) = dark_fix {
+                    let mut combined = text.clone();
+                    combined.push_str("\n\n");
+                    combined.push_str(&dark_section);
+                    uiux = Some(combined);
+                }
+            }
+        }
 
         DocsContent {
             prd,
