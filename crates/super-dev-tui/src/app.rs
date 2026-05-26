@@ -1982,6 +1982,30 @@ impl App {
                 "knowledge/seed-templates/docs-site.md",
                 include_str!("../../../knowledge/seed-templates/docs-site.md"),
             ),
+            (
+                "knowledge/experts/product-manager/methodology.md",
+                include_str!("../../../knowledge/experts/product-manager/methodology.md"),
+            ),
+            (
+                "knowledge/experts/architect/api-design.md",
+                include_str!("../../../knowledge/experts/architect/api-design.md"),
+            ),
+            (
+                "knowledge/experts/architect/security.md",
+                include_str!("../../../knowledge/experts/architect/security.md"),
+            ),
+            (
+                "knowledge/experts/frontend-lead/methodology.md",
+                include_str!("../../../knowledge/experts/frontend-lead/methodology.md"),
+            ),
+            (
+                "knowledge/experts/backend-lead/methodology.md",
+                include_str!("../../../knowledge/experts/backend-lead/methodology.md"),
+            ),
+            (
+                "knowledge/experts/qa-lead/test-strategy.md",
+                include_str!("../../../knowledge/experts/qa-lead/test-strategy.md"),
+            ),
         ];
         let mut count = 0;
         for (rel, content) in files {

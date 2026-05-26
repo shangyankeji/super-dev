@@ -63,6 +63,9 @@ pub fn phase_knowledge_digest(opts: &RunOptions, phase: Phase) -> String {
     let subdirs: &[&str] = match phase {
         Phase::Research => return knowledge_digest(opts),
         Phase::Docs => &[
+            "experts/product-manager",
+            "experts/architect",
+            "experts/uiux-designer",
             "product",
             "architecture",
             "design",
@@ -70,11 +73,44 @@ pub fn phase_knowledge_digest(opts: &RunOptions, phase: Phase) -> String {
             "industries",
         ],
         Phase::DocsConfirm | Phase::PreviewConfirm => return String::new(),
-        Phase::Spec => &["development", "00-governance", "product"],
-        Phase::Frontend => &["frontend", "design", "design-systems", "seed-templates"],
-        Phase::Backend => &["backend", "api", "database", "security", "cloud-native"],
-        Phase::Quality => &["testing", "security", "00-governance"],
-        Phase::Delivery => &["cicd", "operations", "00-governance", "security"],
+        Phase::Spec => &[
+            "experts/product-manager",
+            "experts/architect",
+            "development",
+            "00-governance",
+            "product",
+        ],
+        Phase::Frontend => &[
+            "experts/frontend-lead",
+            "experts/uiux-designer",
+            "frontend",
+            "design",
+            "design-systems",
+            "seed-templates",
+        ],
+        Phase::Backend => &[
+            "experts/backend-lead",
+            "experts/architect",
+            "backend",
+            "api",
+            "database",
+            "security",
+            "cloud-native",
+        ],
+        Phase::Quality => &[
+            "experts/qa-lead",
+            "experts/architect",
+            "testing",
+            "security",
+            "00-governance",
+        ],
+        Phase::Delivery => &[
+            "experts/devops",
+            "cicd",
+            "operations",
+            "00-governance",
+            "security",
+        ],
     };
 
     let mut all_paths = Vec::new();
