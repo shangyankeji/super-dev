@@ -757,17 +757,25 @@ impl<R: Runtime> AgentRunner<R> {
             "{}-quality-gate.json",
             self.options.effective_slug()
         ));
-        if let Ok(qg) = std::fs::read_to_string(&qg_path) {
+        let quality_passed = if let Ok(qg) = std::fs::read_to_string(&qg_path) {
             let score = crate::phases::extract_quality_score(&qg);
             self.emit(EngineEvent::Note(format!(
                 "质量门结果: {}/100 · {}",
                 score.0,
-                if score.1 {
-                    "PASSED ✓"
-                } else {
-                    "BLOCKED ✗ — 需修复后再 delivery"
-                }
+                if score.1 { "PASSED ✓" } else { "BLOCKED ✗" }
             )));
+            score.1
+        } else {
+            true // no gate file = assume pass (offline mode)
+        };
+
+        if !quality_passed {
+            self.emit(EngineEvent::Note(
+                "⚠ 质量门未通过 — 跳过 delivery。请修复质量问题后重跑:\n  \
+                 /redo 重跑整个流水线\n  \
+                 或修复后 /continue 继续"
+                    .to_string(),
+            ));
         }
 
         self.transition(Phase::Delivery, "")?;
