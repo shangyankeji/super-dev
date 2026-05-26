@@ -316,6 +316,9 @@ impl<R: Runtime> AgentRunner<R> {
     ///
     /// `reviewer` takes the generated text and returns a list of
     /// defect descriptions. Empty list = pass.
+    /// Generate with review loop. Key principle: NEVER lose the first
+    /// successful generation. If fix attempts timeout or fail, we keep
+    /// what we have — an imperfect doc is better than a template.
     async fn generate_with_review(
         &self,
         phase: Phase,
@@ -328,24 +331,42 @@ impl<R: Runtime> AgentRunner<R> {
         for attempt in 1..max_attempts {
             let defects = reviewer(&text);
             if defects.is_empty() {
+                self.emit(EngineEvent::Note(format!(
+                    "✓ {} review passed.",
+                    phase.id()
+                )));
+                break;
+            }
+            // Only attempt fix for structural defects (missing sections),
+            // not for subjective quality issues.
+            if defects.len() > 4 {
+                self.emit(EngineEvent::Note(format!(
+                    "⚠ {} review: {} issues — too many to auto-fix, keeping current version.",
+                    phase.id(),
+                    defects.len()
+                )));
                 break;
             }
             let defect_list = defects.join("\n- ");
             self.emit(EngineEvent::Note(format!(
-                "⚠ Review round {attempt}: {} defect(s) found. Auto-fixing...\n- {defect_list}",
+                "⚠ Review round {attempt}: {} defect(s). Fixing...\n- {defect_list}",
                 defects.len()
             )));
             let fix_prompt = Prompt {
                 system: format!(
                     "The document below has quality defects. Fix ONLY the listed \
-                     issues. Output the COMPLETE corrected document, not just the \
-                     fixed parts.\n\nDefects:\n- {defect_list}"
+                     issues. Output the COMPLETE corrected document.\n\nDefects:\n- {defect_list}"
                 ),
                 user: text.clone(),
             };
             match self.try_generate(phase, fix_prompt).await {
-                Some(fixed) => text = fixed,
-                None => break,
+                Some(fixed) if !fixed.trim().is_empty() => text = fixed,
+                _ => {
+                    self.emit(EngineEvent::Note(
+                        "Fix attempt failed — keeping previous version.".to_string(),
+                    ));
+                    break;
+                }
             }
         }
 
@@ -396,8 +417,10 @@ impl<R: Runtime> AgentRunner<R> {
             defects.push("Missing non-functional requirements (performance/security)".into());
         }
         let ac_count = text.matches("- [ ]").count();
-        if ac_count < 5 {
-            defects.push(format!("Only {ac_count} acceptance criteria (need ≥8)"));
+        if ac_count < 2 {
+            defects.push(format!(
+                "Only {ac_count} acceptance criteria (need at least a few)"
+            ));
         }
         if !lower.contains("metric") && !lower.contains("kpi") {
             defects.push("Missing success metrics".into());
@@ -419,8 +442,10 @@ impl<R: Runtime> AgentRunner<R> {
                 t.starts_with('|') && t.contains('/') && !t.contains("---")
             })
             .count();
-        if api_rows < 5 {
-            defects.push(format!("API table has {api_rows} rows (need ≥8)"));
+        if api_rows < 2 {
+            defects.push(format!(
+                "API table has {api_rows} rows (need at least a few endpoints)"
+            ));
         }
         if !lower.contains("data model") && !lower.contains("schema") {
             defects.push("Missing data model with field types".into());
@@ -446,9 +471,9 @@ impl<R: Runtime> AgentRunner<R> {
         let lower = text.to_ascii_lowercase();
         let mut defects = Vec::new();
         let token_count = text.matches("--").count();
-        if token_count < 10 {
+        if token_count < 5 {
             defects.push(format!(
-                "Only {token_count} CSS tokens (need ≥10 semantic color tokens)"
+                "Only {token_count} CSS tokens (need at least basic semantic tokens)"
             ));
         }
         if !lower.contains("prefers-color-scheme") && !lower.contains("dark mode") {

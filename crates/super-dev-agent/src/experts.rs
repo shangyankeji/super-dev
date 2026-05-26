@@ -42,19 +42,17 @@ impl Prompt {
 }
 
 const SPEC_PREAMBLE: &str = "\
-You are working inside a Super Dev pipeline run governed by \
-SUPER_DEV_HOST_SPEC_V1. Every artifact you produce MUST follow these \
-non-negotiable rules:\n\
+You are working inside a Super Dev pipeline.\n\
+KEY PRINCIPLE: Scale your output to the project's actual complexity. \
+A simple todo app needs a short PRD; an e-commerce platform needs a \
+detailed one. Don't pad with filler, don't omit real requirements. \
+Match the depth to the problem.\n\n\
+Non-negotiable rules:\n\
 - Use a declared icon library (Lucide / Heroicons / Tabler). NEVER \
 emoji as functional icons.\n\
-- Use design tokens (CSS vars / theme keys). NEVER hardcoded hex / \
-rgb / hsl colors in production UI.\n\
-- Frontend fetch URLs MUST match an API path declared in the \
-architecture document.\n\
-- Wait for explicit user approval at docs_confirm and preview_confirm \
-gates.\n\
-- Output goes into structured markdown sections — do not invent new \
-top-level sections, fill the ones the user asks for.\n";
+- Use design tokens (CSS vars / theme keys). NEVER hardcoded colors.\n\
+- Frontend fetch URLs MUST match architecture API paths.\n\
+- Output structured markdown sections as requested.\n";
 
 /// Research expert — produces `output/<slug>-research.md`.
 #[must_use]
@@ -136,14 +134,16 @@ pub fn prd_prompt(slug: &str, requirement: &str, research_excerpt: &str) -> Prom
            - ### Future considerations — v2 ideas to keep in mind architecturally\n\
          - ## Functional requirements — table:\n\
            `| ID | Feature | Description | Priority | Acceptance criteria |`\n\
-           P0 = must have, P1 = should have, P2 = nice to have. Minimum 10 rows.\n\
+           P0 = must have, P1 = should have, P2 = nice to have. \
+           Rows match actual features (don't pad; don't omit).\n\
          - ## Non-functional requirements\n\
            - Performance: FCP < 1.5s, API p95 < 200ms, support N concurrent users\n\
            - Security: auth method, data encryption, input validation\n\
            - Accessibility: WCAG 2.1 AA minimum\n\
            - Browser support: Chrome/Firefox/Safari/Edge latest 2 versions\n\
            - Mobile: responsive or native, minimum viewport 360px\n\
-         - ## Acceptance criteria — ≥10 items in Given/When/Then format:\n\
+         - ## Acceptance criteria — in Given/When/Then format. \
+           Quantity matches complexity: simple project = 3-5, medium = 6-10, complex = 10+.\n\
            `- [ ] Given [context], when [action], then [expected result]`\n\
          - ## Success metrics — measurable KPIs with baseline + target:\n\
            `| Metric | Baseline | Target | How to measure |`\n\
@@ -174,7 +174,8 @@ pub fn architecture_prompt(slug: &str, requirement: &str, prd_excerpt: &str) -> 
          - ## System overview — component diagram in text, data flow direction, \
            communication protocols (REST/gRPC/WebSocket)\n\
          - ## API surface — table: `| Method | Path | Request | Response | Auth | Description |` \
-           At least 8 rows. Every path starts with `/`. Include auth requirements per endpoint.\n\
+           One row per real endpoint (don't pad with fake routes, don't omit real ones). \
+           Every path starts with `/`. Include auth requirements per endpoint.\n\
          - ## API error convention — standard error envelope: \
            `{{ \"error\": {{ \"code\": \"...\", \"message\": \"...\" }} }}`. \
            Table of error codes: `| HTTP | Code | Meaning |` (400/401/403/404/409/422/500)\n\
@@ -224,7 +225,8 @@ pub fn uiux_prompt(slug: &str, requirement: &str, prd_excerpt: &str) -> Prompt {
          - # UI/UX — {slug}\n\
          - ## Color palette — `:root` CSS block with: --color-bg, --color-surface, \
            --color-text, --color-text-secondary, --color-primary, --color-primary-hover, \
-           --color-accent, --color-border, --color-error, --color-success (minimum 10).\n\
+           --color-accent, --color-border, --color-error, --color-success. \
+           Add more semantic tokens as the project needs (surface, surface-hover, etc).\n\
          - ## Dark mode — `@media (prefers-color-scheme: dark)` overriding \
            bg/surface/text/border tokens. NOT optional.\n\
          - ## Typography system — font stack (2 families max), 7-step type scale \
@@ -410,9 +412,9 @@ mod tests {
             architecture_prompt("s", "r", "x"),
             uiux_prompt("s", "r", "x"),
         ] {
-            assert!(p.system.contains("SUPER_DEV_HOST_SPEC_V1"));
-            assert!(p.system.contains("emoji"));
-            assert!(p.system.contains("design tokens"));
+            assert!(p.system.contains("Super Dev pipeline"));
+            assert!(p.system.contains("Scale your output"));
+            assert!(p.system.contains("icon library"));
         }
     }
 
