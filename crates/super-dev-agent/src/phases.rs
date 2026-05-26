@@ -1610,23 +1610,104 @@ fn walk_md(dir: &Path, out: &mut Vec<String>, depth: usize) {
 fn render_prd(slug: &str, requirement: &str) -> String {
     format!(
         "# PRD — {slug}\n\n\
-         > Offline scaffold — pass `--backend claude-code` or `--backend codex` to fill this in with real worker-generated content.\n\n\
+         > Offline scaffold. Use `--backend claude-code` for AI-generated content.\n\n\
          ## Goal\n\n{requirement}\n\n\
-         ## Scope\n\n- _what's in_\n- _what's out_\n\n\
-         ## User stories\n\n- As a user, I want …\n\n\
-         ## Acceptance criteria\n\n- [ ] criterion 1\n- [ ] criterion 2\n\n\
-         ## Risks & open questions\n\n- _list domain-specific risks_\n",
+         TODO: Expand with: what + why + for whom + success metric\n\n\
+         ## Target users\n\n\
+         TODO: Define 2-3 personas with role, context, pain point.\n\n\
+         ## Information architecture\n\n\
+         ```\n\
+         / (Home)\n\
+         ├── /feature-1\n\
+         ├── /feature-2\n\
+         └── /auth/login\n\
+         ```\n\
+         TODO: Expand routes for: {requirement}\n\n\
+         ## Scope\n\n\
+         ### In scope\n\
+         - TODO: List features for this iteration\n\n\
+         ### Out of scope\n\
+         - TODO: Explicitly exclude items\n\n\
+         ## Functional requirements\n\n\
+         | ID | Feature | Priority | Acceptance criteria |\n\
+         |---|---|---|---|\n\
+         | F1 | TODO | P0 | TODO |\n\
+         | F2 | TODO | P1 | TODO |\n\n\
+         ## Non-functional requirements\n\n\
+         - Performance: FCP < _target_, API p95 < _target_\n\
+         - Security: _auth method_, _data sensitivity_\n\
+         - Accessibility: WCAG 2.1 _level_\n\n\
+         ## Acceptance criteria\n\n\
+         - [ ] Given TODO, when TODO, then TODO\n\
+         - [ ] Given TODO, when TODO, then TODO\n\
+         - [ ] Given TODO, when TODO, then TODO\n\n\
+         TODO: Add acceptance criteria matching each functional requirement.\n\n\
+         ## Success metrics\n\n\
+         | Metric | Baseline | Target | How to measure |\n\
+         |---|---|---|---|\n\
+         | TODO | TODO | TODO | TODO |\n\n\
+         ## Risks & open questions\n\n\
+         - TODO: Identify domain-specific risks\n",
     )
 }
 
 fn render_architecture(slug: &str, requirement: &str) -> String {
     format!(
         "# Architecture — {slug}\n\n\
-         > Offline scaffold — pass `--backend claude-code` or `--backend codex` to fill this in with real worker-generated content.\n\n\
-         ## System overview\n\n_Diagram + prose describing the components implementing: {requirement}_\n\n\
-         ## API surface\n\n| Method | Path | Purpose |\n|---|---|---|\n| GET | /api/example | _purpose_ |\n\n\
-         ## Data model\n\n_Schemas / tables / message shapes._\n\n\
-         ## Tech-stack rationale\n\n- Frontend: _choice + reason_\n- Backend: _choice + reason_\n- Storage: _choice + reason_\n",
+         > Offline scaffold. Use `--backend claude-code` for AI-generated content.\n\n\
+         ## System overview\n\n\
+         TODO: Describe the system components and how they communicate.\n\
+         Consider: What services exist? REST/gRPC/WebSocket? Data flow direction?\n\n\
+         Requirement: {requirement}\n\n\
+         ## API surface\n\n\
+         | Method | Path | Request | Response | Auth | Description |\n\
+         |---|---|---|---|---|---|\n\
+         | GET | /api/health | - | `{{ ok: true }}` | none | Health check |\n\
+         | POST | /api/auth/login | `{{ email, password }}` | `{{ token, user }}` | none | Login |\n\
+         | GET | /api/auth/me | - | `{{ user }}` | bearer | Current user |\n\
+         | TODO | /api/... | TODO | TODO | TODO | Add endpoints for: {requirement} |\n\n\
+         ## API error convention\n\n\
+         ```json\n\
+         {{ \"error\": {{ \"code\": \"VALIDATION_ERROR\", \"message\": \"...\", \"details\": [...] }} }}\n\
+         ```\n\n\
+         | HTTP | Code | Meaning |\n\
+         |---|---|---|\n\
+         | 400 | BAD_REQUEST | Malformed request |\n\
+         | 401 | UNAUTHORIZED | Missing/invalid auth token |\n\
+         | 403 | FORBIDDEN | Authenticated but no permission |\n\
+         | 404 | NOT_FOUND | Resource doesn't exist |\n\
+         | 422 | VALIDATION_ERROR | Invalid field values |\n\
+         | 429 | RATE_LIMITED | Too many requests |\n\
+         | 500 | INTERNAL_ERROR | Server error (no details to client) |\n\n\
+         ## Data model\n\n\
+         TODO: Define entities with field tables.\n\n\
+         | Field | Type | Required | Description |\n\
+         |---|---|---|---|\n\
+         | id | uuid | yes | Primary key |\n\
+         | created_at | timestamp | yes | Auto-set on create |\n\
+         | updated_at | timestamp | yes | Auto-set on update |\n\n\
+         ## Authentication & authorization\n\n\
+         TODO: Define auth method (JWT/session/OAuth2), roles, permission matrix.\n\n\
+         ## Tech-stack rationale\n\n\
+         - Frontend: TODO (pick framework + justify)\n\
+         - Backend: TODO (pick language/framework + justify)\n\
+         - Database: TODO (pick DB + justify)\n\
+         - Hosting: TODO (pick platform + justify)\n\n\
+         ## Project structure\n\n\
+         ```\n\
+         src/\n\
+           pages/       # Route-level components\n\
+           components/  # Shared UI\n\
+           lib/         # Business logic\n\
+           api/         # API routes or client\n\
+           types/       # Shared types\n\
+         ```\n\n\
+         ## Security considerations\n\n\
+         - [ ] Input validation on all endpoints\n\
+         - [ ] Parameterized queries (no SQL injection)\n\
+         - [ ] HTTPS only (HSTS header)\n\
+         - [ ] Rate limiting on auth endpoints\n\
+         - [ ] Secrets in env vars, not code\n",
     )
 }
 

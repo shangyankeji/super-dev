@@ -2503,15 +2503,34 @@ fn gate_card(gate: Gate, slug: &str, project_root: &std::path::Path) -> String {
     let mut out = String::new();
     out.push_str(&format!("⏸ {title}\n"));
     out.push_str("  工件摘要:\n");
+    let mut warnings = Vec::new();
     for a in &artifacts {
         let path = project_root.join(a);
-        let lines = std::fs::read_to_string(&path).map_or(0, |s| s.lines().count());
-        let detail = if lines > 0 {
-            format!("{lines} lines")
+        let content = std::fs::read_to_string(&path).unwrap_or_default();
+        let lines = content.lines().count();
+        let is_scaffold =
+            content.contains("Offline scaffold") || content.contains("offline scaffold");
+        let detail = if lines == 0 {
+            "⚠ MISSING".to_string()
+        } else if is_scaffold {
+            warnings.push(format!(
+                "{a}: offline scaffold — worker 超时或未配置, 用 /revise 重新生成"
+            ));
+            format!("{lines} lines ⚠ SCAFFOLD")
+        } else if lines < 30 {
+            warnings.push(format!("{a}: only {lines} lines — may be incomplete"));
+            format!("{lines} lines ⚠ SHORT")
         } else {
-            "missing".to_string()
+            format!("{lines} lines ✓")
         };
         out.push_str(&format!("    · {a} ({detail})\n"));
+    }
+    if !warnings.is_empty() {
+        out.push_str("  ⚠ 质量提醒:\n");
+        for w in &warnings {
+            out.push_str(&format!("    · {w}\n"));
+        }
+        out.push_str("    建议: 用 /revise '重新生成 architecture' 让 worker 补充\n");
     }
     // Quick quality indicators for docs_confirm
     if matches!(gate, Gate::DocsConfirm) {
