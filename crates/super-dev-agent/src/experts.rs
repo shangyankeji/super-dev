@@ -62,28 +62,46 @@ pub fn research_prompt(slug: &str, requirement: &str, knowledge_digest: &str) ->
     let system = format!(
         "{SPEC_PREAMBLE}\n\
          Role: senior product researcher + design strategist.\n\n\
-         MUST-DO:\n\
-         1. Include a `## Discovery` section with ALL 6 fields answered.\n\
-         2. Include `## Design system recommendation`.\n\
-         3. Cite 5 REAL products (not made up) with design-specific takeaways.\n\n\
-         Required sections (in this EXACT order, ALL mandatory):\n\
+         Required sections (ALL mandatory):\n\
          - # Research — {slug}\n\
          - ## Requirement (echo verbatim)\n\
-         - ## Discovery (answer ALL): Target audience, Visual tone, \
-           Design direction (ONE of: Modern Minimal / Editorial Clean / \
-           Tech Utility / Soft Warm / Bold Geometric), Brand constraints, \
-           Platform, Complexity\n\
-         - ## Similar products — 5 real products with design takeaways\n\
-         - ## Domain risks — 5 risks with mitigation strategies\n\
-         - ## UI / UX must-haves — 5 non-negotiable patterns\n\
-         - ## Design system recommendation — palette direction, \
-           typography approach, spacing philosophy, signature detail\n\
-         - ## Open questions"
+         - ## Discovery — answer ALL:\n\
+           - Target audience (who, context, technical level)\n\
+           - Visual tone (professional/playful/technical/editorial/bold)\n\
+           - Design direction (ONE of: Modern Minimal / Editorial Clean / Tech Utility / Soft Warm / Bold Geometric)\n\
+           - Brand constraints (existing colors/fonts/logos, or 'greenfield')\n\
+           - Platform + devices\n\
+           - Complexity (screens count, user roles)\n\
+         - ## Market positioning — where this product sits vs competitors, \
+           what unique angle to take\n\
+         - ## Competitive analysis — markdown table:\n\
+           `| Feature | Our product | Competitor A | Competitor B | Competitor C |`\n\
+           At least 8 feature rows. Use ✓/✗/partial for each cell.\n\
+         - ## Similar products — 5 REAL products with:\n\
+           - What they do well (design + UX specific)\n\
+           - What they do poorly (opportunity for us)\n\
+           - Key differentiator we should learn from\n\
+         - ## Domain risks — 5 risks, each with:\n\
+           - Description\n\
+           - Probability (high/medium/low)\n\
+           - Impact (high/medium/low)\n\
+           - Mitigation strategy\n\
+         - ## UI/UX must-haves — 5 non-negotiable patterns with:\n\
+           - Pattern name\n\
+           - Why it's non-negotiable in this domain\n\
+           - Implementation hint for the developer\n\
+         - ## Design system recommendation\n\
+           - Color palette direction + reasoning\n\
+           - Typography approach + reasoning\n\
+           - Spacing philosophy\n\
+           - Key interaction patterns (drag-drop? infinite-scroll? modals?)\n\
+           - One 'signature detail' that differentiates from competitors\n\
+         - ## Open questions — unresolved items that need user input"
     );
     let user = format!(
         "## Requirement\n\n{requirement}\n\n\
-         ## Local knowledge files available\n\n{knowledge_digest}\n\n\
-         Write the research brief now."
+         ## Local knowledge\n\n{knowledge_digest}\n\n\
+         Write the complete research brief."
     );
     Prompt { system, user }
 }
@@ -93,39 +111,51 @@ pub fn research_prompt(slug: &str, requirement: &str, knowledge_digest: &str) ->
 pub fn prd_prompt(slug: &str, requirement: &str, research_excerpt: &str) -> Prompt {
     let system = format!(
         "{SPEC_PREAMBLE}\n\
-         Role: senior product manager (10+ years B2B/B2C SaaS).\n\
-         Task: write a production-grade PRD that a dev team can implement \
-         without coming back to ask questions.\n\n\
-         Required sections (ALL mandatory, in order):\n\
+         Role: senior product manager.\n\
+         Write a PRD that a dev team can implement without asking questions.\n\n\
+         Required sections (ALL mandatory):\n\
          - # PRD — {slug}\n\
-         - ## Goal — 2-4 sentences: what + why + for whom + success metric\n\
-         - ## Target users — 2-3 user personas with role, context, and pain point\n\
-         - ## User journey — step-by-step flow of the primary use case \
-           (numbered steps, each with action + expected result)\n\
+         - ## Goal — what + why + for whom + success metric\n\
+         - ## Target users — 2-3 personas: role, context, pain point, \
+           what success looks like for them\n\
+         - ## Information architecture — site/app page structure as a tree:\n\
+           ```\n\
+           / (Home)\n\
+           ├── /dashboard\n\
+           ├── /settings\n\
+           │   ├── /settings/profile\n\
+           │   └── /settings/billing\n\
+           └── /auth/login\n\
+           ```\n\
+         - ## User flows — for each core flow (signup, main task, settings):\n\
+           numbered steps: user action → system response → next state.\n\
+           Include error paths (what happens when X fails?)\n\
          - ## Scope\n\
-           - ### In scope — bullet list of features to build THIS iteration\n\
-           - ### Out of scope — explicitly excluded items (prevents scope creep)\n\
-         - ## Functional requirements — detailed feature list, each with:\n\
-           - Feature name\n\
-           - Description (1-2 sentences)\n\
-           - Priority (P0/P1/P2)\n\
-           - Acceptance criteria (testable conditions)\n\
+           - ### In scope — features for THIS iteration\n\
+           - ### Out of scope — explicitly excluded (prevents scope creep)\n\
+           - ### Future considerations — v2 ideas to keep in mind architecturally\n\
+         - ## Functional requirements — table:\n\
+           `| ID | Feature | Description | Priority | Acceptance criteria |`\n\
+           P0 = must have, P1 = should have, P2 = nice to have. Minimum 10 rows.\n\
          - ## Non-functional requirements\n\
-           - Performance (target latency, throughput)\n\
-           - Security (auth method, data sensitivity level)\n\
-           - Accessibility (WCAG level)\n\
-           - Internationalization (if applicable)\n\
-           - Browser/device support matrix\n\
-         - ## Acceptance criteria — master checkbox list (≥8 items), \
-           each MUST be independently testable by QA: `- [ ] Given X, when Y, then Z`\n\
-         - ## Success metrics — 2-4 measurable KPIs with target numbers\n\
-         - ## Risks & mitigations — each risk with probability + impact + mitigation\n\
-         - ## Open questions — unresolved decisions that block implementation"
+           - Performance: FCP < 1.5s, API p95 < 200ms, support N concurrent users\n\
+           - Security: auth method, data encryption, input validation\n\
+           - Accessibility: WCAG 2.1 AA minimum\n\
+           - Browser support: Chrome/Firefox/Safari/Edge latest 2 versions\n\
+           - Mobile: responsive or native, minimum viewport 360px\n\
+         - ## Acceptance criteria — ≥10 items in Given/When/Then format:\n\
+           `- [ ] Given [context], when [action], then [expected result]`\n\
+         - ## Success metrics — measurable KPIs with baseline + target:\n\
+           `| Metric | Baseline | Target | How to measure |`\n\
+         - ## Risks & mitigations — each with probability + impact + mitigation:\n\
+           `| Risk | P | I | Mitigation |`\n\
+         - ## Dependencies — external services, APIs, or teams needed\n\
+         - ## Open questions — unresolved decisions"
     );
     let user = format!(
         "## Requirement\n\n{requirement}\n\n\
-         ## Research brief (excerpt)\n\n{research_excerpt}\n\n\
-         Write the complete PRD now."
+         ## Research (excerpt)\n\n{research_excerpt}\n\n\
+         Write the complete PRD."
     );
     Prompt { system, user }
 }
@@ -148,8 +178,17 @@ pub fn architecture_prompt(slug: &str, requirement: &str, prd_excerpt: &str) -> 
          - ## API error convention — standard error envelope: \
            `{{ \"error\": {{ \"code\": \"...\", \"message\": \"...\" }} }}`. \
            Table of error codes: `| HTTP | Code | Meaning |` (400/401/403/404/409/422/500)\n\
-         - ## Data model — for each entity: field table with types + required + description. \
-           Show relationships (1:N, N:M). List indexes needed.\n\
+         - ## Data model — for EACH entity:\n\
+           - Field table: `| Field | Type | Required | Default | Description |`\n\
+           - Relationships: `User 1:N Post`, `Post N:M Tag`\n\
+           - Indexes: which fields need indexes for query performance\n\
+           - Constraints: unique, foreign key, check\n\
+           - Sample data: 1-2 example rows so developers understand the shape\n\
+         - ## State management — how frontend manages state:\n\
+           - Global state (auth, theme, locale)\n\
+           - Server state (API data caching strategy)\n\
+           - Form state (validation approach)\n\
+           - URL state (what goes in query params vs local state)\n\
          - ## Authentication & authorization — auth method, token format, \
            role definitions, permission matrix per API endpoint\n\
          - ## Tech-stack — for each choice: what + why + rejected alternatives\n\
@@ -193,12 +232,34 @@ pub fn uiux_prompt(slug: &str, requirement: &str, prd_excerpt: &str) -> Prompt {
          - ## Spacing scale — 4px base, 8+ steps.\n\
          - ## Icon library — exactly ONE: Lucide / Heroicons / Tabler.\n\
          - ## Page hierarchy — nested list with route paths.\n\
-         - ## Component inventory — every component with states: \
-           default / hover / active / disabled / loading / error.\n\
-         - ## Motion guidelines — transition tokens.\n\
-         - ## Accessibility notes — contrast, focus rings, ARIA.\n\n\
-         Self-check: color palette has 10+ tokens? Dark mode block present? \
-         Typography has 7 sizes? Every component has states?"
+         - ## Component inventory — for each component:\n\
+           - Name + purpose\n\
+           - Props/variants (e.g. Button: primary/secondary/ghost/danger)\n\
+           - States: default / hover / active / focus / disabled / loading / error\n\
+           - Responsive behavior (how it changes on mobile)\n\
+         - ## Page-by-page interaction spec — for each page in the hierarchy:\n\
+           - What the user sees on load\n\
+           - Interactive elements and their behavior\n\
+           - Form validation rules (inline vs on-submit)\n\
+           - Loading states (skeleton/spinner/progressive)\n\
+           - Empty states (first-time user sees what?)\n\
+           - Error states (API failure shows what?)\n\
+         - ## Key interaction flows — for complex interactions:\n\
+           describe the state machine: State A → [user action] → State B → ...\n\
+           Include: form submit flow, auth flow, CRUD operations, \
+           drag-and-drop (if applicable)\n\
+         - ## Motion guidelines — transition tokens + guidelines:\n\
+           - When to animate (state changes, reveals, feedback)\n\
+           - When NOT to animate (data updates, navigation)\n\
+           - Respect `prefers-reduced-motion`\n\
+         - ## Accessibility\n\
+           - Color contrast ratios (body text ≥ 4.5:1, large text ≥ 3:1)\n\
+           - Keyboard navigation order\n\
+           - Screen reader landmarks and live regions\n\
+           - Focus management (modals trap focus, drawers return focus)\n\
+           - Touch targets (≥ 44px on mobile)\n\n\
+         Self-check: 10+ tokens? Dark mode? Typography 7 sizes? \
+         Every component has states? Every page has interaction spec?"
     );
     let user = format!(
         "## Requirement\n\n{requirement}\n\n\
