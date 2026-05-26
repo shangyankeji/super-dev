@@ -19,7 +19,8 @@ use super_dev_spec::{Phase, SPEC_VERSION};
 use crate::coach::write_coach_prompt;
 use crate::events::{null_sink, EngineEvent, EventSink};
 use crate::experts::{
-    architecture_prompt, excerpt, prd_prompt, research_prompt, uiux_prompt, Prompt,
+    architecture_prompt, backend_prompt, excerpt, frontend_prompt, prd_prompt, research_prompt,
+    uiux_prompt, Prompt,
 };
 use crate::gates::Gate;
 use crate::phases::{
@@ -620,7 +621,7 @@ impl<R: Runtime> AgentRunner<R> {
         completed.push(self.record_phase(Phase::Spec, run_spec(&self.options))?);
         self.transition(Phase::Frontend, "")?;
 
-        // Frontend phase: worker creates actual code
+        // Frontend phase: worker creates actual code files
         self.emit(EngineEvent::PhaseStarted {
             phase: Phase::Frontend,
         });
@@ -628,6 +629,38 @@ impl<R: Runtime> AgentRunner<R> {
             self.emit(EngineEvent::Note(
                 "🖥 Worker implementing frontend (components, pages, API client)...".to_string(),
             ));
+            let slug = self.options.effective_slug();
+            let uiux = std::fs::read_to_string(
+                self.options
+                    .project_root
+                    .join(format!("output/{slug}-uiux.md")),
+            )
+            .unwrap_or_default();
+            let arch = std::fs::read_to_string(
+                self.options
+                    .project_root
+                    .join(format!("output/{slug}-architecture.md")),
+            )
+            .unwrap_or_default();
+            let prd = std::fs::read_to_string(
+                self.options
+                    .project_root
+                    .join(format!("output/{slug}-prd.md")),
+            )
+            .unwrap_or_default();
+            // Drive the worker with actual approved doc content injected
+            let _ = self
+                .try_generate(
+                    Phase::Frontend,
+                    frontend_prompt(
+                        &slug,
+                        &self.options.requirement,
+                        &excerpt(&uiux, 3000),
+                        &excerpt(&arch, 2000),
+                        &excerpt(&prd, 1500),
+                    ),
+                )
+                .await;
         }
         let fe = self.record_phase(Phase::Frontend, run_frontend(&self.options))?;
         let gate = fe.gate;
@@ -660,6 +693,30 @@ impl<R: Runtime> AgentRunner<R> {
             self.emit(EngineEvent::Note(
                 "⚙ Worker implementing backend (routes, database, auth, tests)...".to_string(),
             ));
+            let slug = self.options.effective_slug();
+            let arch = std::fs::read_to_string(
+                self.options
+                    .project_root
+                    .join(format!("output/{slug}-architecture.md")),
+            )
+            .unwrap_or_default();
+            let prd = std::fs::read_to_string(
+                self.options
+                    .project_root
+                    .join(format!("output/{slug}-prd.md")),
+            )
+            .unwrap_or_default();
+            let _ = self
+                .try_generate(
+                    Phase::Backend,
+                    backend_prompt(
+                        &slug,
+                        &self.options.requirement,
+                        &excerpt(&arch, 3000),
+                        &excerpt(&prd, 1500),
+                    ),
+                )
+                .await;
         }
         completed.push(self.record_phase(Phase::Backend, run_backend(&self.options))?);
         self.maybe_verify(Phase::Backend).await;

@@ -269,6 +269,93 @@ pub fn uiux_prompt(slug: &str, requirement: &str, prd_excerpt: &str) -> Prompt {
     Prompt { system, user }
 }
 
+/// Frontend expert — drives the worker to implement the frontend.
+///
+/// Unlike research/prd/architecture/uiux which produce documents,
+/// this prompt tells the worker to CREATE ACTUAL CODE FILES in the
+/// project directory. The approved docs (UIUX tokens, Architecture
+/// API surface, PRD acceptance criteria) are injected as context.
+#[must_use]
+pub fn frontend_prompt(
+    slug: &str,
+    requirement: &str,
+    uiux_excerpt: &str,
+    arch_excerpt: &str,
+    prd_excerpt: &str,
+) -> Prompt {
+    let system = format!(
+        "{SPEC_PREAMBLE}\n\
+         Role: senior frontend engineer.\n\
+         Task: implement the frontend based on the approved documents below. \
+         Create REAL CODE FILES — components, pages, API client, styles. \
+         Not just a notes file.\n\n\
+         Steps:\n\
+         1. Set up project if not exists (use framework from architecture doc)\n\
+         2. Copy UIUX design tokens into your CSS/theme file\n\
+         3. Build shared components (Button, Input, Card) with all states\n\
+         4. Build page components following the page hierarchy\n\
+         5. Wire API client following the architecture API surface below\n\
+         6. Add error handling (loading, error, empty states for every view)\n\
+         7. Test responsive (mobile 360px + desktop 1024px)\n\
+         8. Run build — fix all errors\n\n\
+         After creating files, write `output/{slug}-frontend-notes.md` with:\n\
+         - Files created and their purpose\n\
+         - Which API endpoints are wired\n\
+         - Which UIUX tokens are used\n\
+         - Known gaps\n\
+         - How to run the frontend"
+    );
+    let user = format!(
+        "## Requirement\n\n{requirement}\n\n\
+         ## UIUX Design Tokens (bind these)\n\n{uiux_excerpt}\n\n\
+         ## Architecture API Surface (wire these)\n\n{arch_excerpt}\n\n\
+         ## PRD Acceptance Criteria (implement these)\n\n{prd_excerpt}\n\n\
+         Implement the frontend now."
+    );
+    Prompt { system, user }
+}
+
+/// Backend expert — drives the worker to implement the backend.
+#[must_use]
+pub fn backend_prompt(
+    slug: &str,
+    requirement: &str,
+    arch_excerpt: &str,
+    prd_excerpt: &str,
+) -> Prompt {
+    let system = format!(
+        "{SPEC_PREAMBLE}\n\
+         Role: senior backend engineer.\n\
+         Task: implement the backend based on the approved architecture. \
+         Create REAL CODE FILES — routes, models, middleware, tests.\n\n\
+         Steps:\n\
+         1. Set up project if not exists (use framework from architecture doc)\n\
+         2. Create database schema/migrations from the data model\n\
+         3. Implement every API endpoint from the API surface table\n\
+         4. Add authentication middleware\n\
+         5. Add input validation on every endpoint\n\
+         6. Add error handling with consistent error format\n\
+         7. Write tests (unit + integration for each endpoint)\n\
+         8. Create seed data for development\n\
+         9. Run tests — fix all failures\n\n\
+         After creating files, write `output/{slug}-backend-notes.md` with:\n\
+         - Files created and their purpose\n\
+         - API endpoints implemented (table matching architecture)\n\
+         - Database tables created\n\
+         - Auth implementation details\n\
+         - Test coverage summary\n\
+         - Environment variables needed\n\
+         - How to run the backend"
+    );
+    let user = format!(
+        "## Requirement\n\n{requirement}\n\n\
+         ## Architecture (implement this)\n\n{arch_excerpt}\n\n\
+         ## PRD Acceptance Criteria (test against these)\n\n{prd_excerpt}\n\n\
+         Implement the backend now."
+    );
+    Prompt { system, user }
+}
+
 /// Truncate `text` to at most `max_chars` characters, keeping head.
 /// Returns text with a trailing `…` marker when it had to cut.
 #[must_use]

@@ -710,6 +710,33 @@ pub fn run_quality(opts: &RunOptions) -> io::Result<PhaseOutput> {
         2.0,
     ));
 
+    // Cross-reference: count PRD acceptance criteria and verify quantity
+    let ac_lines: Vec<&str> = prd_text
+        .lines()
+        .filter(|l| l.trim().starts_with("- [ ]") || l.trim().starts_with("- [x]"))
+        .collect();
+    let ac_score = if ac_lines.len() >= 8 {
+        100
+    } else if ac_lines.len() >= 5 {
+        70
+    } else {
+        i32::try_from(ac_lines.len()).unwrap_or(0) * 10
+    };
+    checks.push(QualityCheck {
+        name: "Acceptance criteria depth".to_string(),
+        category: "quality".to_string(),
+        description: "PRD has ≥8 testable acceptance criteria in Given/When/Then format"
+            .to_string(),
+        status: if ac_score >= 70 {
+            "passed".to_string()
+        } else {
+            "warning".to_string()
+        },
+        score: ac_score,
+        details: format!("{} acceptance criteria found (target: ≥8)", ac_lines.len()),
+        weight: 2.0,
+    });
+
     let arch_text =
         fs::read_to_string(output_dir.join(format!("{slug}-architecture.md"))).unwrap_or_default();
     let arch_defects = review_document_structure(
