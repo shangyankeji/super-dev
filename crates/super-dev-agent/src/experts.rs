@@ -93,23 +93,39 @@ pub fn research_prompt(slug: &str, requirement: &str, knowledge_digest: &str) ->
 pub fn prd_prompt(slug: &str, requirement: &str, research_excerpt: &str) -> Prompt {
     let system = format!(
         "{SPEC_PREAMBLE}\n\
-         Role: senior product manager.\n\
-         Task: write a Product Requirements Document. Aim for the \
-         density of a real product team's PRD — actionable, testable, \
-         scoped. The acceptance criteria MUST be checkable boxes a \
-         tester can run against.\n\
-         Output: pure markdown. Required sections (in order):\n\
+         Role: senior product manager (10+ years B2B/B2C SaaS).\n\
+         Task: write a production-grade PRD that a dev team can implement \
+         without coming back to ask questions.\n\n\
+         Required sections (ALL mandatory, in order):\n\
          - # PRD — {slug}\n\
-         - ## Goal (2-4 sentences)\n\
-         - ## Scope (`in` and `out` bullets)\n\
-         - ## User stories (3-7 stories in `As a … I want … so that …` form)\n\
-         - ## Acceptance criteria (testable checkbox list, 5-10 items)\n\
-         - ## Risks & open questions"
+         - ## Goal — 2-4 sentences: what + why + for whom + success metric\n\
+         - ## Target users — 2-3 user personas with role, context, and pain point\n\
+         - ## User journey — step-by-step flow of the primary use case \
+           (numbered steps, each with action + expected result)\n\
+         - ## Scope\n\
+           - ### In scope — bullet list of features to build THIS iteration\n\
+           - ### Out of scope — explicitly excluded items (prevents scope creep)\n\
+         - ## Functional requirements — detailed feature list, each with:\n\
+           - Feature name\n\
+           - Description (1-2 sentences)\n\
+           - Priority (P0/P1/P2)\n\
+           - Acceptance criteria (testable conditions)\n\
+         - ## Non-functional requirements\n\
+           - Performance (target latency, throughput)\n\
+           - Security (auth method, data sensitivity level)\n\
+           - Accessibility (WCAG level)\n\
+           - Internationalization (if applicable)\n\
+           - Browser/device support matrix\n\
+         - ## Acceptance criteria — master checkbox list (≥8 items), \
+           each MUST be independently testable by QA: `- [ ] Given X, when Y, then Z`\n\
+         - ## Success metrics — 2-4 measurable KPIs with target numbers\n\
+         - ## Risks & mitigations — each risk with probability + impact + mitigation\n\
+         - ## Open questions — unresolved decisions that block implementation"
     );
     let user = format!(
         "## Requirement\n\n{requirement}\n\n\
          ## Research brief (excerpt)\n\n{research_excerpt}\n\n\
-         Write the PRD now."
+         Write the complete PRD now."
     );
     Prompt { system, user }
 }
@@ -119,25 +135,37 @@ pub fn prd_prompt(slug: &str, requirement: &str, research_excerpt: &str) -> Prom
 pub fn architecture_prompt(slug: &str, requirement: &str, prd_excerpt: &str) -> Prompt {
     let system = format!(
         "{SPEC_PREAMBLE}\n\
-         Role: senior architect.\n\
-         Task: write the system architecture. The API surface table is \
-         load-bearing — every frontend `fetch` URL in subsequent code \
-         MUST match a row in that table. Pick concrete technology \
-         choices (frontend framework, backend framework, storage, \
-         auth) and justify each in one sentence.\n\
-         Output: pure markdown. Required sections (in order):\n\
+         Role: senior software architect.\n\
+         Task: write a production architecture that a dev team can implement directly. \
+         The API surface is load-bearing — every frontend `fetch` MUST match a row. \
+         Every endpoint MUST specify request/response shapes.\n\n\
+         Required sections (ALL mandatory):\n\
          - # Architecture — {slug}\n\
-         - ## System overview (1-3 paragraphs)\n\
-         - ## API surface (a `| Method | Path | Purpose |` markdown table \
-           with at least 5 rows, each path beginning with `/`)\n\
-         - ## Data model (schemas / tables / message shapes)\n\
-         - ## Tech-stack rationale (frontend / backend / storage / auth, one sentence each)\n\
+         - ## System overview — component diagram in text, data flow direction, \
+           communication protocols (REST/gRPC/WebSocket)\n\
+         - ## API surface — table: `| Method | Path | Request | Response | Auth | Description |` \
+           At least 8 rows. Every path starts with `/`. Include auth requirements per endpoint.\n\
+         - ## API error convention — standard error envelope: \
+           `{{ \"error\": {{ \"code\": \"...\", \"message\": \"...\" }} }}`. \
+           Table of error codes: `| HTTP | Code | Meaning |` (400/401/403/404/409/422/500)\n\
+         - ## Data model — for each entity: field table with types + required + description. \
+           Show relationships (1:N, N:M). List indexes needed.\n\
+         - ## Authentication & authorization — auth method, token format, \
+           role definitions, permission matrix per API endpoint\n\
+         - ## Tech-stack — for each choice: what + why + rejected alternatives\n\
+         - ## Project structure — recommended directory layout for frontend + backend\n\
+         - ## Coding conventions — naming (camelCase/snake_case), error handling pattern, \
+           logging format, environment variable naming\n\
+         - ## Performance budget — FCP target, API p95 target, caching strategy\n\
+         - ## Security considerations — input validation, SQL injection prevention, \
+           XSS prevention, CORS policy, rate limiting\n\
+         - ## Deployment — environments, CI/CD steps, rollback strategy\n\
          - ## Open trade-offs"
     );
     let user = format!(
         "## Requirement\n\n{requirement}\n\n\
          ## PRD (excerpt)\n\n{prd_excerpt}\n\n\
-         Write the architecture document now."
+         Write the complete architecture now."
     );
     Prompt { system, user }
 }

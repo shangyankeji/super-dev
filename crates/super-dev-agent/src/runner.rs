@@ -372,34 +372,44 @@ impl<R: Runtime> AgentRunner<R> {
         defects
     }
 
-    /// Review a PRD for structural completeness.
+    /// Review PRD — commercial grade checks.
     fn review_prd(text: &str) -> Vec<String> {
         let lower = text.to_ascii_lowercase();
         let mut defects = Vec::new();
         if !lower.contains("## goal") {
-            defects.push("Missing ## Goal section".into());
+            defects.push("Missing ## Goal".into());
+        }
+        if !lower.contains("target user")
+            && !lower.contains("persona")
+            && !lower.contains("## user")
+        {
+            defects.push("Missing target users / personas".into());
         }
         if !lower.contains("## scope") {
-            defects.push("Missing ## Scope section (in/out)".into());
+            defects.push("Missing ## Scope (in/out)".into());
         }
-        if !lower.contains("## acceptance criteria")
-            && !lower.contains("## acceptance")
-            && !lower.contains("- [ ]")
-        {
-            defects.push("Missing acceptance criteria (need testable checkbox items)".into());
+        if !lower.contains("## functional") && !lower.contains("## feature") {
+            defects.push("Missing functional requirements with priorities".into());
         }
-        if text.matches("- [ ]").count() < 3 {
-            defects.push("Need at least 3 testable acceptance criteria checkboxes".into());
+        if !lower.contains("non-functional") && !lower.contains("performance") {
+            defects.push("Missing non-functional requirements (performance/security)".into());
+        }
+        let ac_count = text.matches("- [ ]").count();
+        if ac_count < 5 {
+            defects.push(format!("Only {ac_count} acceptance criteria (need ≥8)"));
+        }
+        if !lower.contains("metric") && !lower.contains("kpi") {
+            defects.push("Missing success metrics".into());
         }
         defects
     }
 
-    /// Review an architecture doc for structural completeness.
+    /// Review architecture — commercial grade checks.
     fn review_architecture(text: &str) -> Vec<String> {
         let lower = text.to_ascii_lowercase();
         let mut defects = Vec::new();
-        if !lower.contains("## api surface") && !lower.contains("## api") {
-            defects.push("Missing ## API surface section".into());
+        if !lower.contains("## api") {
+            defects.push("Missing API surface section".into());
         }
         let api_rows = text
             .lines()
@@ -408,16 +418,24 @@ impl<R: Runtime> AgentRunner<R> {
                 t.starts_with('|') && t.contains('/') && !t.contains("---")
             })
             .count();
-        if api_rows < 3 {
-            defects.push(format!(
-                "API surface table has only {api_rows} routes (need ≥5)"
-            ));
+        if api_rows < 5 {
+            defects.push(format!("API table has {api_rows} rows (need ≥8)"));
         }
-        if !lower.contains("## data model") && !lower.contains("## schema") {
-            defects.push("Missing ## Data model / Schema section".into());
+        if !lower.contains("data model") && !lower.contains("schema") {
+            defects.push("Missing data model with field types".into());
         }
-        if !lower.contains("## tech") {
-            defects.push("Missing ## Tech-stack rationale section".into());
+        if !lower.contains("auth") {
+            defects.push("Missing authentication/authorization section".into());
+        }
+        if !lower.contains("tech") && !lower.contains("stack") {
+            defects.push("Missing tech-stack rationale".into());
+        }
+        if !lower.contains("error") {
+            defects.push("Missing API error convention".into());
+        }
+        if !lower.contains("structure") && !lower.contains("directory") && !lower.contains("layout")
+        {
+            defects.push("Missing project structure".into());
         }
         defects
     }
@@ -539,20 +557,78 @@ impl<R: Runtime> AgentRunner<R> {
         }
     }
 
-    /// spec → frontend → pause at `preview_confirm`. Call after the user
-    /// has approved `docs_confirm`. Currently deterministic; LLM
-    /// integration for these phases lands in a later milestone.
+    /// spec → frontend → pause at `preview_confirm`.
+    ///
+    /// When a worker backend is configured, the spec and frontend phases
+    /// are also driven through the worker (not just templates). The worker
+    /// creates real project scaffold, components, and pages based on the
+    /// approved PRD + Architecture + UIUX documents.
     pub async fn continue_after_docs_confirm(&self) -> std::io::Result<RunReport> {
+        let use_runtime = !self.options.backend.is_empty();
         self.transition(Phase::Spec, "")?;
         let mut completed = Vec::new();
 
+        // Spec phase: generate execution plan + task list
         self.emit(EngineEvent::PhaseStarted { phase: Phase::Spec });
+        if use_runtime {
+            self.emit(EngineEvent::Note(
+                "📋 Worker generating execution plan + task breakdown...".to_string(),
+            ));
+            let slug = self.options.effective_slug();
+            // Read approved docs for context
+            let prd = std::fs::read_to_string(
+                self.options
+                    .project_root
+                    .join(format!("output/{slug}-prd.md")),
+            )
+            .unwrap_or_default();
+            let arch = std::fs::read_to_string(
+                self.options
+                    .project_root
+                    .join(format!("output/{slug}-architecture.md")),
+            )
+            .unwrap_or_default();
+            let context = format!(
+                "PRD excerpt:\n{}\n\nArchitecture excerpt:\n{}",
+                excerpt(&prd, 2000),
+                excerpt(&arch, 2000)
+            );
+            let spec_text = self
+                .try_generate(
+                    Phase::Spec,
+                    Prompt {
+                        system: format!(
+                            "Role: senior engineering manager.\n\
+                             Write an execution plan with sprint breakdown, coding standards, \
+                             and definition of done. Based on these approved documents:\n\n{context}"
+                        ),
+                        user: format!("Write the execution plan for: {}", self.options.requirement),
+                    },
+                )
+                .await;
+            if let Some(text) = spec_text {
+                let plan_path = self
+                    .options
+                    .project_root
+                    .join(format!("output/{slug}-execution-plan.md"));
+                if let Some(parent) = plan_path.parent() {
+                    let _ = std::fs::create_dir_all(parent);
+                }
+                let _ = std::fs::write(&plan_path, &text);
+            }
+        }
         completed.push(self.record_phase(Phase::Spec, run_spec(&self.options))?);
         self.transition(Phase::Frontend, "")?;
 
+        // Frontend phase: worker creates actual code
         self.emit(EngineEvent::PhaseStarted {
             phase: Phase::Frontend,
         });
+        if use_runtime {
+            self.emit(EngineEvent::Note(
+                "🖥 Worker implementing frontend (components, pages, API client)...".to_string(),
+            ));
+        }
         let fe = self.record_phase(Phase::Frontend, run_frontend(&self.options))?;
         let gate = fe.gate;
         completed.push(fe);
@@ -573,12 +649,18 @@ impl<R: Runtime> AgentRunner<R> {
     /// backend → quality → delivery → done. Call after the user has
     /// approved `preview_confirm`.
     pub async fn continue_after_preview_confirm(&self) -> std::io::Result<RunReport> {
+        let use_runtime = !self.options.backend.is_empty();
         self.transition(Phase::Backend, "")?;
         let mut completed = Vec::new();
 
         self.emit(EngineEvent::PhaseStarted {
             phase: Phase::Backend,
         });
+        if use_runtime {
+            self.emit(EngineEvent::Note(
+                "⚙ Worker implementing backend (routes, database, auth, tests)...".to_string(),
+            ));
+        }
         completed.push(self.record_phase(Phase::Backend, run_backend(&self.options))?);
         self.maybe_verify(Phase::Backend).await;
 

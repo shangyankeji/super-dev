@@ -336,21 +336,41 @@ fn render_gate(phase: Phase, slug: &str) -> String {
 
 fn render_spec(slug: &str, req: &str) -> String {
     format!(
-        "## Role\n\nSenior delivery lead / engineering manager — translates approved \
-         documents into executable work breakdown. Every task is scoped to < 4 hours \
-         and has a clear done-condition.\n\n\
-         ## Task\n\nTranslate the approved three core documents into an execution plan + machine-trackable task list.\n\n\
+        "## Role\n\nSenior engineering manager / tech lead.\n\n\
+         ## Task\n\nTranslate the approved PRD + Architecture + UIUX into a \
+         concrete execution plan that a dev team can follow sprint-by-sprint.\n\n\
          ## Required outputs\n\n\
-         - **Plan:** `output/{slug}-execution-plan.md`\n\
-           - `# Execution plan — {slug}`\n\
-           - `## Goal recap`\n\
-           - `## Sequence` (numbered top-level steps that produce real artifacts)\n\
-           - `## Risk register`\n\n\
-         - **Tasks:** `.super-dev/changes/<change-id>/tasks.md`\n\
-           - Flat bullet list of `- [ ] <work item>` lines, one per shippable unit\n\n\
-         ## Input\n\n\
-         ### Requirement\n\n{req}\n\n\
-         Read `output/{slug}-prd.md`, `output/{slug}-architecture.md`, `output/{slug}-uiux.md` first.\n",
+         ### 1. Execution plan — `output/{slug}-execution-plan.md`\n\n\
+         - `# Execution plan — {slug}`\n\
+         - `## Goal recap` — 2-3 sentences\n\
+         - `## Tech stack setup` — exact commands to scaffold the project:\n\
+           ```bash\n\
+           npx create-next-app@latest {slug} --typescript --tailwind\n\
+           cd {slug} && npm install ...\n\
+           ```\n\
+         - `## Sprint breakdown` — 2-3 sprints, each with:\n\
+           - Sprint goal (one sentence)\n\
+           - Tasks (numbered, each scoped to < 4 hours)\n\
+           - Deliverable (what's shippable at sprint end)\n\
+         - `## Coding standards` — the rules the dev (worker) MUST follow:\n\
+           - File naming convention\n\
+           - Component structure (props interface → component → export)\n\
+           - API client pattern (centralized fetch with error handling)\n\
+           - State management approach\n\
+           - Error handling pattern (try/catch with user-facing messages)\n\
+           - Test requirements (what to test, minimum coverage)\n\
+         - `## Definition of done` — a PR is not done until:\n\
+           - [ ] Feature matches PRD acceptance criteria\n\
+           - [ ] UI matches UIUX design tokens\n\
+           - [ ] API matches Architecture surface table\n\
+           - [ ] No TypeScript errors\n\
+           - [ ] No lint warnings\n\
+           - [ ] Tested on mobile + desktop\n\
+         - `## Risk register` — risks with mitigation\n\n\
+         ### 2. Task list — `.super-dev/changes/<change-id>/tasks.md`\n\n\
+         Each task as: `- [ ] [Sprint N] <description> (est: Xh)`\n\n\
+         ## Input\n\n{req}\n\n\
+         Read all three approved docs before writing.\n",
     )
 }
 
@@ -401,12 +421,31 @@ fn render_frontend(slug: &str, req: &str, design_inject: &str) -> String {
          (saas-landing, dashboard, blog-content) — the seed template gives \
          you the section order and component patterns to follow.\n\n\
          ## Required output\n\n\
-         - **Code:** in your project's frontend directory\n\
-         - **Notes:** `output/{slug}-frontend-notes.md` — audit checklist of \
-           the design quality contract items above (checked/unchecked).\n\n\
+         - **Code:** actual runnable frontend files in project directory. NOT just a notes file.\n\
+           Follow the file structure from `output/{slug}-architecture.md`.\n\
+           Create real components, pages, layouts, API client.\n\
+         - **Notes:** `output/{slug}-frontend-notes.md` with:\n\
+           - ## Files created — list every file you wrote with purpose\n\
+           - ## Architecture compliance — for each API endpoint in the architecture doc, \
+             confirm frontend calls it correctly\n\
+           - ## Design compliance — for each UIUX token, confirm it's used\n\
+           - ## Test instructions — how to run and verify\n\
+           - ## Known gaps — what's not implemented yet and why\n\n\
+         ## Implementation checklist (follow in order)\n\n\
+         1. Read execution plan → identify Sprint 1 tasks\n\
+         2. Set up project scaffold (if not exists): `npx create-*` or equivalent\n\
+         3. Copy design tokens from UIUX into CSS/theme file\n\
+         4. Create shared components first (Button, Input, Card, Layout)\n\
+         5. Create page components following page hierarchy from UIUX\n\
+         6. Wire API client following architecture API surface\n\
+         7. Add error handling (loading states, error states, empty states)\n\
+         8. Test responsive (mobile + desktop)\n\
+         9. Test dark mode\n\
+         10. Run build — fix all errors\n\
+         11. Write frontend-notes.md with compliance audit\n\n\
          ## Input\n\n\
          ### Requirement\n\n{req}\n\n\
-         Read these in order (each informs the next):\n\
+         Read these in order:\n\
          1. `output/{slug}-uiux.md` — your PRIMARY visual guide. Every CSS var, \
             font choice, spacing value, and component pattern comes from here.\n\
          2. `output/{slug}-architecture.md` — API surface and tech stack.\n\
@@ -423,20 +462,44 @@ fn render_frontend(slug: &str, req: &str, design_inject: &str) -> String {
 
 fn render_backend(slug: &str, req: &str) -> String {
     format!(
-        "## Role\n\nSenior backend engineer — builds secure, tested APIs. Every \
-         handler has input validation, error responses, and a matching test. \
-         Secrets go in env vars, never in code.\n\n\
-         ## Task\n\nImplement the backend handlers + storage to match the architecture API surface and any URL the frontend has already written.\n\n\
-         ## Hard rules\n\n\
-         - Every route in `.super-dev/audit/frontend-api-calls.jsonl` MUST have a matching backend handler.\n\
-         - Add tests covering acceptance criteria from the PRD.\n\
-         - Document required env vars / secrets in `output/{slug}-architecture.md`.\n\n\
+        "## Role\n\nSenior backend engineer.\n\n\
+         ## Task\n\nImplement the complete backend: API routes, database schema, \
+         authentication, validation, error handling, and tests.\n\n\
+         ## Implementation requirements\n\n\
+         ### API routes\n\
+         - Implement EVERY endpoint from `output/{slug}-architecture.md` API surface table\n\
+         - Follow the error convention from the architecture doc\n\
+         - Input validation on every endpoint (reject malformed requests with 422)\n\
+         - Rate limiting on auth endpoints\n\n\
+         ### Database\n\
+         - Create migration files for the data model from architecture doc\n\
+         - Add indexes listed in the architecture doc\n\
+         - Seed data for development (realistic test fixtures)\n\n\
+         ### Authentication\n\
+         - Implement the auth method specified in architecture doc\n\
+         - Protect routes according to the permission matrix\n\
+         - Token refresh / session management\n\n\
+         ### Error handling\n\
+         - Consistent error response format across all endpoints\n\
+         - Log errors with context (request ID, user ID, timestamp)\n\
+         - Never expose internal errors to clients\n\n\
+         ### Testing\n\
+         - Unit tests for business logic\n\
+         - Integration tests for each API endpoint\n\
+         - Test happy path + error paths + edge cases\n\
+         - Test auth: unauthorized access returns 401, forbidden returns 403\n\n\
          ## Required output\n\n\
-         - **Code:** in your project's backend directory\n\
-         - **Notes:** `output/{slug}-backend-notes.md` with a checklist showing each audited URL → handler.\n\n\
-         ## Input\n\n\
-         ### Requirement\n\n{req}\n\n\
-         Read `output/{slug}-architecture.md` and `.super-dev/audit/frontend-api-calls.jsonl`.\n",
+         - **Code:** actual backend files (routes, models, middleware, tests)\n\
+         - **Notes:** `output/{slug}-backend-notes.md` with:\n\
+           - ## API compliance — for each architecture endpoint, confirm handler exists\n\
+           - ## Database — migration files created, seed data\n\
+           - ## Auth — implementation details\n\
+           - ## Tests — test count, what's covered, what's not\n\
+           - ## Environment variables — list every env var needed to run\n\
+           - ## How to run — exact commands to start the backend\n\n\
+         ## Input\n\n{req}\n\n\
+         Read `output/{slug}-architecture.md` (API surface + data model + auth design) \
+         and `output/{slug}-prd.md` (acceptance criteria to test against).\n",
     )
 }
 
