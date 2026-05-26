@@ -256,17 +256,16 @@ impl<R: Runtime> AgentRunner<R> {
             )));
         }
         let research_text = if use_runtime {
-            self.generate_with_review(
-                Phase::Research,
+            let rp = self.with_expert_knowledge(
                 research_prompt(
                     &self.options.effective_slug(),
                     &self.options.requirement,
                     &knowledge_digest(&self.options),
                 ),
-                Self::review_research,
-                3,
-            )
-            .await
+                &["product-manager"],
+            );
+            self.generate_with_review(Phase::Research, rp, Self::review_research, 3)
+                .await
         } else {
             None
         };
@@ -533,47 +532,81 @@ impl<R: Runtime> AgentRunner<R> {
 
     /// Generate PRD, architecture, UIUX content sequentially so each
     /// expert sees the prior artifact as an excerpt.
+    /// Read expert methodology from knowledge/experts/<role>/ and return
+    /// a condensed string suitable for injecting into a prompt's system field.
+    fn load_expert_knowledge(&self, expert_dirs: &[&str]) -> String {
+        let base = self.options.project_root.join("knowledge/experts");
+        let mut out = String::new();
+        for dir in expert_dirs {
+            let expert_dir = base.join(dir);
+            if !expert_dir.is_dir() {
+                continue;
+            }
+            if let Ok(rd) = std::fs::read_dir(&expert_dir) {
+                for entry in rd.flatten() {
+                    let p = entry.path();
+                    if p.extension().and_then(|s| s.to_str()) != Some("md") {
+                        continue;
+                    }
+                    if let Ok(content) = std::fs::read_to_string(&p) {
+                        let trimmed: String = content.chars().take(1500).collect();
+                        out.push_str(&format!(
+                            "\n---\nExpert reference ({}):\n{}\n",
+                            p.file_name().unwrap_or_default().to_string_lossy(),
+                            trimmed,
+                        ));
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    /// Enhance a prompt by appending expert methodology to the system field.
+    fn with_expert_knowledge(&self, mut prompt: Prompt, expert_dirs: &[&str]) -> Prompt {
+        let knowledge = self.load_expert_knowledge(expert_dirs);
+        if !knowledge.is_empty() {
+            prompt.system.push_str(&knowledge);
+        }
+        prompt
+    }
+
     async fn generate_docs_content(&self, research: Option<&str>) -> DocsContent {
         let slug = self.options.effective_slug();
         let req = &self.options.requirement;
         let research_excerpt = excerpt(research.unwrap_or(""), 1500);
 
-        // PRD: generate → review (goal + scope + acceptance criteria) → fix
+        // PRD: inject PM methodology → generate → review → fix
         self.emit(EngineEvent::Note("📋 Generating PRD...".to_string()));
+        let prd_p = self.with_expert_knowledge(
+            prd_prompt(&slug, req, &research_excerpt),
+            &["product-manager"],
+        );
         let prd = self
-            .generate_with_review(
-                Phase::Docs,
-                prd_prompt(&slug, req, &research_excerpt),
-                Self::review_prd,
-                3,
-            )
+            .generate_with_review(Phase::Docs, prd_p, Self::review_prd, 3)
             .await;
         let prd_excerpt = excerpt(prd.as_deref().unwrap_or(""), 1500);
 
-        // Architecture: generate → review (API table + data model) → fix
+        // Architecture: inject architect methodology → generate → review → fix
         self.emit(EngineEvent::Note(
             "🏗 Generating Architecture...".to_string(),
         ));
+        let arch_p = self.with_expert_knowledge(
+            architecture_prompt(&slug, req, &prd_excerpt),
+            &["architect"],
+        );
         let architecture = self
-            .generate_with_review(
-                Phase::Docs,
-                architecture_prompt(&slug, req, &prd_excerpt),
-                Self::review_architecture,
-                3,
-            )
+            .generate_with_review(Phase::Docs, arch_p, Self::review_architecture, 3)
             .await;
 
-        // UIUX: generate → review (tokens + dark mode + typography + states) → fix
+        // UIUX: inject designer methodology → generate → review → fix
         self.emit(EngineEvent::Note(
             "🎨 Generating UI/UX design system...".to_string(),
         ));
+        let uiux_p =
+            self.with_expert_knowledge(uiux_prompt(&slug, req, &prd_excerpt), &["uiux-designer"]);
         let uiux = self
-            .generate_with_review(
-                Phase::Docs,
-                uiux_prompt(&slug, req, &prd_excerpt),
-                Self::review_uiux,
-                3,
-            )
+            .generate_with_review(Phase::Docs, uiux_p, Self::review_uiux, 3)
             .await;
 
         DocsContent {
@@ -673,19 +706,17 @@ impl<R: Runtime> AgentRunner<R> {
                     .join(format!("output/{slug}-prd.md")),
             )
             .unwrap_or_default();
-            // Drive the worker with actual approved doc content injected
-            let _ = self
-                .try_generate(
-                    Phase::Frontend,
-                    frontend_prompt(
-                        &slug,
-                        &self.options.requirement,
-                        &excerpt(&uiux, 3000),
-                        &excerpt(&arch, 2000),
-                        &excerpt(&prd, 1500),
-                    ),
-                )
-                .await;
+            let fe_p = self.with_expert_knowledge(
+                frontend_prompt(
+                    &slug,
+                    &self.options.requirement,
+                    &excerpt(&uiux, 3000),
+                    &excerpt(&arch, 2000),
+                    &excerpt(&prd, 1500),
+                ),
+                &["frontend-lead", "uiux-designer"],
+            );
+            let _ = self.try_generate(Phase::Frontend, fe_p).await;
         }
         let fe = self.record_phase(Phase::Frontend, run_frontend(&self.options))?;
         let gate = fe.gate;
@@ -731,17 +762,16 @@ impl<R: Runtime> AgentRunner<R> {
                     .join(format!("output/{slug}-prd.md")),
             )
             .unwrap_or_default();
-            let _ = self
-                .try_generate(
-                    Phase::Backend,
-                    backend_prompt(
-                        &slug,
-                        &self.options.requirement,
-                        &excerpt(&arch, 3000),
-                        &excerpt(&prd, 1500),
-                    ),
-                )
-                .await;
+            let be_p = self.with_expert_knowledge(
+                backend_prompt(
+                    &slug,
+                    &self.options.requirement,
+                    &excerpt(&arch, 3000),
+                    &excerpt(&prd, 1500),
+                ),
+                &["backend-lead", "architect"],
+            );
+            let _ = self.try_generate(Phase::Backend, be_p).await;
         }
         completed.push(self.record_phase(Phase::Backend, run_backend(&self.options))?);
         self.maybe_verify(Phase::Backend).await;

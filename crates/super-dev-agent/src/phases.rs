@@ -855,6 +855,18 @@ pub fn run_quality(opts: &RunOptions) -> io::Result<PhaseOutput> {
         weight: 2.0,
     });
 
+    // Cross-document: PRD IA routes ↔ Architecture API surface
+    let prd_arch = check_prd_arch_alignment(&prd_text, &arch_text);
+    checks.push(QualityCheck {
+        name: "PRD↔Architecture alignment".to_string(),
+        category: "quality".to_string(),
+        description: "PRD page routes have corresponding API endpoints in Architecture".to_string(),
+        status: prd_arch.0,
+        score: prd_arch.1,
+        details: prd_arch.2,
+        weight: 1.5,
+    });
+
     // Dark mode check — does the UIUX doc define dark mode tokens?
     let uiux_path = output_dir.join(format!("{slug}-uiux.md"));
     let dark_mode = check_dark_mode_support(&uiux_path);
@@ -1457,6 +1469,71 @@ fn content_quality_check(
         details,
         weight,
     }
+}
+
+/// Cross-validate PRD information architecture against Architecture API surface.
+/// Checks that pages mentioned in PRD have corresponding API endpoints.
+#[allow(clippy::unnecessary_cast)]
+fn check_prd_arch_alignment(prd_text: &str, arch_text: &str) -> (String, i32, String) {
+    if prd_text.is_empty() || arch_text.is_empty() {
+        return (
+            "warning".to_string(),
+            50,
+            "Cannot cross-validate — one or both documents empty".to_string(),
+        );
+    }
+
+    // Extract routes from PRD IA section (lines starting with ├── /xxx or └── /xxx or / )
+    let prd_routes: Vec<&str> = prd_text
+        .lines()
+        .filter_map(|l| {
+            let trimmed = l.trim().trim_start_matches(['├', '└', '│', '─', ' ']);
+            if trimmed.starts_with('/') && !trimmed.contains("Home") {
+                Some(trimmed.split_whitespace().next().unwrap_or(trimmed))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    let arch_lower = arch_text.to_ascii_lowercase();
+    let mut covered = 0;
+    let mut total = 0;
+    for route in &prd_routes {
+        if route.contains(':') || route.len() < 3 {
+            continue;
+        }
+        total += 1;
+        let route_base = route
+            .split('/')
+            .find(|s| !s.is_empty() && !s.starts_with(':'))
+            .unwrap_or("");
+        if !route_base.is_empty() && arch_lower.contains(route_base) {
+            covered += 1;
+        }
+    }
+
+    if total == 0 {
+        return (
+            "passed".to_string(),
+            100,
+            "No routes to cross-validate (PRD may lack IA section)".to_string(),
+        );
+    }
+
+    let coverage_pct = (covered * 100) / total.max(1);
+    let status = if coverage_pct >= 70 {
+        "passed"
+    } else {
+        "warning"
+    };
+    (
+        status.to_string(),
+        coverage_pct as i32,
+        format!(
+            "PRD→Architecture alignment: {covered}/{total} page routes have matching API endpoints ({coverage_pct}%)"
+        ),
+    )
 }
 
 /// Count anti-slop violations across markdown artifacts in output/.
