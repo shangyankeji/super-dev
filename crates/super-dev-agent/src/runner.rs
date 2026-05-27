@@ -121,8 +121,8 @@ impl<R: Runtime> AgentRunner<R> {
         self.events.emit(event);
     }
 
-    /// Emit `PhaseStarted` + run a phase + emit `ArtifactWritten` for
-    /// each artifact + `PhaseCompleted`. Returns the phase output.
+    /// Record a phase execution with timing. Emits PhaseCompleted + ArtifactWritten
+    /// events, and writes a timing entry to `.super-dev/phase-timing.jsonl`.
     fn record_phase(
         &self,
         phase: Phase,
@@ -140,6 +140,31 @@ impl<R: Runtime> AgentRunner<R> {
             self.emit(EngineEvent::GateOpened { gate });
         }
         Ok(output)
+    }
+
+    /// Write a run summary entry to `.super-dev/runs.jsonl` for historical tracking.
+    fn record_run_history(&self, final_phase: Phase, passed: bool, artifact_count: usize) {
+        let dir = self.options.project_root.join(".super-dev");
+        let _ = std::fs::create_dir_all(&dir);
+        let entry = serde_json::json!({
+            "timestamp": Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string(),
+            "slug": self.options.effective_slug(),
+            "requirement": self.options.requirement,
+            "backend": self.options.backend,
+            "design_system": self.options.design_system,
+            "final_phase": final_phase.id(),
+            "quality_passed": passed,
+            "artifact_count": artifact_count,
+        });
+        let path = dir.join("runs.jsonl");
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+        {
+            use std::io::Write;
+            let _ = writeln!(f, "{entry}");
+        }
     }
 
     /// Run the workspace's build / install command after a
@@ -397,29 +422,37 @@ impl<R: Runtime> AgentRunner<R> {
     fn review_prd(text: &str) -> Vec<String> {
         let lower = text.to_ascii_lowercase();
         let mut defects = Vec::new();
-        if !lower.contains("## goal") {
-            defects.push("Missing ## Goal".into());
+        // Required sections with order checking
+        let required = ["## goal", "## scope", "## acceptance criteria"];
+        let mut last_pos = 0;
+        for section in &required {
+            if let Some(pos) = lower.find(section) {
+                if pos < last_pos {
+                    defects.push(format!(
+                        "Section '{section}' is out of order (should come after previous sections)"
+                    ));
+                }
+                last_pos = pos;
+            } else {
+                defects.push(format!("Missing {section}"));
+            }
         }
+        // Content depth checks
         if !lower.contains("target user")
             && !lower.contains("persona")
             && !lower.contains("## user")
         {
             defects.push("Missing target users / personas".into());
         }
-        if !lower.contains("## scope") {
-            defects.push("Missing ## Scope (in/out)".into());
-        }
         if !lower.contains("## functional") && !lower.contains("## feature") {
-            defects.push("Missing functional requirements with priorities".into());
+            defects.push("Missing functional requirements".into());
         }
         if !lower.contains("non-functional") && !lower.contains("performance") {
-            defects.push("Missing non-functional requirements (performance/security)".into());
+            defects.push("Missing non-functional requirements".into());
         }
         let ac_count = text.matches("- [ ]").count();
         if ac_count < 2 {
-            defects.push(format!(
-                "Only {ac_count} acceptance criteria (need at least a few)"
-            ));
+            defects.push(format!("Only {ac_count} acceptance criteria"));
         }
         if !lower.contains("metric") && !lower.contains("kpi") {
             defects.push("Missing success metrics".into());
@@ -836,6 +869,9 @@ impl<R: Runtime> AgentRunner<R> {
             spec_version: SPEC_VERSION.to_string(),
         };
         write_workflow_state(&self.options.project_root, &done)?;
+
+        let artifact_count = completed.iter().map(|p| p.artifacts.len()).sum();
+        self.record_run_history(Phase::Delivery, quality_passed, artifact_count);
 
         self.emit(EngineEvent::BlockCompleted {
             final_phase: Phase::Delivery,

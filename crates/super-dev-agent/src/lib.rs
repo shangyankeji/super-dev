@@ -28,6 +28,7 @@
 )]
 
 pub mod coach;
+pub mod config;
 pub mod events;
 pub mod experts;
 pub mod gates;

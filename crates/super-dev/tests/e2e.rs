@@ -88,6 +88,58 @@ fn full_pipeline_offline_end_to_end() {
 
     // Step 5 — report regenerates the compliance mapping
     run(&["report"], root);
+
+    // Step 6 — content structure validation (not just file-exists)
+    let prd = std::fs::read_to_string(root.join("output/demo-prd.md")).unwrap();
+    assert!(
+        prd.contains("## Goal") || prd.contains("## goal"),
+        "PRD missing Goal section"
+    );
+    assert!(
+        prd.contains("## Scope") || prd.contains("## scope"),
+        "PRD missing Scope section"
+    );
+    let arch = std::fs::read_to_string(root.join("output/demo-architecture.md")).unwrap();
+    assert!(
+        arch.contains("| ") && arch.contains("/api"),
+        "Architecture missing API surface table"
+    );
+    let uiux = std::fs::read_to_string(root.join("output/demo-uiux.md")).unwrap();
+    assert!(
+        uiux.contains("--color") || uiux.contains("--font"),
+        "UIUX missing design tokens"
+    );
+
+    // Quality gate should have a real score
+    let qg = std::fs::read_to_string(root.join("output/demo-quality-gate.json")).unwrap();
+    assert!(qg.contains("\"score\""), "Quality gate missing score");
+    assert!(
+        qg.contains("\"passed\""),
+        "Quality gate missing passed field"
+    );
+
+    // Proof-pack should contain README
+    let zip_path = std::fs::read_dir(&release)
+        .unwrap()
+        .filter_map(Result::ok)
+        .find(|e| e.path().extension().and_then(|s| s.to_str()) == Some("zip"))
+        .expect("no zip in release/")
+        .path();
+    let zip_file = std::fs::File::open(&zip_path).unwrap();
+    let mut archive = zip::ZipArchive::new(zip_file).unwrap();
+    let has_readme = (0..archive.len()).any(|i| {
+        archive
+            .by_index(i)
+            .map(|f| f.name() == "README.md")
+            .unwrap_or(false)
+    });
+    assert!(has_readme, "Proof-pack missing README.md");
+
+    // Run history should exist
+    assert!(
+        root.join(".super-dev/runs.jsonl").is_file(),
+        "Missing run history"
+    );
 }
 
 #[test]
