@@ -522,6 +522,14 @@ fn scaffold_design_infrastructure(workspace: &Path) -> usize {
             "knowledge/experts/qa-lead/test-strategy.md",
             include_str!("../../../knowledge/experts/qa-lead/test-strategy.md"),
         ),
+        (
+            "knowledge/experts/uiux-designer/methodology.md",
+            include_str!("../../../knowledge/experts/uiux-designer/methodology.md"),
+        ),
+        (
+            "knowledge/experts/devops/methodology.md",
+            include_str!("../../../knowledge/experts/devops/methodology.md"),
+        ),
     ];
     let mut count = 0;
     for (rel, content) in files {

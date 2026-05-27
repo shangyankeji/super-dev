@@ -490,44 +490,54 @@ impl<R: Runtime> AgentRunner<R> {
         defects
     }
 
+    /// Try to generate content via the worker. Retries once on timeout.
     async fn try_generate(&self, phase: Phase, prompt: Prompt) -> Option<String> {
-        let req = prompt.into_request(&self.options.model, 4096);
-        match self.runtime.complete(req).await {
-            Ok(resp) if !resp.text.trim().is_empty() => {
-                // Emit each non-empty line so the TUI can render the host's
-                // actual output, not just "phase done". Cap at 40 lines to
-                // keep the event stream bounded — the full body still lands
-                // in the artifact on disk.
-                for line in resp.text.lines().filter(|l| !l.trim().is_empty()).take(40) {
-                    self.emit(EngineEvent::HostOutput {
-                        phase,
-                        line: line.to_string(),
-                    });
+        let max_retries = 2;
+        for attempt in 0..max_retries {
+            let req = prompt.clone().into_request(&self.options.model, 4096);
+            match self.runtime.complete(req).await {
+                Ok(resp) if !resp.text.trim().is_empty() => {
+                    for line in resp.text.lines().filter(|l| !l.trim().is_empty()).take(40) {
+                        self.emit(EngineEvent::HostOutput {
+                            phase,
+                            line: line.to_string(),
+                        });
+                    }
+                    return Some(resp.text);
                 }
-                Some(resp.text)
-            }
-            Ok(_) => {
-                tracing::warn!(runtime = %self.runtime.kind().id(), "runtime returned empty body — falling back to template");
-                self.emit(EngineEvent::Note(format!(
-                    "⚠ Worker 返回空内容({} 阶段)— 使用 offline 模板替代。\
-                     产出标记为 [offline scaffold],内容需要手动补充。",
-                    phase.id()
-                )));
-                None
-            }
-            Err(err) => {
-                tracing::warn!(
-                    runtime = %self.runtime.kind().id(),
-                    error = %err,
-                    "runtime call failed — falling back to template"
-                );
-                self.emit(EngineEvent::Note(format!(
-                    "⚠ Worker 调用失败({} 阶段): {err}\n  使用 offline 模板替代。",
-                    phase.id()
-                )));
-                None
+                Ok(_) => {
+                    tracing::warn!(runtime = %self.runtime.kind().id(), "empty body");
+                    self.emit(EngineEvent::Note(format!(
+                        "⚠ Worker 返回空内容({} 阶段)— offline 模板替代。",
+                        phase.id()
+                    )));
+                    return None;
+                }
+                Err(err) => {
+                    let is_timeout = err.to_string().contains("timed out");
+                    if is_timeout && attempt + 1 < max_retries {
+                        self.emit(EngineEvent::Note(format!(
+                            "⚠ Worker 超时({} 阶段), 重试 {}/{}...",
+                            phase.id(),
+                            attempt + 2,
+                            max_retries
+                        )));
+                        continue;
+                    }
+                    tracing::warn!(
+                        runtime = %self.runtime.kind().id(),
+                        error = %err,
+                        "runtime call failed"
+                    );
+                    self.emit(EngineEvent::Note(format!(
+                        "⚠ Worker 调用失败({} 阶段): {err}",
+                        phase.id()
+                    )));
+                    return None;
+                }
             }
         }
+        None
     }
 
     /// Generate PRD, architecture, UIUX content sequentially so each
