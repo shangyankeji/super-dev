@@ -121,8 +121,7 @@ impl<R: Runtime> AgentRunner<R> {
         self.events.emit(event);
     }
 
-    /// Record a phase execution with timing. Emits PhaseCompleted + ArtifactWritten
-    /// events, and writes a timing entry to `.super-dev/phase-timing.jsonl`.
+    /// Record a phase execution with timing.
     fn record_phase(
         &self,
         phase: Phase,
@@ -140,6 +139,33 @@ impl<R: Runtime> AgentRunner<R> {
             self.emit(EngineEvent::GateOpened { gate });
         }
         Ok(output)
+    }
+
+    /// Record phase timing to `.super-dev/phase-timing.jsonl`.
+    fn record_phase_timing(&self, phase: Phase, started: std::time::Instant) {
+        let elapsed_ms = started.elapsed().as_millis();
+        let dir = self.options.project_root.join(".super-dev");
+        let _ = std::fs::create_dir_all(&dir);
+        let entry = serde_json::json!({
+            "timestamp": Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string(),
+            "phase": phase.id(),
+            "elapsed_ms": elapsed_ms,
+            "slug": self.options.effective_slug(),
+        });
+        let path = dir.join("phase-timing.jsonl");
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+        {
+            use std::io::Write;
+            let _ = writeln!(f, "{entry}");
+        }
+        self.emit(EngineEvent::Note(format!(
+            "⏱ {} completed in {:.1}s",
+            phase.id(),
+            elapsed_ms as f64 / 1000.0
+        )));
     }
 
     /// Write a run summary entry to `.super-dev/runs.jsonl` for historical tracking.
@@ -253,7 +279,8 @@ impl<R: Runtime> AgentRunner<R> {
             requirement: self.options.requirement.clone(),
         });
 
-        // 1. research — generate via LLM if requested, else None falls back to template.
+        // 1. research
+        let phase_start = std::time::Instant::now();
         self.emit(EngineEvent::PhaseStarted {
             phase: Phase::Research,
         });
@@ -298,10 +325,11 @@ impl<R: Runtime> AgentRunner<R> {
             Phase::Research,
             run_research(&self.options, research_text.as_deref()),
         )?);
+        self.record_phase_timing(Phase::Research, phase_start);
         self.transition(Phase::Docs, "")?;
 
-        // 2. docs — three artifacts. Each gets an LLM body when use_runtime; subsequent
-        //    experts get the previous artifact's excerpt as additional context.
+        // 2. docs
+        let phase_start = std::time::Instant::now();
         self.emit(EngineEvent::PhaseStarted { phase: Phase::Docs });
         let docs_content = if use_runtime {
             self.generate_docs_content(research_text.as_deref()).await
@@ -310,6 +338,7 @@ impl<R: Runtime> AgentRunner<R> {
         };
 
         let docs = self.record_phase(Phase::Docs, run_docs(&self.options, &docs_content))?;
+        self.record_phase_timing(Phase::Docs, phase_start);
         let gate = docs.gate;
         completed.push(docs);
         self.transition(Phase::DocsConfirm, gate.map_or("", Gate::id_str))?;

@@ -640,7 +640,8 @@ pub fn run_quality(opts: &RunOptions) -> io::Result<PhaseOutput> {
     let slug = opts.effective_slug();
     let output_dir = opts.project_root.join("output");
     fs::create_dir_all(&output_dir)?;
-    let pass_threshold = 90;
+    let project_config = crate::config::load_project_config(&opts.project_root);
+    let pass_threshold = i32::try_from(project_config.quality.threshold).unwrap_or(90);
 
     let mut checks: Vec<QualityCheck> = Vec::new();
 
