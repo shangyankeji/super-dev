@@ -1,3 +1,13 @@
+---
+id: e-commerce
+title: Seed Template: E-Commerce Product Page
+domain: seed-templates
+category: e-commerce.md
+difficulty: intermediate
+tags: [commerce, gates, page, quality, seed-templates, structure]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Seed Template: E-Commerce Product Page
 
 > Use for online shops, marketplaces, product catalogs.

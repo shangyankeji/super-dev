@@ -1,3 +1,13 @@
+---
+id: security-antipatterns
+title: 安全反模式指南
+domain: development
+category: 04-antipatterns
+difficulty: intermediate
+tags: [antipatterns, concatenation, csrf, development, injection, password, protection, secrets]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 安全反模式指南
 
 > 适用范围：Web 应用 / API 服务 / 后端系统

@@ -1,3 +1,13 @@
+---
+id: performance-tuning-playbook
+title: 性能调优作战手册 (Performance Tuning Playbook)
+domain: development
+category: 02-playbooks
+difficulty: intermediate
+tags: [agent, checklist, development, performance, playbook, tuning, 前置条件, 回滚方案]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 性能调优作战手册 (Performance Tuning Playbook)
 
 ## 概述

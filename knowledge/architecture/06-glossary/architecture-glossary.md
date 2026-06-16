@@ -1,3 +1,13 @@
+---
+id: architecture-glossary
+title: 架构术语表
+domain: architecture
+category: 06-glossary
+difficulty: intermediate
+tags: [architecture, devops, glossary, 事件与数据模式, 分布式系统理论, 可观测性与, 可靠性工程, 微服务与服务治理]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 架构术语表
 
 > 收录软件架构领域核心术语，涵盖分布式系统、微服务、设计原则、架构模式等方向。

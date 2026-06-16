@@ -1,3 +1,13 @@
+---
+id: case-rag-production
+title: RAG 系统生产化案例：从 PoC 到生产的知识库问答系统
+domain: ai
+category: 05-cases
+difficulty: intermediate
+tags: [3-10, agent, ai, case, checklist, production, rag, 上线效果]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # RAG 系统生产化案例：从 PoC 到生产的知识库问答系统
 
 ## 概述

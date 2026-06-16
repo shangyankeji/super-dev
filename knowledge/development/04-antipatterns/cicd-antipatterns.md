@@ -1,3 +1,13 @@
+---
+id: cicd-antipatterns
+title: CI/CD 反模式指南
+domain: development
+category: 04-antipatterns
+difficulty: intermediate
+tags: [agent, antipatterns, artifacts, canary, checklist, cicd, development, drift]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # CI/CD 反模式指南
 
 > 适用范围：GitHub Actions / GitLab CI / Jenkins / Azure Pipelines

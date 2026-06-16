@@ -1,3 +1,13 @@
+---
+id: zero-trust-architecture
+title: 零信任架构指南
+domain: security
+category: 01-standards
+difficulty: intermediate
+tags: [agent, architecture, checklist, security, trust, zero, 实战代码示例, 常见陷阱]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 零信任架构指南
 
 ## 概述

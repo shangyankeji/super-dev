@@ -1,3 +1,13 @@
+---
+id: security-review-checklist
+title: 安全评审检查清单 (Security Review Checklist)
+domain: development
+category: 03-checklists
+difficulty: intermediate
+tags: [checklist, development, owasp, review, security, 依赖与供应链安全, 基础设施安全, 安全]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 安全评审检查清单 (Security Review Checklist)
 
 > 适用场景：新功能安全评审、定期安全审计、第三方集成安全评估、合规检查。

@@ -1,3 +1,13 @@
+---
+id: incident-hotfix-playbook
+title: 线上故障热修复手册 (Incident Hotfix Playbook)
+domain: development
+category: 02-playbooks
+difficulty: intermediate
+tags: [development, hotfix, incident, playbook, 修复方案, 前置条件, 基本信息, 时间线]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 线上故障热修复手册 (Incident Hotfix Playbook)
 
 ## 概述

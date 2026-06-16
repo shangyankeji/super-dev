@@ -1,7 +1,7 @@
 # Super Dev — workspace manifest.
 #
 # Super Dev is a coach for AI coding hosts. One specification, one
-# binary, 11 host CLI backends. No API key — drives your already
+# binary, 23 host CLI backends. No API key — drives your already
 # logged-in coding CLI as a subprocess.
 
 [workspace]
@@ -13,13 +13,15 @@ members = [
     "crates/super-dev-agent",
     "crates/super-dev-runtime",
     "crates/super-dev-host",
+    "crates/super-dev-knowledge",
+    "crates/super-dev-contract",
     "crates/super-dev-tui",
 ]
 
 [workspace.package]
-version = "4.5.0"
+version = "4.6.0"
 edition = "2021"
-rust-version = "1.75"
+rust-version = "1.87"
 license = "MIT"
 authors = ["Shangyan Technology <11964948@qq.com>"]
 repository = "https://github.com/shangyankeji/super-dev"
@@ -54,6 +56,7 @@ crossterm = { version = "0.28", features = ["event-stream"] }
 
 # --- governance / parsing ---
 regex = "1.10"
+sha2 = "0.10"
 
 # --- time ---
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
@@ -68,14 +71,17 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 # --- testing ---
 insta = { version = "1.41", features = ["json", "yaml"] }
 pretty_assertions = "1"
+mockito = "1"
 
 # --- internal ---
-super-dev-spec = { path = "crates/super-dev-spec", version = "4.5.0" }
-super-dev-governance = { path = "crates/super-dev-governance", version = "4.5.0" }
-super-dev-agent = { path = "crates/super-dev-agent", version = "4.5.0" }
-super-dev-runtime = { path = "crates/super-dev-runtime", version = "4.5.0" }
-super-dev-host = { path = "crates/super-dev-host", version = "4.5.0" }
-super-dev-tui = { path = "crates/super-dev-tui", version = "4.5.0" }
+super-dev-spec = { path = "crates/super-dev-spec", version = "4.6.0" }
+super-dev-governance = { path = "crates/super-dev-governance", version = "4.6.0" }
+super-dev-agent = { path = "crates/super-dev-agent", version = "4.6.0" }
+super-dev-runtime = { path = "crates/super-dev-runtime", version = "4.6.0" }
+super-dev-host = { path = "crates/super-dev-host", version = "4.6.0" }
+super-dev-knowledge = { path = "crates/super-dev-knowledge", version = "4.6.0" }
+super-dev-contract = { path = "crates/super-dev-contract", version = "4.6.0" }
+super-dev-tui = { path = "crates/super-dev-tui", version = "4.6.0" }
 
 [profile.release]
 lto = "fat"

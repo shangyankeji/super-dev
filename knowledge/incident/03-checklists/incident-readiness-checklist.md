@@ -1,3 +1,13 @@
+---
+id: incident-readiness-checklist
+title: 事故准备度检查清单
+domain: incident
+category: 03-checklists
+difficulty: intermediate
+tags: [agent, checklist, incident, readiness, 概述, 评分汇总]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 事故准备度检查清单
 
 ## 概述

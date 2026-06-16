@@ -1,3 +1,13 @@
+---
+id: production-launch-checklist
+title: 生产上线检查清单 (Production Launch Checklist)
+domain: operations
+category: 03-checklists
+difficulty: intermediate
+tags: [application, checklist, data, documentation, infrastructure, launch, monitoring, operations]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 生产上线检查清单 (Production Launch Checklist)
 
 ## 概述

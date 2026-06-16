@@ -1,3 +1,13 @@
+---
+id: cicd-glossary
+title: CI/CD 术语表 (CI/CD Glossary)
+domain: cicd
+category: 06-glossary
+difficulty: intermediate
+tags: [agent, checklist, cicd, glossary, 分支模型, 构建策略, 流水线基础, 版本管理]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # CI/CD 术语表 (CI/CD Glossary)
 
 > 收录 40+ 核心 CI/CD 术语，覆盖流水线基础、构建策略、部署策略、分支模型和版本管理等领域。

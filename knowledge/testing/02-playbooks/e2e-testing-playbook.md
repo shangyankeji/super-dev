@@ -5,6 +5,9 @@ last_updated: 2026-03-28
 owner: qa-team
 tags: [e2e-testing, Playwright, Cypress, test-strategy, CI-integration, parallel-execution, stability]
 status: production
+domain: testing
+difficulty: intermediate
+quality_score: 70
 ---
 
 # 开发：Excellent（11964948@qq.com）

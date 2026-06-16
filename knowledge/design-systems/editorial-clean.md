@@ -1,3 +1,13 @@
+---
+id: editorial-clean
+title: Editorial Clean
+domain: design-systems
+category: editorial-clean.md
+difficulty: intermediate
+tags: [clean, color, component, design-systems, editorial, motion, palette, patterns]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Editorial Clean
 
 > Magazine-like, serif-accent headings, photography-driven. Inspired by Medium, Substack, The Verge.

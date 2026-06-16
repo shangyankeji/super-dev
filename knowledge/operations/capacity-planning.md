@@ -1,3 +1,13 @@
+---
+id: capacity-planning
+title: capacity-planning
+domain: operations
+category: capacity-planning.md
+difficulty: intermediate
+tags: [capacity, operations, planning, 容量规划报告, 容量规划流程, 当前状态, 执行摘要, 核心概念]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 开发：Excellent（11964948@qq.com）
 # 功能：容量规划实践指南
 # 作用：提供系统容量预测、规划和优化的完整方法论

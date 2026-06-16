@@ -1,3 +1,13 @@
+---
+id: architecture-antipatterns
+title: 架构反模式库
+domain: architecture
+category: 04-antipatterns
+difficulty: intermediate
+tags: [antipatterns, architecture, ball, distributed, golden, hammer, monolith, 候选方案]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 架构反模式库
 
 > 覆盖软件架构设计中最常见的 8 类反模式，每个反模式包含描述、症状、真实案例和重构方案。

@@ -5,6 +5,9 @@ last_updated: 2026-03-28
 owner: platform-team
 tags: [kubernetes, troubleshooting, diagnostics, pod, network, storage, node]
 status: production
+domain: cloud-native
+difficulty: intermediate
+quality_score: 70
 ---
 
 # 开发：Excellent（11964948@qq.com）

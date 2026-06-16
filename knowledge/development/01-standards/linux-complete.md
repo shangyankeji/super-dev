@@ -1,3 +1,13 @@
+---
+id: linux-complete
+title: Linux命令行完整指南
+domain: development
+category: 01-standards
+difficulty: intermediate
+tags: [complete, development, linux, 学习路径, 最佳实践, 核心命令, 概述]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Linux命令行完整指南
 
 ## 概述

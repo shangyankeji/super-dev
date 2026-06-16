@@ -1,3 +1,13 @@
+---
+id: testing-antipatterns
+title: 测试反模式指南 (Testing Anti-Patterns Guide)
+domain: testing
+category: 04-antipatterns
+difficulty: intermediate
+tags: [antipatterns, behavior, excessive, implementation, mock, mocking, testing, 反模式]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 测试反模式指南 (Testing Anti-Patterns Guide)
 
 > 适用范围：Python / JavaScript / TypeScript / Go / Java

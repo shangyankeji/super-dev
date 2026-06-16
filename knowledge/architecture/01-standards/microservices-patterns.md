@@ -1,3 +1,13 @@
+---
+id: microservices-patterns
+title: 微服务架构模式完整指南
+domain: architecture
+category: 01-standards
+difficulty: intermediate
+tags: [agent, architecture, checklist, microservices, patterns, 参考资料, 可观测性, 常见反模式]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 微服务架构模式完整指南
 
 ## 概述

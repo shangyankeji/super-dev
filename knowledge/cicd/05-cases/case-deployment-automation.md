@@ -1,3 +1,13 @@
+---
+id: case-deployment-automation
+title: 部署自动化案例：从手动部署到 GitOps 的转型
+domain: cicd
+category: 05-cases
+difficulty: intermediate
+tags: [agent, automation, case, checklist, cicd, deployment, 关键决策回顾, 概述]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 部署自动化案例：从手动部署到 GitOps 的转型
 
 ## 概述

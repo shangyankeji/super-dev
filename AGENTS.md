@@ -23,11 +23,15 @@ cargo fmt --all
 
 See [README.md](README.md). Short version:
 
-- `crates/super-dev` — binary
+- `crates/super-dev` — binary (clap CLI + hook + doctor)
 - `crates/super-dev-spec` — spec as Rust data
 - `crates/super-dev-governance` — rules + audit + compliance kernel
-- `crates/super-dev-agent` — 9-phase runner + gates + workflow state
-- `crates/super-dev-runtime` — Anthropic / OpenAI / Antigravity HTTP adapters
+- `crates/super-dev-agent` — 9-phase runner + gates + workflow state + scaffolding
+- `crates/super-dev-runtime` — Runtime trait + OfflineRuntime
+- `crates/super-dev-host` — subprocess drivers for Claude Code / Codex / Gemini / +8 more
+- `crates/super-dev-contract` — typed OpenAPI 3.1 contract layer
+- `crates/super-dev-knowledge` — BM25 + optional vector (hybrid) knowledge retrieval
+- `crates/super-dev-tui` — ratatui real-time terminal UI
 
 ## Hard rules
 
@@ -37,8 +41,10 @@ See [README.md](README.md). Short version:
   be blocked by a bug in the governor.
 - **Spec is the source of truth.** When data and prose diverge, fix
   both.
-- **Three-runtime scope.** The list of supported host families is exactly
-  Anthropic, OpenAI, Antigravity. Do not propose adding others.
+- **Subprocess-driver scope.** Hosts are driven as non-interactive
+  subprocesses (no API key, no SDK vendoring). The authoritative list is
+  `super_dev_host::BACKEND_IDS` (23 as of 4.6.0). Adding a host means a
+  `SimpleHostDriver` factory + a `BackendArg` variant, not an HTTP client.
 
 ## Recommended sequence for new contributors
 

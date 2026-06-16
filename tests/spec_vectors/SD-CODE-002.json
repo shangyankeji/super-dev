@@ -1,0 +1,56 @@
+{
+  "clause": "SD-CODE-002",
+  "title": "Hardcoded color literals",
+  "level": "MUST",
+  "section": "3.2",
+  "guarded_extensions": ["tsx", "ts", "jsx", "js", "vue", "svelte", "astro", "css", "scss", "sass"],
+  "exempt_path_fragments": ["/tokens/", "/theme/", "/themes/", "/design-system/", ".stories.", ".test.", ".spec.", "/fixtures/", "/mocks/"],
+  "allowed_neutrals": ["#fff", "#ffffff", "#000", "#000000"],
+  "vectors": [
+    {
+      "file_path": "src/Card.tsx",
+      "content": "color: #9333ea",
+      "expected_decision": "block",
+      "reason_fragment": "design tokens"
+    },
+    {
+      "file_path": "src/Button.tsx",
+      "content": "background: rgba(255, 0, 0, 0.5)",
+      "expected_decision": "block"
+    },
+    {
+      "file_path": "src/Alert.tsx",
+      "content": "border-color: hsl(120 50% 50%)",
+      "expected_decision": "block"
+    },
+    {
+      "file_path": "src/Card.tsx",
+      "content": "color: var(--primary)",
+      "expected_decision": "pass"
+    },
+    {
+      "file_path": "src/Card.tsx",
+      "content": "color: #fff",
+      "expected_decision": "pass",
+      "note": "achromatic neutral is allowed"
+    },
+    {
+      "file_path": "src/tokens/colors.ts",
+      "content": "export const primary = '#9333ea'",
+      "expected_decision": "pass",
+      "note": "tokens directory is exempt"
+    },
+    {
+      "file_path": "src/theme/dark.css",
+      "content": ".dark { --bg: #0f172a }",
+      "expected_decision": "pass",
+      "note": "theme directory is exempt"
+    },
+    {
+      "file_path": "config.json",
+      "content": "\"color\": \"#ff0000\"",
+      "expected_decision": "pass",
+      "note": "non-UI extension is exempt"
+    }
+  ]
+}

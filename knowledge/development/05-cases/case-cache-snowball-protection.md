@@ -1,3 +1,13 @@
+---
+id: case-cache-snowball-protection
+title: 案例研究：缓存雪崩防护体系建设
+domain: development
+category: 05-cases
+difficulty: intermediate
+tags: [agent, cache, case, checklist, development, protection, snowball, 元数据]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 案例研究：缓存雪崩防护体系建设
 
 ## 元数据

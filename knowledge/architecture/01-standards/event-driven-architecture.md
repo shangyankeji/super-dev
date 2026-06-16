@@ -1,3 +1,13 @@
+---
+id: event-driven-architecture
+title: 事件驱动架构完整指南
+domain: architecture
+category: 01-standards
+difficulty: intermediate
+tags: [agent, architecture, checklist, driven, event, 实战代码示例, 常见陷阱, 最佳实践]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 事件驱动架构完整指南
 
 ## 概述

@@ -1,3 +1,13 @@
+---
+id: database-launch-checklist
+title: 数据库上线检查清单
+domain: data
+category: 03-checklists
+difficulty: intermediate
+tags: [agent, alerting, baseline, checklist, data, database, launch, pool]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 数据库上线检查清单
 
 ## 概述

@@ -1,3 +1,13 @@
+---
+id: distributed-transactions
+title: 分布式事务处理完全指南
+domain: architecture
+category: distributed-transactions.md
+difficulty: intermediate
+tags: [architecture, distributed, transactions, 分布式事务框架, 分布式事务模式, 参考资源, 常见问题, 最佳实践]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 分布式事务处理完全指南
 
 ## 概述

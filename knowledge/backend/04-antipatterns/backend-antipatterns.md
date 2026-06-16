@@ -1,3 +1,13 @@
+---
+id: backend-antipatterns
+title: 后端反模式手册
+domain: backend
+category: 04-antipatterns
+difficulty: intermediate
+tags: [antipatterns, backend, controller, 同步阻塞, 无超时设置, 无连接池, 无重试策略, 无限分页]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 后端反模式手册
 
 > 覆盖 Python 和 Node.js 后端开发中最常见的 10 类反模式。

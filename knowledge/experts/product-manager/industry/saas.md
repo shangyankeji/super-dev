@@ -1,3 +1,13 @@
+---
+id: saas
+title: SaaS Product — Industry-Specific Knowledge
+domain: experts
+category: product-manager
+difficulty: intermediate
+tags: [appear, architecture, common, considerations, experts, metrics, must, patterns]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # SaaS Product — Industry-Specific Knowledge
 
 ## Key Metrics (must appear in PRD success metrics)

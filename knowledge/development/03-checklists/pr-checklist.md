@@ -1,3 +1,13 @@
+---
+id: pr-checklist
+title: PR 检查清单 (Pull Request Checklist)
+domain: development
+category: 03-checklists
+difficulty: intermediate
+tags: [checklist, development, 代码质量, 兼容性, 变更范围与描述, 安全, 性能, 文档]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # PR 检查清单 (Pull Request Checklist)
 
 > 适用场景：代码评审、合并请求审核、自动化 CI 门禁配合使用。

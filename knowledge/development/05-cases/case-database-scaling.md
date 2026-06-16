@@ -1,3 +1,13 @@
+---
+id: case-database-scaling
+title: 案例研究：数据库从单实例到读写分离到分库分表的演进
+domain: development
+category: 05-cases
+difficulty: intermediate
+tags: [agent, case, checklist, database, development, scaling, 元数据]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 案例研究：数据库从单实例到读写分离到分库分表的演进
 
 ## 元数据

@@ -1,3 +1,13 @@
+---
+id: compliance-automation
+title: 合规自动化完整指南
+domain: security
+category: compliance-automation.md
+difficulty: intermediate
+tags: [automation, code, compliance, security, 合规工作流, 合规报告, 合规框架, 审计日志]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 合规自动化完整指南
 
 ## 概述

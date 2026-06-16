@@ -1,3 +1,13 @@
+---
+id: release-readiness-checklist
+title: 发布就绪检查清单 (Release Readiness Checklist)
+domain: development
+category: 03-checklists
+difficulty: intermediate
+tags: [checklist, development, readiness, release, 依赖确认, 发布后验证, 发布计划, 变更记录]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 发布就绪检查清单 (Release Readiness Checklist)
 
 > 适用场景：版本发布前的最终审查，包括常规发布、热修复发布、重大版本升级。

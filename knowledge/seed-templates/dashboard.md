@@ -1,3 +1,13 @@
+---
+id: dashboard
+title: Seed Template: Dashboard
+domain: seed-templates
+category: dashboard.md
+difficulty: intermediate
+tags: [component, dashboard, gates, layout, page, patterns, quality, rules]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Seed Template: Dashboard
 
 > Use this structure when the product is a data dashboard, admin panel, or monitoring tool.

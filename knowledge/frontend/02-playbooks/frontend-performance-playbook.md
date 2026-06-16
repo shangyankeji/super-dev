@@ -1,3 +1,13 @@
+---
+id: frontend-performance-playbook
+title: 前端性能优化 Playbook
+domain: frontend
+category: 02-playbooks
+difficulty: intermediate
+tags: [frontend, performance, playbook, vitals, 代码分割, 关键渲染路径优化, 性能审计, 懒加载]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 前端性能优化 Playbook
 
 > 适用场景：Web 应用性能审计、优化执行、持续监控全流程。

@@ -5,6 +5,9 @@ last_updated: 2026-03-28
 owner: security-team
 tags: [penetration-testing, OWASP, Burp-Suite, Nmap, ZAP, API-security, web-security]
 status: production
+domain: security
+difficulty: intermediate
+quality_score: 70
 ---
 
 # 开发：Excellent（11964948@qq.com）

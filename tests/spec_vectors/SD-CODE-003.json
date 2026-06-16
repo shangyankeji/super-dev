@@ -1,0 +1,53 @@
+{
+  "clause": "SD-CODE-003",
+  "title": "Frontend-backend API path alignment",
+  "level": "SHOULD",
+  "section": "3.3",
+  "contract_location": ".super-dev/contracts/openapi.yaml",
+  "description": "Every frontend fetch/axios call must match a (method, path) declared in the OpenAPI contract. Validated by super-dev-contract::validate_frontend_vs_contract.",
+  "vectors": [
+    {
+      "name": "fully conformant calls",
+      "contract_endpoints": [
+        {"method": "GET", "path": "/api/users"},
+        {"method": "POST", "path": "/api/users"},
+        {"method": "GET", "path": "/api/users/:id"},
+        {"method": "DELETE", "path": "/api/users/:id"}
+      ],
+      "frontend_calls": [
+        {"method": "GET", "path": "/api/users"},
+        {"method": "POST", "path": "/api/users"},
+        {"method": "GET", "path": "/api/users/42"},
+        {"method": "DELETE", "path": "/api/users/42"}
+      ],
+      "expected_violations": 0
+    },
+    {
+      "name": "undeclared call",
+      "contract_endpoints": [{"method": "GET", "path": "/api/users"}],
+      "frontend_calls": [{"method": "GET", "path": "/api/nonexistent"}],
+      "expected_violations": 1,
+      "violation_kind": "UndeclaredCall"
+    },
+    {
+      "name": "method mismatch",
+      "contract_endpoints": [{"method": "GET", "path": "/api/users"}],
+      "frontend_calls": [{"method": "DELETE", "path": "/api/users"}],
+      "expected_violations": 1,
+      "violation_kind": "MethodMismatch"
+    },
+    {
+      "name": "path template param match",
+      "contract_endpoints": [{"method": "GET", "path": "/api/users/:id"}],
+      "frontend_calls": [{"method": "GET", "path": "/api/users/123"}],
+      "expected_violations": 0,
+      "note": ":id template matches any single segment"
+    },
+    {
+      "name": "query string stripped before match",
+      "contract_endpoints": [{"method": "GET", "path": "/api/users"}],
+      "frontend_calls": [{"method": "GET", "path": "/api/users?include=email"}],
+      "expected_violations": 0
+    }
+  ]
+}

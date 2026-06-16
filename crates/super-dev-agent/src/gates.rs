@@ -21,6 +21,21 @@ impl Gate {
             Self::PreviewConfirm => "preview_confirm",
         }
     }
+
+    /// Inverse of [`Gate::id_str`]: parse a persisted gate id back into the
+    /// typed enum. Case-insensitive + whitespace-tolerant; returns `None`
+    /// for unknown ids (fail-open). Replaces the ad-hoc string matches the
+    /// CLI previously sprinkled across `main.rs`. Mirrors
+    /// `super_dev_spec::Gate::from_id` so both Gate types stay parseable
+    /// from the same persisted strings.
+    #[must_use]
+    pub fn from_id(id: &str) -> Option<Self> {
+        match id.trim().to_ascii_lowercase().as_str() {
+            "docs_confirm" => Some(Self::DocsConfirm),
+            "preview_confirm" => Some(Self::PreviewConfirm),
+            _ => None,
+        }
+    }
 }
 
 /// What the user did at the gate.
@@ -95,5 +110,19 @@ mod tests {
     #[test]
     fn empty_reply_is_revise_with_empty_text() {
         assert!(matches!(classify_reply(""), GateOutcome::Revise(s) if s.is_empty()));
+    }
+
+    #[test]
+    fn gate_from_id_roundtrips_and_is_case_insensitive() {
+        for g in [Gate::DocsConfirm, Gate::PreviewConfirm] {
+            assert_eq!(Gate::from_id(g.id_str()), Some(g));
+        }
+        assert_eq!(Gate::from_id("Docs_Confirm"), Some(Gate::DocsConfirm));
+        assert_eq!(
+            Gate::from_id("  preview_confirm  "),
+            Some(Gate::PreviewConfirm)
+        );
+        assert_eq!(Gate::from_id("nope"), None);
+        assert_eq!(Gate::from_id(""), None);
     }
 }

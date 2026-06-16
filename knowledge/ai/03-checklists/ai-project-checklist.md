@@ -1,3 +1,13 @@
+---
+id: ai-project-checklist
+title: AI 项目检查清单 (AI Project Checklist)
+domain: ai
+category: 03-checklists
+difficulty: intermediate
+tags: [ai, checklist, data, evaluation, model, preparation, project, selection]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # AI 项目检查清单 (AI Project Checklist)
 
 > 适用场景：AI/ML 项目全生命周期质量把控，涵盖数据准备、模型选择、评估验证、部署运维、安全合规五大阶段。

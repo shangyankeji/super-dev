@@ -1,3 +1,13 @@
+---
+id: security
+title: Architect — Security Checklist (OWASP-based)
+domain: experts
+category: architect
+difficulty: intermediate
+tags: [authentication, authorization, encoding, experts, input, management, output, security]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Architect — Security Checklist (OWASP-based)
 
 ## Authentication & Session Management

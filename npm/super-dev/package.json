@@ -1,6 +1,6 @@
 {
   "name": "super-dev",
-  "version": "4.4.0",
+  "version": "4.6.0",
   "description": "AI 编码的项目经理 — drives your logged-in Claude Code / Codex through a 9-phase commercial delivery pipeline. No API key needed.",
   "keywords": [
     "ai",
@@ -34,10 +34,10 @@
     "node": ">=18"
   },
   "optionalDependencies": {
-    "@super-dev/cli-darwin-arm64": "4.4.0",
-    "@super-dev/cli-darwin-x64": "4.4.0",
-    "@super-dev/cli-linux-x64": "4.4.0",
-    "@super-dev/cli-linux-arm64": "4.4.0",
-    "@super-dev/cli-win32-x64": "4.4.0"
+    "@super-dev/cli-darwin-arm64": "4.6.0",
+    "@super-dev/cli-darwin-x64": "4.6.0",
+    "@super-dev/cli-linux-x64": "4.6.0",
+    "@super-dev/cli-linux-arm64": "4.6.0",
+    "@super-dev/cli-win32-x64": "4.6.0"
   }
 }

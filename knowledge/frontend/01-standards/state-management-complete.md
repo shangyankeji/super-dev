@@ -1,3 +1,13 @@
+---
+id: state-management-complete
+title: 状态管理完整对比指南
+domain: frontend
+category: 01-standards
+difficulty: intermediate
+tags: [complete, frontend, jotai, management, mobx, recoil, redux, state]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 状态管理完整对比指南
 
 ## 概述

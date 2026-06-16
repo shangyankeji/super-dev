@@ -1,3 +1,13 @@
+---
+id: system-design-interview
+title: 系统设计面试指南
+domain: architecture
+category: 01-standards
+difficulty: intermediate
+tags: [agent, architecture, checklist, design, interview, system, 实战系统设计, 常见陷阱]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 系统设计面试指南
 
 ## 概述

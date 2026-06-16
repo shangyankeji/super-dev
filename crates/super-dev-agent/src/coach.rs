@@ -36,9 +36,21 @@ pub const COACH_DIR: &str = ".super-dev/coach";
 /// prefix matches `PHASE_CHAIN` ordering so the directory listing
 /// reads top-to-bottom in pipeline order.
 pub fn write_coach_prompt(opts: &RunOptions, phase: Phase) -> io::Result<PathBuf> {
+    write_coach_prompt_with_vector(opts, phase, None)
+}
+
+/// Write the coach prompt with an optional pre-embedded query vector. The
+/// async runner calls this after pre-embedding the requirement so every
+/// phase's expert-knowledge section gets true BM25+vector fusion. When
+/// `query_vec` is `None`, behaves identically to [`write_coach_prompt`].
+pub fn write_coach_prompt_with_vector(
+    opts: &RunOptions,
+    phase: Phase,
+    query_vec: Option<&[f32]>,
+) -> io::Result<PathBuf> {
     let dir = opts.project_root.join(COACH_DIR);
     fs::create_dir_all(&dir)?;
-    let body = render_coach_prompt(opts, phase);
+    let body = render_coach_prompt_with_vector(opts, phase, query_vec);
     let path = dir.join(coach_filename(phase));
     fs::write(&path, body)?;
     // Mirror to CURRENT.md so the host's CLAUDE.md can point at one
@@ -50,7 +62,7 @@ pub fn write_coach_prompt(opts: &RunOptions, phase: Phase) -> io::Result<PathBuf
         coach_filename(phase),
     );
     let mut current_body = header;
-    current_body.push_str(&render_coach_prompt(opts, phase));
+    current_body.push_str(&render_coach_prompt_with_vector(opts, phase, query_vec));
     fs::write(&current, current_body)?;
     Ok(path)
 }
@@ -73,13 +85,28 @@ fn coach_filename(phase: Phase) -> String {
 /// Pure renderer — exposed for tests.
 #[must_use]
 pub fn render_coach_prompt(opts: &RunOptions, phase: Phase) -> String {
+    render_coach_prompt_with_vector(opts, phase, None)
+}
+
+/// Pure renderer with an optional pre-embedded query vector. Threads the
+/// vector into [`phase_knowledge_digest_with_vector`] so the expert-knowledge
+/// section gets RRF fusion when hybrid + vectors are available.
+#[must_use]
+pub fn render_coach_prompt_with_vector(
+    opts: &RunOptions,
+    phase: Phase,
+    query_vec: Option<&[f32]>,
+) -> String {
     let slug = opts.effective_slug();
     let req = &opts.requirement;
     let preamble = spec_preamble();
     let design_inject = load_design_system_inject(opts);
-    let expert_knowledge = crate::phases::phase_knowledge_digest(opts, phase);
+    let expert_knowledge =
+        crate::phases::phase_knowledge_digest_with_vector(opts, phase, query_vec);
+    let lessons =
+        crate::lessons::relevant_lessons_for_prompt(&opts.project_root, &opts.requirement);
     let body = match phase {
-        Phase::Research => render_research(&slug, req, opts),
+        Phase::Research => render_research(&slug, req, opts, query_vec),
         Phase::Docs => render_docs(&slug, req, &design_inject),
         Phase::DocsConfirm | Phase::PreviewConfirm => render_gate(phase, &slug),
         Phase::Spec => render_spec(&slug, req),
@@ -94,7 +121,7 @@ pub fn render_coach_prompt(opts: &RunOptions, phase: Phase) -> String {
          `super-dev continue` to advance.\n\n\
          {preamble}\n\n\
          {body}\n\
-         {expert_knowledge}\n",
+         {expert_knowledge}\n{lessons}\n",
         phase.id()
     )
 }
@@ -131,8 +158,9 @@ rules:\n\n\
     .to_string()
 }
 
-fn render_research(slug: &str, req: &str, opts: &RunOptions) -> String {
-    let knowledge = crate::phases::knowledge_digest(opts);
+fn render_research(slug: &str, req: &str, opts: &RunOptions, query_vec: Option<&[f32]>) -> String {
+    let knowledge =
+        crate::phases::phase_knowledge_digest_with_vector(opts, Phase::Research, query_vec);
     format!(
         "## MUST-DO (read first)\n\n\
          1. **Print the FULL research brief as your text reply.** Do NOT use Edit / Write \

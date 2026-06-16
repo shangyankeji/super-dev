@@ -1,3 +1,13 @@
+---
+id: security-architecture-deep-dive
+title: security-architecture-deep-dive
+domain: security
+category: security-architecture-deep-dive.md
+difficulty: intermediate
+tags: [architecture, deep, dive, security, 安全环节深度知识库]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 开发：Excellent（11964948@qq.com）
 
 ## 安全环节深度知识库

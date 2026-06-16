@@ -1,3 +1,13 @@
+---
+id: case-ci-cd-pipeline
+title: 案例研究：CI/CD 流水线从 0 到 1 搭建实战
+domain: development
+category: 05-cases
+difficulty: intermediate
+tags: [agent, case, checklist, development, pipeline, 元数据]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 案例研究：CI/CD 流水线从 0 到 1 搭建实战
 
 ## 元数据

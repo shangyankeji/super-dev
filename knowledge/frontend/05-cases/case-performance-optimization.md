@@ -1,3 +1,13 @@
+---
+id: case-performance-optimization
+title: 前端性能优化案例：Lighthouse 从 40 到 95 的实战过程
+domain: frontend
+category: 05-cases
+difficulty: intermediate
+tags: [agent, case, checklist, frontend, optimization, performance, 业务影响, 初始状态诊断]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 前端性能优化案例：Lighthouse 从 40 到 95 的实战过程
 
 ## 概述

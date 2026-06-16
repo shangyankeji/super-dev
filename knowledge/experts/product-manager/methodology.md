@@ -1,3 +1,13 @@
+---
+id: methodology
+title: Product Manager — Methodology
+domain: experts
+category: product-manager
+difficulty: intermediate
+tags: [experts, framework, methodology, writing]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Product Manager — Methodology
 
 ## PRD Writing Framework

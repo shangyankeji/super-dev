@@ -1,3 +1,13 @@
+---
+id: ai-rag-engineering-playbook
+title: ai-rag-engineering-playbook
+domain: ai
+category: ai-rag-engineering-playbook.md
+difficulty: intermediate
+tags: [ai, engineering, playbook, rag, rag工程作战手册]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 开发：Excellent（11964948@qq.com）
 
 ## AI RAG工程作战手册

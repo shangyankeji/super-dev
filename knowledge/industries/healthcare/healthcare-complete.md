@@ -1,3 +1,13 @@
+---
+id: healthcare-complete
+title: 医疗健康系统完整指南
+domain: industries
+category: healthcare
+difficulty: intermediate
+tags: [complete, healthcare, hipaa合规, industries, 参考资料, 学习路径, 安全最佳实践, 核心领域]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 医疗健康系统完整指南
 
 ## 概述

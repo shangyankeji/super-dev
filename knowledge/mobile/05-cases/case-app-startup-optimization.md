@@ -1,3 +1,13 @@
+---
+id: case-app-startup-optimization
+title: App 启动优化案例：冷启动从 5s 降到 1.5s
+domain: mobile
+category: 05-cases
+difficulty: intermediate
+tags: [agent, app, case, checklist, mobile, optimization, startup, 关键教训]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # App 启动优化案例：冷启动从 5s 降到 1.5s
 
 ## 概述

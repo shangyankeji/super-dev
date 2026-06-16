@@ -1,0 +1,42 @@
+[package]
+name = "super-dev-knowledge"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Super Dev knowledge base — BM25 + optional vector retrieval, replacing the flat-folder approach."
+
+[dependencies]
+super-dev-spec = { workspace = true }
+
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }
+# Stable content hash for the corpus cache (truncated SHA-256). SHA-256 is
+# fixed by spec, so the cache survives Rust-stdlib hasher changes that would
+# otherwise invalidate the whole .super-dev/kb-index/ between toolchain bumps.
+sha2 = { workspace = true }
+
+# Optional: real OpenAI embeddings HTTP transport. Off by default so the
+# crate stays zero-network-dependency in its default build (BM25-only,
+# fully offline). Enable with `--features super-dev-knowledge/vector`.
+reqwest = { workspace = true, optional = true }
+# tokio is needed for the retry/backoff sleep in the vector transport; pulled
+# in only when the `vector` feature is on (reqwest already depends on it, but
+# we call tokio::time::sleep directly).
+tokio = { workspace = true, optional = true }
+
+[features]
+default = []
+# Enable the real HTTP embeddings transport (POST /v1/embeddings). Without
+# this feature, `vector::is_enabled()` is a compile-time false and the
+# crate pulls in no HTTP dependency at all.
+vector = ["dep:reqwest", "dep:tokio"]
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
+tempfile = "3"
+tokio = { workspace = true }

@@ -1,39 +1,29 @@
 //! `super-dev-host` — drive an already-logged-in host CLI as a subprocess.
 //!
-//! Super Dev 4.x's primary execution mode does not call any LLM API and
-//! does not need an API key. Instead it spawns the host CLI the user has
-//! already installed and authenticated (`claude`, `codex`, `gemini`,
-//! `droid`, `opencode`, `cursor-agent`, `qwen`, `cn`, `copilot`, `aider`)
-//! in non-interactive mode and captures the response.
+//! Super Dev's primary execution mode does not call any LLM API and does not
+//! need an API key. Instead it spawns a host CLI the user has already
+//! installed and authenticated, in non-interactive mode, and captures the
+//! response.
+//!
+//! Super Dev drives **exactly two** host CLIs as first-class workers:
+//!
+//! | id            | binary    | non-interactive form                              |
+//! |---------------|-----------|---------------------------------------------------|
+//! | `claude-code` | `claude`  | `claude --print --output-format text "<p>"`       |
+//! | `codex`       | `codex`   | `codex exec --skip-git-repo-check --sandbox …`    |
 //!
 //! Each driver implements [`super_dev_runtime::Runtime`] so the existing
 //! `AgentRunner` machinery drives it unchanged — a host CLI is just
-//! another "prompt in, text out" backend.
+//! another "prompt in, text out" backend. Drivers additionally expose
+//! [`HostDriver::probe`] to report whether the underlying CLI is installed +
+//! reachable before a run starts.
 //!
-//! Drivers additionally expose [`HostDriver::probe`] to report whether
-//! the underlying CLI is installed + reachable before a run starts.
+//! Run `super-dev doctor` to see which of the supported CLIs are installed on
+//! the current machine.
 //!
-//! ## Backend matrix (13 hosts)
-//!
-//! | id              | binary           | non-interactive form                              |
-//! |-----------------|------------------|---------------------------------------------------|
-//! | `claude-code`   | `claude`         | `claude --print --output-format text "<p>"`       |
-//! | `codex`         | `codex`          | `codex exec --skip-git-repo-check --sandbox …`    |
-//! | `gemini`        | `gemini`         | `gemini -p "<prompt>"`                            |
-//! | `droid`         | `droid`          | `droid exec --auto low -o text "<p>"`             |
-//! | `opencode`      | `opencode`       | `opencode run "<prompt>"`                         |
-//! | `cursor-agent`  | `cursor-agent`   | `cursor-agent -p --output-format text "<p>"`      |
-//! | `qwen`          | `qwen`           | `qwen -p "<prompt>"`                              |
-//! | `continue`      | `cn`             | `cn -p "<prompt>"`                                |
-//! | `copilot`       | `copilot`        | `copilot -p --allow-all-tools "<p>"`              |
-//! | `aider`         | `aider`          | `aider --yes --no-stream --message "<p>"`         |
-//! | `trae`          | `trae-cli`       | `trae-cli run "<prompt>"`                         |
-//! | `plandex`       | `plandex`        | `plandex tell --skip-menu --stop "<p>"`           |
-//! | `cody`          | `cody`           | `cody chat --message "<prompt>"`                  |
-//!
-//! See [`SimpleHostDriver`] for the generic driver shared by every
-//! backend below the top two — and [`ClaudeCodeDriver`] /
-//! [`CodexDriver`] for the bespoke ones.
+//! Users who do not have either CLI can instead point Super Dev at a custom
+//! OpenAI-compatible or Anthropic HTTP endpoint (the `super-dev-runtime`
+//! `http` module) — that path is configured via the TUI's `/provider` wizard.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs, clippy::all, clippy::pedantic)]
@@ -41,19 +31,18 @@
 
 pub mod claude;
 pub mod codex;
-pub mod simple;
 
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
+use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 
 pub use claude::ClaudeCodeDriver;
 pub use codex::CodexDriver;
-pub use simple::SimpleHostDriver;
 
 /// Outcome of probing a host CLI for availability.
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -182,21 +171,35 @@ pub(crate) async fn run_subprocess(call: SubprocessCall<'_>) -> Result<Subproces
         }
     }
 
-    let output = match tokio::time::timeout(call.timeout, child.wait_with_output()).await {
-        Ok(Ok(out)) => out,
+    // Capture stdout/stderr separately so we still own `child` and can kill
+    // it explicitly on timeout (preventing orphaned grandchild processes).
+    let mut stdout_buf = Vec::new();
+    let mut stderr_buf = Vec::new();
+    if let Some(mut so) = child.stdout.take() {
+        let _ = so.read_to_end(&mut stdout_buf).await;
+    }
+    if let Some(mut se) = child.stderr.take() {
+        let _ = se.read_to_end(&mut stderr_buf).await;
+    }
+
+    let status = match tokio::time::timeout(call.timeout, child.wait()).await {
+        Ok(Ok(s)) => s,
         Ok(Err(e)) => return Err(format!("`{}` failed: {e}", call.program)),
         Err(_) => {
+            // Timeout — explicitly kill to prevent orphaned processes.
+            let _ = child.start_kill();
+            let _ = child.wait().await;
             return Err(format!(
                 "`{}` timed out after {}s",
                 call.program,
                 call.timeout.as_secs()
-            ))
+            ));
         }
     };
 
-    if !output.status.success() {
-        let code = output.status.code().unwrap_or(-1);
-        let mut stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+    if !status.success() {
+        let code = status.code().unwrap_or(-1);
+        let mut stderr = String::from_utf8_lossy(&stderr_buf).into_owned();
         stderr.truncate(2048);
         return Err(format!(
             "`{}` exited with code {code}: {}",
@@ -205,7 +208,41 @@ pub(crate) async fn run_subprocess(call: SubprocessCall<'_>) -> Result<Subproces
         ));
     }
 
-    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+    // When exit-0 but stdout is empty, inspect stderr — many host CLIs
+    // (Claude Code, Codex) write auth/logged-out errors to stderr while
+    // still returning exit code 0. Surface these so the user gets an
+    // actionable error instead of a silent empty-body template fallback.
+    let stdout_raw = String::from_utf8_lossy(&stdout_buf).into_owned();
+    let stderr_raw = String::from_utf8_lossy(&stderr_buf).into_owned();
+    if stdout_raw.trim().is_empty() && !stderr_raw.trim().is_empty() {
+        let mut stderr_capped = stderr_raw.clone();
+        stderr_capped.truncate(2048);
+        return Err(format!(
+            "`{}` exited 0 but stdout is empty — stderr: {}",
+            call.program,
+            stderr_capped.trim()
+        ));
+    }
+
+    let stdout = {
+        let mut s = stdout_raw;
+        if s.len() > 262_144 {
+            let mut idx = 262_144;
+            while !s.is_char_boundary(idx) {
+                idx -= 1;
+            }
+            s.truncate(idx);
+            s.push_str("\n...[super-dev: stdout truncated at 256 KiB]");
+            // Also surface in the log so the truncation isn't only visible
+            // in the host's stdout tail (a long run might scroll past it).
+            tracing::warn!(
+                program = call.program,
+                orig_len = s.len(),
+                "host stdout exceeded 256 KiB and was truncated"
+            );
+        }
+        s
+    };
     let cleaned = clean_output(&stdout);
     tracing::debug!(
         program = call.program,
@@ -221,6 +258,37 @@ pub(crate) async fn run_subprocess(call: SubprocessCall<'_>) -> Result<Subproces
 pub(crate) fn clean_output(raw: &str) -> String {
     let no_ansi = strip_ansi(raw);
     no_ansi.trim().to_string()
+}
+
+/// Map a `run_subprocess` error string into a typed [`RuntimeError`],
+/// turning "timed out after Ns" into [`RuntimeError::Timeout`] and
+/// everything else into [`RuntimeError::HostProcess`].
+///
+/// Shared by every host driver so the timeout-vs-other-failure split is
+/// consistent (previously `codex.rs` mapped *all* errors, including
+/// timeouts, to `HostProcess`, which broke caller-side timeout detection).
+pub(crate) fn map_subprocess_error(err: String) -> super_dev_runtime::RuntimeError {
+    if err.contains("timed out") {
+        let secs = err
+            .split("after ")
+            .nth(1)
+            .and_then(|s| s.split('s').next())
+            .and_then(|n| n.parse::<u64>().ok())
+            .unwrap_or(300);
+        super_dev_runtime::RuntimeError::Timeout(secs, err)
+    } else {
+        super_dev_runtime::RuntimeError::HostProcess(err)
+    }
+}
+
+/// Read the `SUPER_DEV_WORKER_TIMEOUT` env override (seconds). Returns
+/// `DEFAULT_TIMEOUT` when unset or unparseable. Used by every driver so
+/// the timeout knob works for both backends, not just `claude-code`.
+pub(crate) fn worker_timeout_from_env() -> Duration {
+    std::env::var("SUPER_DEV_WORKER_TIMEOUT")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .map_or(DEFAULT_TIMEOUT, Duration::from_secs)
 }
 
 fn strip_ansi(s: &str) -> String {
@@ -265,51 +333,23 @@ pub(crate) fn merge_prompt(req: &super_dev_runtime::CompletionRequest) -> String
 }
 
 /// Build a driver for the given backend id, or `None` for an unknown id.
+///
+/// Super Dev drives exactly two host CLIs as first-class workers:
+/// `claude-code` and `codex`. Both are bespoke drivers with dedicated
+/// output handling and tests. (A generic `SimpleHostDriver` for other CLIs
+/// existed historically but was removed to keep the surface focused.)
 #[must_use]
 pub fn driver_for(backend_id: &str) -> Option<Box<dyn HostDriver>> {
     match backend_id {
         "claude-code" => Some(Box::new(ClaudeCodeDriver::default())),
         "codex" => Some(Box::new(CodexDriver::default())),
-        "droid" => Some(Box::new(SimpleHostDriver::droid())),
-        "opencode" => Some(Box::new(SimpleHostDriver::opencode())),
-        "gemini" | "antigravity" => Some(Box::new(SimpleHostDriver::gemini())),
-        "cursor-agent" => Some(Box::new(SimpleHostDriver::cursor_agent())),
-        "qwen" => Some(Box::new(SimpleHostDriver::qwen())),
-        "continue" => Some(Box::new(SimpleHostDriver::continue_cli())),
-        "copilot" => Some(Box::new(SimpleHostDriver::copilot())),
-        "aider" => Some(Box::new(SimpleHostDriver::aider())),
-        "trae" => Some(Box::new(SimpleHostDriver::trae())),
-        "plandex" => Some(Box::new(SimpleHostDriver::plandex())),
-        "cody" => Some(Box::new(SimpleHostDriver::cody())),
-        "goose" => Some(Box::new(SimpleHostDriver::goose())),
-        "kimi" => Some(Box::new(SimpleHostDriver::kimi())),
-        "amp" => Some(Box::new(SimpleHostDriver::amp())),
-        "junie" => Some(Box::new(SimpleHostDriver::junie())),
-        "grok-build" => Some(Box::new(SimpleHostDriver::grok_build())),
-        "amazon-q" => Some(Box::new(SimpleHostDriver::amazon_q())),
-        "crush" => Some(Box::new(SimpleHostDriver::crush())),
-        "gptme" => Some(Box::new(SimpleHostDriver::gptme())),
-        "codebuddy" => Some(Box::new(SimpleHostDriver::codebuddy())),
-        "qoder" => Some(Box::new(SimpleHostDriver::qoder())),
         _ => None,
     }
 }
 
-/// All backend ids `driver_for` accepts. Order is the canonical display
-/// order for the TUI picker — flagship hosts first.
-pub const BACKEND_IDS: &[&str] = &[
-    "claude-code",
-    "codex",
-    "gemini",
-    "droid",
-    "opencode",
-    "qwen",
-    "copilot",
-    "trae",
-    "codebuddy",
-    "qoder",
-    "kimi",
-];
+/// All backend ids `driver_for` accepts. Super Dev drives exactly two host
+/// CLIs: Claude Code and Codex.
+pub const BACKEND_IDS: &[&str] = &["claude-code", "codex"];
 
 /// Default per-call timeout for a host CLI invocation.
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(300);
@@ -432,8 +472,8 @@ mod tests {
     }
 
     #[test]
-    fn backend_count_is_eleven() {
-        assert_eq!(BACKEND_IDS.len(), 11);
+    fn backend_count_matches_driver_for() {
+        assert_eq!(BACKEND_IDS.len(), 2);
     }
 
     #[test]

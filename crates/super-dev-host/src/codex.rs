@@ -42,7 +42,7 @@ use super_dev_runtime::{
 
 use crate::{
     default_workspace, merge_prompt, run_subprocess, HostDriver, ProbeResult, PromptChannel,
-    SubprocessCall, DEFAULT_TIMEOUT,
+    SubprocessCall,
 };
 
 /// Drives the `codex` CLI as a subprocess.
@@ -59,7 +59,7 @@ impl Default for CodexDriver {
             program: std::env::var("SUPER_DEV_CODEX_BIN").unwrap_or_else(|_| "codex".to_string()),
             exec_subcmd: std::env::var("SUPER_DEV_CODEX_EXEC_SUBCMD")
                 .unwrap_or_else(|_| "exec".to_string()),
-            timeout: DEFAULT_TIMEOUT,
+            timeout: crate::worker_timeout_from_env(),
         }
     }
 }
@@ -125,7 +125,7 @@ impl Runtime for CodexDriver {
             timeout: self.timeout,
         })
         .await
-        .map_err(RuntimeError::HostProcess)?;
+        .map_err(crate::map_subprocess_error)?;
 
         Ok(CompletionResponse {
             text: out.stdout,

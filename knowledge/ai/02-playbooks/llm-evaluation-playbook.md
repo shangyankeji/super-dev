@@ -1,3 +1,13 @@
+---
+id: llm-evaluation-playbook
+title: LLM 评估 Playbook
+domain: ai
+category: 02-playbooks
+difficulty: intermediate
+tags: [ai, evaluation, llm, llm-as-judge, playbook, 人工评估, 回答, 基准测试]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # LLM 评估 Playbook
 
 ## 概述

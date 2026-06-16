@@ -1,3 +1,13 @@
+---
+id: agent-development-complete
+title: Agent 开发完整指南
+domain: ai
+category: 01-standards
+difficulty: intermediate
+tags: [agent, ai, complete, development, memory, multi-agent, react, tool]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Agent 开发完整指南
 
 ## 概述

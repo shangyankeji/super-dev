@@ -1,3 +1,13 @@
+---
+id: operations-glossary
+title: 运维/SRE 术语表 (Operations & SRE Glossary)
+domain: operations
+category: 06-glossary
+difficulty: intermediate
+tags: [agent, checklist, glossary, operations, 可观测性, 基础设施与架构, 容量与性能, 弹性工程]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 运维/SRE 术语表 (Operations & SRE Glossary)
 
 > 收录 50+ 核心运维与 SRE 术语，覆盖 SRE 理念、可观测性、故障管理、弹性工程和架构模式等领域。

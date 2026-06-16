@@ -1,3 +1,13 @@
+---
+id: case-netflix-microservices
+title: 案例：Netflix 微服务架构演进
+domain: architecture
+category: 05-cases
+difficulty: intermediate
+tags: [agent, architecture, case, checklist, microservices, netflix, 之前, 复用要点]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 案例：Netflix 微服务架构演进
 
 > 从单体到 SOA 到微服务再到服务网格，Netflix 在 10 年间完成了四个阶段的架构演进。本案例详细记录每个阶段的背景、决策、实施路径和经验教训。

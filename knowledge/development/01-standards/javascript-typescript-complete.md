@@ -1,3 +1,13 @@
+---
+id: javascript-typescript-complete
+title: JavaScript/TypeScript 完整指南
+domain: development
+category: 01-standards
+difficulty: intermediate
+tags: [complete, development, javascript, typescript, 学习路径, 最佳实践, 核心概念, 概述]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # JavaScript/TypeScript 完整指南
 
 ## 概述

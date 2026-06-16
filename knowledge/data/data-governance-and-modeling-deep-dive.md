@@ -1,3 +1,13 @@
+---
+id: data-governance-and-modeling-deep-dive
+title: data-governance-and-modeling-deep-dive
+domain: data
+category: data-governance-and-modeling-deep-dive.md
+difficulty: intermediate
+tags: [and, data, deep, dive, governance, modeling, 数据环节深度知识库]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 开发：Excellent（11964948@qq.com）
 
 ## 数据环节深度知识库

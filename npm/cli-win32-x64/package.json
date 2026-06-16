@@ -1,6 +1,6 @@
 {
   "name": "@super-dev/cli-win32-x64",
-  "version": "4.4.0",
+  "version": "4.6.0",
   "description": "super-dev prebuilt binary for Windows (x86_64 / msvc).",
   "homepage": "https://github.com/shangyankeji/super-dev",
   "repository": {

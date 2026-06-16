@@ -1,19 +1,21 @@
 //! `super-dev` — the single binary entrypoint.
 //!
-//! 4.4+ verbs (the standalone `tui` subcommand and the legacy
-//! `install` / `uninstall` / `hook` verbs were dropped — the TUI is now
-//! the default entry, and host injection is gone):
+//! The recommended entry is to run the binary with **no subcommand**, which
+//! launches the chat TUI. From there every feature is reachable via slash
+//! commands (`/run`, `/continue`, `/provider`, `/backend`, `/status`, …).
 //!
-//! - (none)                  launch the chat TUI (recommended entry)
+//! Subcommands exist for scripting / CI and for the architectural non-negotiable
+//! real-time governance hook (called *by* a host CLI, not a human). The visible
+//! surface is intentionally tiny:
+//!
+//! - (none)                  launch the chat TUI (the recommended entry)
 //! - `init`                  write the `super-dev.yaml` spec manifest
-//! - `run <req>`             drive research → docs, pause at `docs_confirm`
-//! - `continue`              approve the active gate (reuses persisted backend)
-//! - `revise <text>`         keep the active gate, request revisions
-//! - `spec`                  print `SUPER_DEV_HOST_SPEC_V1`
-//! - `verify`                inspect workspace conformance + worker
-//! - `report`                emit the SD-EVID-004 compliance mapping
-//! - `doctor`                self-test
-//! - `examples` / `guide`    cheat-sheet / walkthrough
+//! - `install --host <id>`   wire the real-time governance hook into a host CLI
+//!
+//! The rest (`run` / `continue` / `revise` / `spec` / `verify` / `report` /
+//! `doctor` / `examples` / `guide` / `rollback` / `history`) are hidden from
+//! `--help` but still work for scripts, and mirror TUI slash commands.
+//! `hook` / `uninstall` are hidden internals.
 //!
 //! Anything outside this surface is intentionally absent.
 
@@ -34,15 +36,19 @@
 )]
 
 mod doctor;
+mod hook;
 
+use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
 
+use super_dev_agent::ChannelSink;
 use super_dev_agent::{
-    classify_reply, read_workflow_state, AgentRunner, Gate, GateOutcome, RunOptions, RunReport,
-    WorkflowState,
+    classify_reply, list_snapshots, read_workflow_state, restore_snapshot, AgentRunner, Gate,
+    GateOutcome, RunOptions, RunReport, WorkflowState,
 };
 use super_dev_governance::{compliance::write_compliance_mapping, record_tool_call};
 use super_dev_runtime::{OfflineRuntime, RuntimeKind};
@@ -53,13 +59,13 @@ use super_dev_spec::{CLAUSES, PHASE_CHAIN, SPEC_VERSION};
 #[command(
     name = "super-dev",
     version,
-    about = "AI 编码的项目经理 — drives your logged-in AI coding CLI (11 backends supported) through a 9-phase commercial delivery pipeline. No API key needed.",
+    about = "AI 编码的项目经理 — 9-phase commercial delivery pipeline. Run `super-dev` (no args) for the TUI. Drive your logged-in Claude Code / Codex CLI, or a custom OpenAI/Anthropic API endpoint. No API key needed for host-CLI mode.",
     long_about = None,
 )]
 struct Cli {
-    /// Subcommand: `init` / `run` / `continue` / `revise` / `spec` /
-    /// `verify` / `report` / `doctor` / `examples` / `guide`.
-    /// **Omit to launch the TUI** — that is the recommended user entry.
+    /// Subcommand. **Omit to launch the TUI** — that is the recommended entry.
+    /// `init` bootstraps a workspace; `install` wires the governance hook.
+    /// All other verbs are hidden but still work for scripts/CI.
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -96,19 +102,12 @@ enum Command {
     },
     /// Drive the pipeline from `research` to the first gate (`docs_confirm`).
     #[command(
+        hide = true,
         long_about = "Run the pipeline non-interactively from `research` to the first\n\
                       gate (`docs_confirm`). Workers:\n\
                       \n  \
                       --backend claude-code    Anthropic Claude Code\n  \
                       --backend codex          OpenAI Codex\n  \
-                      --backend gemini         Google Gemini CLI\n  \
-                      --backend droid          Factory.ai Droid\n  \
-                      --backend opencode       OpenCode (open-source)\n  \
-                      --backend cursor-agent   Cursor Agent (headless)\n  \
-                      --backend qwen           Alibaba Qwen Code\n  \
-                      --backend continue       Continue (cn)\n  \
-                      --backend copilot        GitHub Copilot CLI\n  \
-                      --backend aider          Aider (--message mode)\n  \
                       (default)                offline deterministic templates\n\
                       \n\
                       All host backends drive the user's already-installed,\n\
@@ -120,9 +119,6 @@ enum Command {
         after_help = "EXAMPLES:\n  \
                       super-dev run \"做一个登录系统\"                       # offline\n  \
                       super-dev run \"...\" --backend claude-code              # Claude Code\n  \
-                      super-dev run \"...\" --backend gemini                   # Google Gemini\n  \
-                      super-dev run \"...\" --backend droid                    # Factory Droid\n  \
-                      super-dev run \"...\" --backend cursor-agent             # Cursor headless\n  \
                       super-dev run \"...\" --backend codex --slug my-mvp      # explicit slug"
     )]
     Run {
@@ -144,6 +140,7 @@ enum Command {
     },
     /// Approve the active gate and continue the pipeline.
     #[command(
+        hide = true,
         long_about = "Approve the currently-active gate and drive the pipeline to its\n\
                       next pause point. Call after reviewing the artifacts a `run` or\n\
                       `continue` previously produced.\n\
@@ -170,6 +167,7 @@ enum Command {
     },
     /// Stay in the active gate and record a revision request.
     #[command(
+        hide = true,
         long_about = "Record a revision request against the active gate. The pipeline\n\
                       does NOT advance — it stays at the same gate so you can iterate\n\
                       on the artifacts. The revision text is appended to\n\
@@ -186,8 +184,28 @@ enum Command {
         #[arg(long)]
         project_root: Option<PathBuf>,
     },
+    /// Roll the pipeline back to a previous state snapshot.
+    #[command(
+        hide = true,
+        long_about = "Restore workflow-state.json from a previous transition snapshot.\n\n                      Every phase transition is snapshotted to .super-dev/history/. Use\n                      `super-dev history` to list available snapshots, then `super-dev rollback\n                      <timestamp>` to restore one. This undoes the most recent transition(s)\n                      without losing the generated artifacts on disk.",
+        after_help = "EXAMPLES:\n                        super-dev history                   # list snapshots\n                        super-dev rollback 20260614T120000  # restore by timestamp\n                        super-dev rollback latest           # undo the last transition"
+    )]
+    Rollback {
+        /// Snapshot timestamp (from `super-dev history`), or `latest`.
+        timestamp: String,
+        /// Workspace root; defaults to current directory.
+        #[arg(long)]
+        project_root: Option<PathBuf>,
+    },
+    /// List available rollback snapshots.
+    History {
+        /// Workspace root; defaults to current directory.
+        #[arg(long)]
+        project_root: Option<PathBuf>,
+    },
     /// Print the `SUPER_DEV_HOST_SPEC_V1` specification.
     #[command(
+        hide = true,
         long_about = "Print the SUPER_DEV_HOST_SPEC_V1 specification — the normative\n\
                       contract Super Dev enforces (25 clauses across 4 layers + 9\n\
                       phases + 2 gates).",
@@ -203,6 +221,7 @@ enum Command {
     },
     /// Verify spec conformance of a workspace.
     #[command(
+        hide = true,
         long_about = "Print a structured conformance report for the workspace:\n\
                       spec manifest health, workflow state, evidence chain row counts,\n\
                       latest quality-gate score, and proof-pack zips.",
@@ -217,6 +236,7 @@ enum Command {
     },
     /// Emit the SD-EVID-004 compliance mapping document.
     #[command(
+        hide = true,
         long_about = "Generate the SD-EVID-004 compliance mapping document. Takes the\n\
                       in-workspace evidence files (audit JSONLs + quality report) and\n\
                       maps every clause that fired to the corresponding controls in\n\
@@ -237,6 +257,7 @@ enum Command {
     },
     /// Self-test: binary integrity, workspace permissions, manifest.
     #[command(
+        hide = true,
         long_about = "Run a self-test that diagnoses common 'installed but not working'\n\
                       situations: binary identity, embedded spec validity, workspace\n\
                       writability, SD-META-001 manifest health.\n\
@@ -253,6 +274,7 @@ enum Command {
     },
     /// Show common-workflow examples for new users.
     #[command(
+        hide = true,
         long_about = "Print a curated set of common-workflow examples. Useful as a\n\
                       cheat-sheet — every important command is shown with a real\n\
                       invocation."
@@ -260,43 +282,72 @@ enum Command {
     Examples,
     /// 60-second guided walkthrough for new users (interactive).
     #[command(
+        hide = true,
         long_about = "Run a short, mode-by-mode walkthrough of Super Dev. Prints what\n\
                       each command does, how the pipeline progresses, and what\n\
                       artifacts you can expect. No side effects."
     )]
     Guide,
+    /// Pre-write governance hook (called by Claude Code's PreToolUse).
+    ///
+    /// Reads a PreToolUse JSON payload from stdin, runs the governance rules
+    /// (emoji / color / AI-slop), and prints a permission decision. This is
+    /// NOT meant to be called by humans — Claude Code invokes it via the
+    /// hook registered by `super-dev install`.
+    #[command(hide = true)]
+    Hook {
+        /// Which governance check to run: `pre-write` (all code rules) or
+        /// `check-emoji` / `check-color` / `check-slop` (individual).
+        check: String,
+    },
+    /// Install the Super Dev pre-write governance hook into a host CLI.
+    ///
+    /// Currently supports Claude Code (writes `.claude/settings.json` with a
+    /// PreToolUse hook pointing at this binary). Codex is honestly
+    /// reported as unsupported — they rely on the quality-gate hard block
+    /// instead of real-time interception.
+    #[command(
+        long_about = "Install the Super Dev pre-write governance hook into a host CLI.\n\
+                      \n\
+                      Supported hosts:\n  \
+                      claude-code   writes .claude/settings.json PreToolUse hook\n\
+                      \n\
+                      The hook intercepts every Write/Edit tool call and refuses\n\
+                      emoji-as-icon / hardcoded-color / AI-slop code in real time\n\
+                      (SD-CODE-001/002/005). Codex lacks\n\
+                      a PreToolUse hook surface — they rely on the quality-gate\n\
+                      hard block instead."
+    )]
+    Install {
+        /// Host to install into: `claude-code` (default).
+        #[arg(long, default_value = "claude-code")]
+        host: String,
+        /// Workspace root; defaults to current directory.
+        #[arg(long)]
+        project_root: Option<PathBuf>,
+    },
+    /// Remove the Super Dev governance hook from a host CLI.
+    #[command(hide = true)]
+    Uninstall {
+        /// Host to uninstall from.
+        #[arg(long, default_value = "claude-code")]
+        host: String,
+        /// Workspace root; defaults to current directory.
+        #[arg(long)]
+        project_root: Option<PathBuf>,
+    },
 }
 
 /// Host CLI backend selector for `super-dev run --backend`.
 ///
-/// Each variant maps 1:1 onto a registered [`super_dev_host::HostDriver`].
-/// Adding a new host requires (1) a driver in `super-dev-host`, (2) a
-/// variant here, (3) the matching id pair in [`BackendArg::id`] /
-/// [`BackendArg::from_id`].
+/// Super Dev drives exactly two host CLIs: Claude Code and Codex. A unit test
+/// asserts [`BACKEND_ARG_IDS`] stays equal to [`super_dev_host::BACKEND_IDS`].
 #[derive(Debug, Copy, Clone, clap::ValueEnum)]
 enum BackendArg {
     /// Drive Claude Code CLI.
     ClaudeCode,
     /// Drive Codex CLI.
     Codex,
-    /// Drive Gemini CLI.
-    Gemini,
-    /// Drive Droid CLI.
-    Droid,
-    /// Drive OpenCode CLI.
-    Opencode,
-    /// Drive Qwen Code CLI.
-    Qwen,
-    /// Drive Copilot CLI.
-    Copilot,
-    /// Drive Trae CLI.
-    Trae,
-    /// Drive CodeBuddy CLI.
-    Codebuddy,
-    /// Drive Qoder CLI.
-    Qoder,
-    /// Drive Kimi Code CLI.
-    Kimi,
 }
 
 impl BackendArg {
@@ -304,15 +355,6 @@ impl BackendArg {
         match self {
             Self::ClaudeCode => "claude-code",
             Self::Codex => "codex",
-            Self::Gemini => "gemini",
-            Self::Droid => "droid",
-            Self::Opencode => "opencode",
-            Self::Qwen => "qwen",
-            Self::Copilot => "copilot",
-            Self::Trae => "trae",
-            Self::Codebuddy => "codebuddy",
-            Self::Qoder => "qoder",
-            Self::Kimi => "kimi",
         }
     }
 
@@ -320,29 +362,38 @@ impl BackendArg {
         match id {
             "claude-code" => Some(Self::ClaudeCode),
             "codex" => Some(Self::Codex),
-            "gemini" => Some(Self::Gemini),
-            "droid" => Some(Self::Droid),
-            "opencode" => Some(Self::Opencode),
-            "qwen" => Some(Self::Qwen),
-            "copilot" => Some(Self::Copilot),
-            "trae" => Some(Self::Trae),
-            "codebuddy" => Some(Self::Codebuddy),
-            "qoder" => Some(Self::Qoder),
-            "kimi" => Some(Self::Kimi),
             _ => None,
         }
     }
+
+    /// Every id this enum can produce. Kept in sync with
+    /// [`super_dev_host::BACKEND_IDS`] by the `backend_arg_ids_match_host` test.
+    fn all_ids() -> &'static [&'static str] {
+        &["claude-code", "codex"]
+    }
 }
+
+/// Re-export so the sync test and help text can reference the canonical list.
+const BACKEND_ARG_IDS: &[&str] = &["claude-code", "codex"];
 
 #[tokio::main]
 async fn main() -> Result<()> {
     init_tracing();
     let cli = Cli::parse();
 
-    // No subcommand → launch the TUI. The user types their requirement
-    // inside the conversation — this is the recommended user entry.
+    // No subcommand → launch the TUI (the recommended interactive entry).
+    // In a non-TTY environment (piped output, CI, docker), fall back to
+    // printing help instead of crashing on terminal setup.
     let Some(command) = cli.command else {
-        return cmd_tui().await;
+        if std::io::IsTerminal::is_terminal(&std::io::stdin()) {
+            return cmd_tui().await;
+        }
+        eprintln!(
+            "super-dev: no terminal detected — showing help.
+"
+        );
+        Cli::command().print_help()?;
+        return Ok(());
     };
 
     match command {
@@ -372,12 +423,20 @@ async fn main() -> Result<()> {
             backend,
         } => cmd_continue(project_root, backend).await,
         Command::Revise { text, project_root } => cmd_revise(text, project_root).await,
+        Command::Rollback {
+            timestamp,
+            project_root,
+        } => cmd_rollback(timestamp, project_root),
+        Command::History { project_root } => cmd_history(project_root),
         Command::Spec { clauses } => cmd_spec(clauses),
         Command::Verify { project_root } => cmd_verify(project_root),
         Command::Report { slug, project_root } => cmd_report(slug, project_root),
         Command::Doctor { project_root } => cmd_doctor(project_root),
         Command::Examples => cmd_examples(),
         Command::Guide => cmd_guide(),
+        Command::Hook { check } => cmd_hook(check),
+        Command::Install { host, project_root } => cmd_install(host, project_root),
+        Command::Uninstall { host, project_root } => cmd_uninstall(host, project_root),
     }
 }
 
@@ -388,6 +447,67 @@ fn cmd_examples() -> Result<()> {
 
 fn cmd_guide() -> Result<()> {
     println!("{}", include_str!("../templates/guide.txt"));
+    Ok(())
+}
+
+fn cmd_hook(check: String) -> Result<()> {
+    // Read the PreToolUse payload from stdin.
+    use std::io::Read;
+    let mut stdin = String::new();
+    let _ = std::io::stdin().read_to_string(&mut stdin);
+    match check.as_str() {
+        "pre-write" | "check-emoji" | "check-color" | "check-slop" => {
+            let decision = hook::run_pre_write(&stdin);
+            hook::print_decision(&decision);
+        }
+        _ => {
+            anyhow::bail!(
+                "unknown hook check: {check} (expected one of: pre-write, check-emoji, check-color, check-slop)"
+            );
+        }
+    }
+    Ok(())
+}
+
+fn cmd_install(host: String, project_root: Option<PathBuf>) -> Result<()> {
+    let root = project_root.unwrap_or_else(|| std::env::current_dir().expect("cwd"));
+    match host.as_str() {
+        "claude-code" => {
+            let path = hook::install_claude_hook(&root)?;
+            println!("✓ Installed Super Dev PreToolUse hook for Claude Code.");
+            println!("  → {}", path.display());
+            println!();
+            println!("Every Write/Edit tool call will now be checked for:");
+            println!("  • emoji-as-functional-icons (SD-CODE-001)");
+            println!("  • hardcoded color literals   (SD-CODE-002)");
+            println!("  • AI-slop / placeholders     (SD-CODE-002)");
+            println!("  • sensitive-path writes      (SD-SEC-001) — .git/.env/.ssh bypass-immune");
+            println!();
+            println!("To remove: super-dev uninstall --host claude-code");
+        }
+        other => {
+            anyhow::bail!(
+                "Real-time hook interception is only supported for Claude Code.\n\
+                 Host '{other}' lacks a PreToolUse hook surface. It relies on the\n\
+                 quality-gate hard block (SD-EVID-003) instead — which is always\n\
+                 active for every backend."
+            );
+        }
+    }
+    Ok(())
+}
+
+fn cmd_uninstall(host: String, project_root: Option<PathBuf>) -> Result<()> {
+    let root = project_root.unwrap_or_else(|| std::env::current_dir().expect("cwd"));
+    match host.as_str() {
+        "claude-code" => {
+            hook::uninstall_claude_hook(&root)?;
+            println!("✓ Removed Super Dev PreToolUse hook from Claude Code settings.");
+        }
+        other => {
+            anyhow::bail!("uninstall not applicable for host '{other}'");
+        }
+    }
     Ok(())
 }
 
@@ -426,6 +546,24 @@ fn cmd_init(slug: Option<String>, project_root: Option<PathBuf>, force: bool) ->
     // embedded in the binary — no external data directory needed.
     let scaffolded = scaffold_design_infrastructure(&workspace);
 
+    // Write a default .superdevrc config template so users can discover the
+    // knowledge / quality / pipeline configuration surface. Idempotent.
+    let superdevrc = workspace.join(".superdevrc");
+    if !superdevrc.is_file() {
+        let template = "# Super Dev project configuration. Edit and re-run to take effect.\n\
+# Docs: https://github.com/anthropics/super-dev/blob/main/crates/super-dev-agent/src/config.rs\n\
+\n[quality]\nthreshold = 90           # minimum weighted score to pass the quality gate\nskip_checks = []         # e.g. [\"Dark mode support\"]\n\
+\n[pipeline]\nskip_phases = []         # e.g. [\"research\"]\nmax_review_rounds = 3    # doc structural review retries\n\
+\n[knowledge]\nenabled = true           # enable BM25 / hybrid expert-knowledge retrieval\nengine = \"bm25\"          # bm25 (offline) or hybrid (needs OPENAI_API_KEY)\ntop_k = 6                # knowledge chunks injected per phase\n\
+\n# Custom API provider for THIS project (overrides the global default_provider).\n\
+# The named provider must be defined in ~/.super-dev/config.toml under [providers.<name>].\n\
+# Empty string = explicitly disable any custom provider for this project.\n\
+#[model]\n\
+#provider = \"deepseek\"\n";
+        let _ = std::fs::write(&superdevrc, template);
+        println!("  config:  {}", superdevrc.display());
+    }
+
     println!("Super Dev workspace initialised.");
     println!("  manifest: {}", path.display());
     println!(
@@ -438,8 +576,16 @@ fn cmd_init(slug: Option<String>, project_root: Option<PathBuf>, force: bool) ->
         println!("  design: {scaffolded} files scaffolded into knowledge/");
     }
     println!("\nNext steps:");
-    println!("  super-dev                          # launch the TUI");
-    println!("  super-dev run \"<requirement>\"      # or scripted form");
+    println!("  super-dev                          # launch the TUI (recommended)");
+    println!("  super-dev run \"<requirement>\"      # or scripted / CI form");
+    println!();
+    println!("Inside the TUI:");
+    println!("  /claude  or  /codex    drive a logged-in host CLI (Claude Code / Codex)");
+    println!("  /provider add <name> openai <base_url> <model>  custom API (DeepSeek/OpenRouter/Ollama/...)");
+    println!(
+        "  /provider key <name> ${{ENV_VAR}}                  set the API key via env reference"
+    );
+    println!("  /provider <name>                                  switch to that custom provider");
     Ok(())
 }
 
@@ -568,6 +714,70 @@ struct RunArgs {
     slug: String,
 }
 
+/// Attach a live event sink to the runner and spawn a background printer.
+/// Returns the sink-equipped runner and a JoinHandle for the printer task.
+/// The caller must `drop(runner)` then `await` the handle after their block
+/// finishes, so the channel closes cleanly.
+fn attach_live_sink<R: super_dev_runtime::Runtime>(
+    runner: AgentRunner<R>,
+) -> (AgentRunner<R>, tokio::task::JoinHandle<()>) {
+    let (sink, mut rx) = ChannelSink::new();
+    let sink = Arc::new(sink);
+    let runner = runner.with_event_sink(sink);
+    let printer = tokio::spawn(async move {
+        while let Some(event) = rx.recv().await {
+            print_engine_event(&event);
+        }
+    });
+    (runner, printer)
+}
+
+/// Render a single engine event to stderr for live CLI progress.
+fn print_engine_event(event: &super_dev_agent::EngineEvent) {
+    use super_dev_agent::EngineEvent;
+    match event {
+        EngineEvent::PipelineStarted { slug, .. } => {
+            eprintln!("▶ Pipeline started: {slug}");
+        }
+        EngineEvent::PhaseStarted { phase } => {
+            eprintln!("▶ Phase: {}", phase.id());
+        }
+        EngineEvent::Note(msg) => {
+            eprintln!("  {msg}");
+        }
+        EngineEvent::HostOutput { phase, line } => {
+            eprintln!("  │ [{phase:?}] {line}");
+        }
+        EngineEvent::ArtifactWritten { phase, path } => {
+            eprintln!("  ✓ {} → {}", phase.id(), path.display());
+        }
+        EngineEvent::PhaseCompleted { phase } => {
+            eprintln!("  ✓ {} complete", phase.id());
+        }
+        EngineEvent::GateOpened { gate } => {
+            eprintln!(
+                "
+⏸  Gate: {} — run `super-dev continue` to proceed.",
+                gate.id_str()
+            );
+        }
+        EngineEvent::BlockCompleted { final_phase, .. } => {
+            eprintln!("✓ Block complete at {}", final_phase.id());
+        }
+        EngineEvent::VerifyPassed { phase, duration_ms } => {
+            eprintln!("  ✓ {} verify OK ({}ms)", phase.id(), duration_ms);
+        }
+        EngineEvent::VerifyFailed { phase, .. } => {
+            eprintln!("  ✗ {} verify FAILED", phase.id());
+        }
+        EngineEvent::VerifySkipped { phase, .. } => {
+            eprintln!("  ⊘ {} verify skipped", phase.id());
+        }
+        _ => {}
+    }
+    let _ = std::io::stderr().flush();
+}
+
 async fn cmd_run(args: RunArgs) -> Result<()> {
     let project_root = resolve_root(args.project_root)?;
     let opts = RunOptions {
@@ -611,19 +821,25 @@ async fn cmd_run(args: RunArgs) -> Result<()> {
         );
         let runner = AgentRunner::new(driver, opts);
         runner.start().context("failed to start agent")?;
+        let (runner, printer) = attach_live_sink(runner);
         let report = runner
             .run_initial_block(true)
             .await
             .context("pipeline failure")?;
+        drop(runner);
+        let _ = printer.await;
         (report, label)
     } else {
         let label = "Offline deterministic templates (no AI; demos / CI)".to_string();
         let runner = AgentRunner::new(OfflineRuntime::new(RuntimeKind::Anthropic), opts);
         runner.start().context("failed to start agent")?;
+        let (runner, printer) = attach_live_sink(runner);
         let report = runner
             .run_initial_block(false)
             .await
             .context("pipeline failure")?;
+        drop(runner);
+        let _ = printer.await;
         (report, label)
     };
 
@@ -677,55 +893,63 @@ fn print_report(project_root: &Path, runtime_label: &str, report: &RunReport) {
     }
 }
 
-async fn cmd_continue(
-    project_root: Option<PathBuf>,
-    backend_override: Option<BackendArg>,
-) -> Result<()> {
-    let project_root = resolve_root(project_root)?;
-    let state = read_workflow_state(&project_root).ok_or_else(|| {
-        anyhow::anyhow!("no .super-dev/workflow-state.json — run `super-dev run` first")
-    })?;
+/// Which block to drive relative to the active gate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum GateBlock {
+    /// Approve the gate and advance past it.
+    Continue,
+    /// Keep the gate; regenerate the artifacts that produced it.
+    Revise,
+}
+
+/// Parse the persisted `active_gate` string into a [`Gate`], or bail with
+/// a clear message when none is open / the value is unrecognised.
+fn resolve_active_gate(state: &super_dev_agent::WorkflowState) -> Result<Gate> {
     if state.active_gate.is_empty() {
         anyhow::bail!("no active gate to approve (current phase: {})", state.phase);
     }
-    let gate = match state.active_gate.as_str() {
-        "docs_confirm" => Gate::DocsConfirm,
-        "preview_confirm" => Gate::PreviewConfirm,
-        other => anyhow::bail!("unknown active_gate `{other}` in workflow-state.json"),
-    };
+    // Delegate to the spec crate's typed parser (case-insensitive,
+    // fail-open) instead of hand-matching the two ids here — keeps this
+    // call site in sync with Gate if a third gate is ever added.
+    match Gate::from_id(&state.active_gate) {
+        Some(g) => Ok(g),
+        None => anyhow::bail!(
+            "unknown active_gate `{}` in workflow-state.json",
+            state.active_gate
+        ),
+    }
+}
 
-    // Record the approval as evidence
-    let clause = match gate {
-        Gate::DocsConfirm => "SD-FLOW-002",
-        Gate::PreviewConfirm => "SD-FLOW-003",
-    };
-    let _ = record_tool_call(
-        &project_root,
-        "super-dev/cli.continue",
-        "",
-        "approved",
-        clause,
-        &format!("user approved gate {}", gate.id_str()),
-        "",
-        None,
-    );
-
-    // Reconstruct RunOptions from the persisted workflow state so the
-    // slug and requirement stay consistent across `run` / `continue`.
+/// Shared driver for `continue` / `revise`: reconstruct `RunOptions` from
+/// the persisted state, resolve + probe the backend, run the appropriate
+/// block, and print the report. `requirement_override` lets `revise` fold
+/// the user's feedback into the worker prompt.
+async fn drive_gate_block(
+    project_root: &Path,
+    state: &super_dev_agent::WorkflowState,
+    gate: Gate,
+    backend_override: Option<BackendArg>,
+    requirement_override: Option<String>,
+    mode: GateBlock,
+) -> Result<()> {
+    // Reconstruct slug + requirement so `continue` / `revise` resolve the
+    // same artifacts the original `run` produced.
     let slug = if state.slug.is_empty() {
-        infer_slug(&project_root)
+        infer_slug(project_root)
     } else {
         state.slug.clone()
     };
-    let requirement = if state.requirement.is_empty() {
-        state
-            .note
-            .split_once(": ")
-            .map_or("(no requirement recorded)", |x| x.1)
-            .to_string()
-    } else {
-        state.requirement.clone()
-    };
+    let requirement = requirement_override.unwrap_or_else(|| {
+        if state.requirement.is_empty() {
+            state
+                .note
+                .split_once(": ")
+                .map_or("(no requirement recorded)", |x| x.1)
+                .to_string()
+        } else {
+            state.requirement.clone()
+        }
+    });
 
     // Resolve backend: explicit flag > persisted state > offline.
     let backend_id: Option<String> = backend_override
@@ -740,7 +964,7 @@ async fn cmd_continue(
         });
 
     let opts = RunOptions {
-        project_root: project_root.clone(),
+        project_root: project_root.to_path_buf(),
         requirement,
         slug,
         model: "claude-sonnet-4-6".to_string(),
@@ -749,6 +973,7 @@ async fn cmd_continue(
         seed_template: String::new(),
     };
 
+    let use_runtime = backend_id.is_some();
     let (report, runtime_label) = if let Some(id) = backend_id {
         let backend = BackendArg::from_id(&id)
             .ok_or_else(|| anyhow::anyhow!("unknown backend `{id}` in workflow-state.json"))?;
@@ -775,39 +1000,99 @@ async fn cmd_continue(
             backend.id()
         );
         let runner = AgentRunner::new(driver, opts);
-        let report = runner
-            .continue_from_gate(gate)
-            .await
-            .context("pipeline failure")?;
+        runner.start().context("failed to start agent")?;
+        let (runner, printer) = attach_live_sink(runner);
+        let report = if mode == GateBlock::Continue {
+            runner.continue_from_gate(gate).await
+        } else {
+            runner.revise_at_gate(gate, use_runtime).await
+        }
+        .context("pipeline failure")?;
+        drop(runner);
+        let _ = printer.await;
         (report, label)
     } else {
         let runner = AgentRunner::new(OfflineRuntime::new(RuntimeKind::Anthropic), opts);
-        let report = runner
-            .continue_from_gate(gate)
-            .await
-            .context("pipeline failure")?;
+        runner.start().context("failed to start agent")?;
+        let (runner, printer) = attach_live_sink(runner);
+        let report = if mode == GateBlock::Continue {
+            runner.continue_from_gate(gate).await
+        } else {
+            runner.revise_at_gate(gate, use_runtime).await
+        }
+        .context("pipeline failure")?;
+        drop(runner);
+        let _ = printer.await;
         (
             report,
             "Offline deterministic templates (no AI; demos / CI)".to_string(),
         )
     };
 
-    print_report(&project_root, &runtime_label, &report);
+    print_report(project_root, &runtime_label, &report);
     Ok(())
+}
+
+async fn cmd_continue(
+    project_root: Option<PathBuf>,
+    backend_override: Option<BackendArg>,
+) -> Result<()> {
+    let project_root = resolve_root(project_root)?;
+    let state = match super_dev_agent::read_workflow_state_diagnostic(&project_root) {
+        super_dev_agent::ReadState::Ok(s) => s,
+        super_dev_agent::ReadState::Missing => anyhow::bail!(
+            "no .super-dev/workflow-state.json — run `super-dev run` first"
+        ),
+        super_dev_agent::ReadState::Corrupt { path, error } => anyhow::bail!(
+            "workflow-state.json at {} is corrupt ({error}).              Run `super-dev rollback latest` or delete it, then `super-dev run` again.",
+            path.display()
+        ),
+    };
+    let gate = resolve_active_gate(&state)?;
+
+    // Record the approval as evidence
+    let clause = match gate {
+        Gate::DocsConfirm => "SD-FLOW-002",
+        Gate::PreviewConfirm => "SD-FLOW-003",
+    };
+    let _ = record_tool_call(
+        &project_root,
+        "super-dev/cli.continue",
+        "",
+        "approved",
+        clause,
+        &format!("user approved gate {}", gate.id_str()),
+        "",
+        None,
+    );
+
+    drive_gate_block(
+        &project_root,
+        &state,
+        gate,
+        backend_override,
+        None,
+        GateBlock::Continue,
+    )
+    .await
 }
 
 async fn cmd_revise(text: String, project_root: Option<PathBuf>) -> Result<()> {
     let project_root = resolve_root(project_root)?;
-    let state = read_workflow_state(&project_root).ok_or_else(|| {
-        anyhow::anyhow!("no .super-dev/workflow-state.json — run `super-dev run` first")
-    })?;
-    if state.active_gate.is_empty() {
-        anyhow::bail!("no active gate; revision applies only inside a gate.");
-    }
+    let state = match super_dev_agent::read_workflow_state_diagnostic(&project_root) {
+        super_dev_agent::ReadState::Ok(s) => s,
+        super_dev_agent::ReadState::Missing => anyhow::bail!(
+            "no .super-dev/workflow-state.json — run `super-dev run` first"
+        ),
+        super_dev_agent::ReadState::Corrupt { path, error } => anyhow::bail!(
+            "workflow-state.json at {} is corrupt ({error}).              Run `super-dev rollback latest` or delete it, then `super-dev run` again.",
+            path.display()
+        ),
+    };
+    let gate = resolve_active_gate(&state)?;
     let outcome = classify_reply(&text);
     match outcome {
         GateOutcome::Revise(notes) => {
-            println!("revision noted; still in gate `{}`.", state.active_gate);
             let _ = record_tool_call(
                 &project_root,
                 "super-dev/cli.revise",
@@ -818,8 +1103,39 @@ async fn cmd_revise(text: String, project_root: Option<PathBuf>) -> Result<()> {
                 "",
                 None,
             );
-            println!("To re-execute the affected phase after editing artifacts, run `super-dev run` again.");
-            Ok(())
+            // 4.8 auto-sediment: capture this revision as an ADR + lesson.
+            let _ = super_dev_agent::capture_gate_revision(
+                &project_root,
+                &state.active_gate,
+                &notes,
+                &state.requirement,
+            );
+            println!(
+                "Revising at gate `{}` — regenerating artifacts with your feedback…",
+                state.active_gate
+            );
+            // Fold the revision into the requirement so the worker
+            // actually incorporates the feedback, then re-run the block
+            // that produced this gate (docs for docs_confirm, frontend
+            // for preview_confirm). The pipeline pauses at the same gate.
+            let base_req = if state.requirement.is_empty() {
+                state
+                    .note
+                    .split_once(": ")
+                    .map_or(String::new(), |x| x.1.to_string())
+            } else {
+                state.requirement.clone()
+            };
+            let revised = format!("{base_req}\n\n## Revision request\n{notes}");
+            drive_gate_block(
+                &project_root,
+                &state,
+                gate,
+                None,
+                Some(revised),
+                GateBlock::Revise,
+            )
+            .await
         }
         GateOutcome::Approved => {
             // Defensive: user said "继续" via revise — treat as approval.
@@ -850,6 +1166,73 @@ fn cmd_spec(clauses_only: bool) -> Result<()> {
     println!(
         "{}",
         include_str!("../../../spec/SUPER_DEV_HOST_SPEC_V1.md")
+    );
+    Ok(())
+}
+
+fn cmd_history(project_root: Option<PathBuf>) -> Result<()> {
+    let project_root = resolve_root(project_root)?;
+    let snaps = list_snapshots(&project_root);
+    if snaps.is_empty() {
+        println!(
+            "No snapshots yet. Snapshots are created automatically on every phase transition."
+        );
+        println!("Run `super-dev run` / `super-dev continue` to advance the pipeline.");
+        return Ok(());
+    }
+    println!(
+        "Available rollback snapshots (newest first):
+"
+    );
+    let state = read_workflow_state(&project_root);
+    for (i, ts) in snaps.iter().enumerate() {
+        // Try to show what phase each snapshot would restore.
+        let snap_path = project_root
+            .join(".super-dev/history")
+            .join(format!("{ts}.json"));
+        let phase = std::fs::read_to_string(&snap_path)
+            .ok()
+            .and_then(|t| serde_json::from_str::<WorkflowState>(&t).ok())
+            .map_or("?".to_string(), |s| s.phase);
+        let marker = if i == 0 { " (latest)" } else { "" };
+        println!("  {ts}  →  phase: {phase}{marker}");
+    }
+    let _ = state;
+    println!(
+        "
+Roll back with:  super-dev rollback latest"
+    );
+    Ok(())
+}
+
+fn cmd_rollback(timestamp: String, project_root: Option<PathBuf>) -> Result<()> {
+    let project_root = resolve_root(project_root)?;
+    let snaps = list_snapshots(&project_root);
+    if snaps.is_empty() {
+        anyhow::bail!("no snapshots available — run `super-dev history` to check");
+    }
+    let target = if timestamp == "latest" {
+        snaps[0].clone()
+    } else {
+        // Allow partial match (e.g. user passes 20260614T12 to match 20260614T120000.123).
+        let matches: Vec<&String> = snaps.iter().filter(|s| s.starts_with(&timestamp)).collect();
+        match matches.len() {
+            0 => anyhow::bail!("no snapshot matches `{timestamp}`. Run `super-dev history`."),
+            1 => matches[0].clone(),
+            _ => anyhow::bail!(
+                "`{timestamp}` is ambiguous ({} matches). Use more digits.",
+                matches.len()
+            ),
+        }
+    };
+    let before = read_workflow_state(&project_root).map_or("none".to_string(), |s| s.phase);
+    restore_snapshot(&project_root, &target)?;
+    let after = read_workflow_state(&project_root).map_or("none".to_string(), |s| s.phase);
+    println!("Rolled back to snapshot {target}.");
+    println!("  phase: {before} → {after}");
+    println!("Note: artifacts on disk are NOT reverted — only workflow-state.json.");
+    println!(
+        "      The pipeline now resumes from phase `{after}` on the next `super-dev continue`."
     );
     Ok(())
 }
@@ -973,16 +1356,55 @@ fn cmd_report(slug: Option<String>, project_root: Option<PathBuf>) -> Result<()>
         Some(s) if !s.is_empty() => s,
         _ => infer_slug(&project_root),
     };
+
+    // 1. Compliance mapping (SD-EVID-004)
     match write_compliance_mapping(&project_root, &slug) {
         Some((path, doc)) => {
             println!("Wrote {} ({} clauses).", path.display(), doc.clauses.len());
             println!("  frameworks: {}", doc.summary.frameworks.join(", "));
         }
         None => {
-            anyhow::bail!(
-                "no evidence to map yet — run `super-dev run` and let the agent emit \
-                 audit logs / quality report first."
-            );
+            println!("(no compliance mapping yet — run `super-dev run` first)");
+        }
+    }
+
+    // 2. Project health summary — tech-debt trend + learned lessons.
+    println!("\n--- project health ---");
+    let output_dir = project_root.join("output");
+    let current_debt = super_dev_agent::tech_debt::scan_debt(&output_dir);
+    let ledger = super_dev_agent::tech_debt::read_ledger(&project_root);
+    if !ledger.is_empty() || !current_debt.is_empty() {
+        let trend = super_dev_agent::tech_debt::diff_against_ledger(&current_debt, &ledger);
+        println!(
+            "tech-debt: {} open ({} new, {} resolved, net {:+})",
+            trend.current_count, trend.new_count, trend.resolved_count, trend.net_change
+        );
+        let summary = super_dev_agent::tech_debt::summarise(&current_debt);
+        if summary.total > 0 {
+            let kinds: Vec<String> = summary
+                .by_kind
+                .iter()
+                .map(|(k, n)| format!("{k}: {n}"))
+                .collect();
+            println!("  by kind: {}", kinds.join(", "));
+            println!("  severity score: {}", summary.severity_total);
+        }
+    } else {
+        println!("tech-debt: none detected");
+    }
+
+    let lessons = super_dev_agent::list_sedimented_lessons(&project_root);
+    if lessons.is_empty() {
+        println!("learned lessons: none yet");
+    } else {
+        println!("learned lessons: {} sedimented file(s)", lessons.len());
+        for p in lessons.iter().take(5) {
+            if let Some(name) = p.file_name() {
+                println!("  • {}", name.to_string_lossy());
+            }
+        }
+        if lessons.len() > 5 {
+            println!("  ... and {} more", lessons.len() - 5);
         }
     }
     Ok(())
@@ -1013,26 +1435,17 @@ fn line_count(path: &std::path::Path) -> usize {
     std::fs::read_to_string(path).map_or(0, |t| t.lines().filter(|l| !l.trim().is_empty()).count())
 }
 
-fn project_root_from_env() -> PathBuf {
-    if let Ok(v) = std::env::var("CLAUDE_PROJECT_DIR") {
-        let p = PathBuf::from(v);
-        if p.is_dir() {
-            return p;
-        }
-    }
-    if let Ok(v) = std::env::var("SUPER_DEV_PROJECT_DIR") {
-        let p = PathBuf::from(v);
-        if p.is_dir() {
-            return p;
-        }
-    }
-    std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
-}
-
 fn resolve_root(project_root: Option<PathBuf>) -> Result<PathBuf> {
-    project_root
-        .map_or_else(std::env::current_dir, Ok)
-        .context("could not resolve project root")
+    if let Some(root) = project_root {
+        return Ok(root);
+    }
+    // Default to cwd. We deliberately do NOT honour CLAUDE_PROJECT_DIR /
+    // SUPER_DEV_PROJECT_DIR here: when the user runs `super-dev` from a
+    // directory, that directory IS the workspace they mean. The env vars
+    // would override cwd even when the user cd'd elsewhere (e.g. a smoke
+    // test in /tmp while CLAUDE_PROJECT_DIR still points at the real repo),
+    // which is surprising and wrong for the CLI entry.
+    std::env::current_dir().context("could not resolve project root (cwd unreadable)")
 }
 
 fn infer_slug(project_root: &std::path::Path) -> String {
@@ -1041,4 +1454,51 @@ fn infer_slug(project_root: &std::path::Path) -> String {
         .and_then(|s| s.to_str())
         .unwrap_or("project")
         .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// BackendArg must cover EXACTLY the ids that super-dev-host registers
+    /// as drivers. If you add a host driver, you must add the selector
+    /// variant too — otherwise `--backend <new>` is unreachable from the
+    /// CLI even though `driver_for` builds it.
+    #[test]
+    fn backend_arg_ids_match_host() {
+        let host_ids: std::collections::HashSet<&str> =
+            super_dev_host::BACKEND_IDS.iter().copied().collect();
+        let arg_ids: std::collections::HashSet<&str> = BACKEND_ARG_IDS.iter().copied().collect();
+        assert_eq!(
+            host_ids,
+            arg_ids,
+            "BackendArg and super-dev-host::BACKEND_IDS drifted.\n\
+             only in host: {:?}\n\
+             only in arg : {:?}",
+            host_ids.difference(&arg_ids).collect::<Vec<_>>(),
+            arg_ids.difference(&host_ids).collect::<Vec<_>>(),
+        );
+    }
+
+    /// Every selector id must resolve through driver_for — i.e. selecting a
+    /// backend in the CLI can never 404 at driver-build time.
+    #[test]
+    fn every_backend_arg_has_a_driver() {
+        for id in BACKEND_ARG_IDS {
+            assert!(
+                super_dev_host::driver_for(id).is_some(),
+                "BackendArg id `{id}` has no driver in super-dev-host::driver_for"
+            );
+        }
+    }
+
+    /// id() / from_id() must be round-trippable for every variant.
+    #[test]
+    fn backend_arg_id_roundtrip() {
+        for id in BACKEND_ARG_IDS {
+            let var =
+                BackendArg::from_id(id).unwrap_or_else(|| panic!("from_id({id}) returned None"));
+            assert_eq!(var.id(), *id, "id()/from_id() not inverse for {id}");
+        }
+    }
 }

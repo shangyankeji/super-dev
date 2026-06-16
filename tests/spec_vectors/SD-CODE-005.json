@@ -1,0 +1,60 @@
+{
+  "clause": "SD-CODE-005",
+  "description": "AI-slop anti-pattern detection — Lorem ipsum, generic 'Welcome to' headings, purple-to-pink gradients.",
+  "vectors": [
+    {
+      "file_path": "src/Hero.tsx",
+      "content": "<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit.</p>",
+      "expected_decision": "block"
+    },
+    {
+      "file_path": "src/Hero.tsx",
+      "content": "<h1>Welcome to MyApp</h1>",
+      "expected_decision": "block"
+    },
+    {
+      "file_path": "src/Hero.tsx",
+      "content": "background: linear-gradient(135deg, #7c3aed, #ec4899)",
+      "expected_decision": "block"
+    },
+    {
+      "file_path": "src/Hero.tsx",
+      "content": "<h1>Ship faster with real content</h1>",
+      "expected_decision": "pass"
+    },
+    {
+      "file_path": "src/Hero.tsx",
+      "content": "<div>Production-ready dashboard</div>",
+      "expected_decision": "pass"
+    },
+    {
+      "file_path": "src/Form.tsx",
+      "content": "<input placeholder='your code here' />",
+      "expected_decision": "block",
+      "note": "4.6+: unfilled placeholder text"
+    },
+    {
+      "file_path": "src/Api.tsx",
+      "content": "fetch('https://example.com/data')",
+      "expected_decision": "block",
+      "note": "4.6+: example.com placeholder URL"
+    },
+    {
+      "file_path": "src/Login.tsx",
+      "content": "const demo = 'test@test.com';",
+      "expected_decision": "block",
+      "note": "4.6+: fake placeholder email"
+    },
+    {
+      "file_path": "src/utils.ts",
+      "content": "console.log('debug');",
+      "expected_decision": "block",
+      "note": "4.6+: console.log debug residue"
+    },
+    {
+      "file_path": "README.md",
+      "content": "Lorem ipsum in docs is fine",
+      "expected_decision": "pass"
+    }
+  ]
+}

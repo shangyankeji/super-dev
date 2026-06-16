@@ -1,3 +1,13 @@
+---
+id: data-migration-checklist
+title: 数据迁移检查清单 (Data Migration Checklist)
+domain: development
+category: 03-checklists
+difficulty: intermediate
+tags: [checklist, data, development, migration, 人员与沟通, 参考, 回滚方案, 对业务的影响评估]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 数据迁移检查清单 (Data Migration Checklist)
 
 > 适用场景：数据库 Schema 变更、数据库引擎迁移、数据中心迁移、数据格式转换、大规模数据回填。

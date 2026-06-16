@@ -1,3 +1,13 @@
+---
+id: blog-content
+title: Seed Template: Blog / Content Site
+domain: seed-templates
+category: blog-content.md
+difficulty: intermediate
+tags: [article, articles, blog, content, gates, page, quality, rules]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Seed Template: Blog / Content Site
 
 > Use this structure when the product is a blog, documentation site, or content-heavy platform.

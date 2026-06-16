@@ -1,3 +1,13 @@
+---
+id: case-db-hotspot-optimization
+title: 案例研究：数据库热点治理——核心查询延迟降低 95%
+domain: development
+category: 05-cases
+difficulty: intermediate
+tags: [agent, case, checklist, development, hotspot, optimization, 元数据]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 案例研究：数据库热点治理——核心查询延迟降低 95%
 
 ## 元数据

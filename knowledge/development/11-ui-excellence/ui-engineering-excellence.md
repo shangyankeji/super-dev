@@ -1,3 +1,13 @@
+---
+id: ui-engineering-excellence
+title: UI Engineering Excellence - Comprehensive Guide
+domain: development
+category: 11-ui-excellence
+difficulty: intermediate
+tags: [aesthetic, architecture, component, development, direction, engineering, excellence, standard]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # UI Engineering Excellence - Comprehensive Guide
 
 > Consolidated reference for UI development lifecycle: aesthetic system, component standards, layout, motion, accessibility, theming, copywriting, scene recipes, anti-patterns, and release readiness.

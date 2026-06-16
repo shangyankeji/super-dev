@@ -53,6 +53,36 @@ pub enum Action {
     /// Backend was switched (saved to config); the engine task should be
     /// restarted on next `StartRun`.
     BackendChanged,
+    /// The setup wizard finished collecting a provider config — the engine
+    /// should send a short probe request to validate the key/URL/model before
+    /// the config is committed.
+    ProbeProvider {
+        /// Provider name (key into `config.providers`).
+        name: String,
+        /// Wire protocol (`openai` / `anthropic`).
+        kind: String,
+        /// API root URL.
+        base_url: String,
+        /// API key — bare literal or `${ENV}` reference.
+        api_key: String,
+        /// Model id.
+        model: String,
+    },
+    /// `/preview` — start the dev server in the background so the recorded
+    /// Preview URL is live, then open the browser. The event loop owns the
+    /// child handle (it lives in `App::preview_server`).
+    StartPreview {
+        /// The Preview URL the worker recorded.
+        url: String,
+        /// The exact command to start the dev server (e.g. `cd web && npm run dev`).
+        command: String,
+    },
+    /// `/deploy` — run the deploy command the worker recorded to ship the
+    /// project. Runs in the foreground (deploys need interactive CLI login).
+    RunDeploy {
+        /// The exact deploy command (e.g. `npx vercel --prod`).
+        command: String,
+    },
 }
 
 /// Status of one pipeline phase.
@@ -86,10 +116,23 @@ pub struct BackendInfo {
     pub detail: String,
 }
 
+/// Which group a picker item belongs to — drives the section headers in the
+/// first-launch picker so a user sees the three runtime paths at a glance.
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum PickerGroup {
+    /// Drive a logged-in host CLI subprocess (Claude Code / Codex, no API key).
+    HostCli,
+    /// Call a custom OpenAI-compatible or Anthropic HTTP endpoint (BYO key).
+    CustomApi,
+    /// Deterministic templates, no AI.
+    Offline,
+}
+
 /// One item in the first-launch backend picker.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct PickerItem {
-    /// `Some("claude-code")` etc. `None` represents the `offline` choice.
+    /// `Some("claude-code")` etc. `None` represents the `offline` choice
+    /// or the custom-API wizard entry (disambiguated by [`PickerItem::group`]).
     pub backend_id: Option<String>,
     /// Display label.
     pub label: String,
@@ -97,6 +140,160 @@ pub struct PickerItem {
     pub ready: bool,
     /// Detail line (version / "not on PATH" / "deterministic templates").
     pub detail: String,
+    /// Which section this item renders under.
+    pub group: PickerGroup,
+    /// `true` only for the single custom-API entry that launches the setup
+    /// wizard instead of committing a backend.
+    pub launches_wizard: bool,
+}
+
+/// A built-in provider preset — pre-filled `base_url` / `model` / `kind` so a
+/// user can set up a custom API without hand-typing vendor URLs. The wizard
+/// shows these by name; selecting one skips the manual URL/model steps.
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub struct ProviderPreset {
+    /// Short id the user types in the wizard (`deepseek`, `openrouter`, …).
+    pub id: &'static str,
+    /// Human-facing label.
+    pub label: &'static str,
+    /// Wire protocol: `"openai"` or `"anthropic"`.
+    pub kind: &'static str,
+    /// API root URL (no `/chat/completions` or `/v1/messages` suffix).
+    pub base_url: &'static str,
+    /// Suggested default model id.
+    pub default_model: &'static str,
+    /// Suggested env-var name to hold the key (shown as a hint; the wizard
+    /// stores whatever the user actually types).
+    pub env_var: &'static str,
+    /// `false` for local servers (Ollama / LM Studio) — the wizard skips the
+    /// API-key step entirely.
+    pub needs_key: bool,
+}
+
+/// The catalog of provider presets, grouped for display: domestic Chinese
+/// vendors first (most common for this audience), then international
+/// aggregators, then local self-hosted. A unit test asserts every entry is
+/// well-formed.
+pub const PROVIDER_PRESETS: &[ProviderPreset] = &[
+    // ── 国内厂商 ──
+    ProviderPreset {
+        id: "deepseek",
+        label: "DeepSeek (深度求索)",
+        kind: "openai",
+        base_url: "https://api.deepseek.com/v1",
+        default_model: "deepseek-chat",
+        env_var: "DEEPSEEK_API_KEY",
+        needs_key: true,
+    },
+    ProviderPreset {
+        id: "zhipu",
+        label: "智谱 GLM",
+        kind: "openai",
+        base_url: "https://open.bigmodel.cn/api/paas/v4",
+        default_model: "glm-4-coder",
+        env_var: "ZHIPUAI_API_KEY",
+        needs_key: true,
+    },
+    ProviderPreset {
+        id: "dashscope",
+        label: "阿里百炼 (通义千问)",
+        kind: "openai",
+        base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        default_model: "qwen-coder-plus",
+        env_var: "DASHSCOPE_API_KEY",
+        needs_key: true,
+    },
+    ProviderPreset {
+        id: "volcengine",
+        label: "火山引擎 (豆包)",
+        kind: "openai",
+        base_url: "https://ark.cn-beijing.volces.com/api/v3",
+        default_model: "doubao-coder-pro",
+        env_var: "ARK_API_KEY",
+        needs_key: true,
+    },
+    ProviderPreset {
+        id: "moonshot",
+        label: "月之暗面 Kimi",
+        kind: "openai",
+        base_url: "https://api.moonshot.cn/v1",
+        default_model: "moonshot-v1-32k",
+        env_var: "MOONSHOT_API_KEY",
+        needs_key: true,
+    },
+    // ── 国际聚合 ──
+    ProviderPreset {
+        id: "openrouter",
+        label: "OpenRouter (一个 key 接所有模型)",
+        kind: "openai",
+        base_url: "https://openrouter.ai/api/v1",
+        default_model: "anthropic/claude-3.5-sonnet",
+        env_var: "OPENROUTER_API_KEY",
+        needs_key: true,
+    },
+    ProviderPreset {
+        id: "openai",
+        label: "OpenAI 官方",
+        kind: "openai",
+        base_url: "https://api.openai.com/v1",
+        default_model: "gpt-4o",
+        env_var: "OPENAI_API_KEY",
+        needs_key: true,
+    },
+    ProviderPreset {
+        id: "anthropic",
+        label: "Anthropic 官方 (Claude)",
+        kind: "anthropic",
+        base_url: "https://api.anthropic.com",
+        default_model: "claude-sonnet-4-20250514",
+        env_var: "ANTHROPIC_API_KEY",
+        needs_key: true,
+    },
+    ProviderPreset {
+        id: "groq",
+        label: "Groq (极速推理)",
+        kind: "openai",
+        base_url: "https://api.groq.com/openai/v1",
+        default_model: "llama-3.3-70b-versatile",
+        env_var: "GROQ_API_KEY",
+        needs_key: true,
+    },
+    ProviderPreset {
+        id: "together",
+        label: "Together AI",
+        kind: "openai",
+        base_url: "https://api.together.xyz/v1",
+        default_model: "meta-llama/Llama-3-70b-chat-hf",
+        env_var: "TOGETHER_API_KEY",
+        needs_key: true,
+    },
+    // ── 本地部署 (无需 key) ──
+    ProviderPreset {
+        id: "ollama",
+        label: "Ollama (本地)",
+        kind: "openai",
+        base_url: "http://localhost:11434/v1",
+        default_model: "qwen2.5-coder:7b",
+        env_var: "",
+        needs_key: false,
+    },
+    ProviderPreset {
+        id: "lmstudio",
+        label: "LM Studio (本地)",
+        kind: "openai",
+        base_url: "http://localhost:1234/v1",
+        default_model: "local-model",
+        env_var: "",
+        needs_key: false,
+    },
+];
+
+/// Look up a preset by its id (case-insensitive). Returns `None` for unknown.
+#[must_use]
+pub fn find_preset(id: &str) -> Option<&'static ProviderPreset> {
+    PROVIDER_PRESETS
+        .iter()
+        .find(|p| p.id.eq_ignore_ascii_case(id))
 }
 
 /// Source of a chat message — used to colour the role label.
@@ -157,6 +354,78 @@ impl Overlay {
     /// Scroll up by `n` lines, clamped at 0.
     pub fn scroll_up(&mut self, n: usize) {
         self.scroll = self.scroll.saturating_sub(n);
+    }
+}
+
+/// One step of the custom-API setup wizard. The wizard is a conversational
+/// flow: Super Dev asks a question (pushed as a `ChatRole::SuperDev` message),
+/// the user types the answer + Enter, and [`App::wizard_consume`] advances.
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum WizardStep {
+    /// Ask which provider preset to use (or "custom" for a hand-typed URL).
+    ChoosePreset,
+    /// Confirm or override the model id (preset path only).
+    ConfirmModel,
+    /// For the "custom" path: ask for the provider name.
+    EnterName,
+    /// Custom path: ask for the wire protocol (openai / anthropic).
+    EnterKind,
+    /// Custom path: ask for the API root URL.
+    EnterUrl,
+    /// Custom path: ask for the model id.
+    EnterModel,
+    /// Ask for the API key (skipped when the preset has `needs_key = false`).
+    EnterKey,
+    /// A probe request is in flight; input is locked.
+    Verifying,
+    /// Finished (provider saved). The wizard field is cleared on the next event.
+    Done,
+}
+
+/// State of the custom-API setup wizard while it is active. Lives on
+/// [`App::provider_wizard`] as `Option<ProviderWizard>`; `None` outside a
+/// wizard session.
+#[derive(Debug, Clone)]
+pub struct ProviderWizard {
+    /// Current step.
+    pub step: WizardStep,
+    /// The preset the user picked (`None` = fully custom URL). Owned copy
+    /// (the preset is `Copy`) so the wizard isn't tied to a static lifetime.
+    pub preset: Option<ProviderPreset>,
+    /// Provider name (key in `config.providers`).
+    pub name: String,
+    /// Wire protocol (`"openai"` / `"anthropic"`).
+    pub kind: String,
+    /// API root URL.
+    pub base_url: String,
+    /// Model id.
+    pub model: String,
+    /// API key — bare literal or `${ENV}` reference.
+    pub api_key: String,
+    /// Last probe error, shown when retrying the key step.
+    pub error: Option<String>,
+}
+
+impl ProviderWizard {
+    /// Start a fresh wizard at the preset-chooser step.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            step: WizardStep::ChoosePreset,
+            preset: None,
+            name: String::new(),
+            kind: String::new(),
+            base_url: String::new(),
+            model: String::new(),
+            api_key: String::new(),
+            error: None,
+        }
+    }
+}
+
+impl Default for ProviderWizard {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -222,6 +491,13 @@ pub struct App {
     /// `/diff`). When `Some`, key input is routed to the overlay
     /// (scroll, close); when `None`, normal chat input.
     pub overlay: Option<Overlay>,
+    /// Active custom-API setup wizard. `None` outside a wizard session.
+    /// While `Some`, plain-text Enter is intercepted by [`App::wizard_consume`]
+    /// instead of starting a run / approving a gate.
+    pub provider_wizard: Option<ProviderWizard>,
+    /// Handle to a running dev-server subprocess spawned by `/preview`, so we
+    /// can kill it on `/stop-preview` or quit. `None` when no preview is live.
+    pub preview_server: std::sync::Arc<std::sync::Mutex<Option<tokio::process::Child>>>,
     /// Workspace root — surfaced in the status bar as a breadcrumb.
     pub project_root: std::path::PathBuf,
     /// When a pipeline is running and the user presses `q` / Esc, we
@@ -235,6 +511,14 @@ pub struct App {
     pub tick: u8,
     /// `true` when the user asked to quit.
     pub should_quit: bool,
+
+    /// Wall-clock start of the current running block. Drives the live
+    /// `[m:ss]` elapsed counter in the status bar so long worker calls
+    /// don't read as "frozen". `None` when nothing is running.
+    pub run_started_at: Option<std::time::Instant>,
+    /// Wall-clock start of the currently running phase. Reset on every
+    /// `PhaseStarted` so the status bar can show per-phase elapsed time.
+    pub phase_started_at: Option<std::time::Instant>,
 }
 
 impl App {
@@ -287,11 +571,15 @@ impl App {
             backends: Vec::new(),
             show_help: false,
             overlay: None,
+            provider_wizard: None,
+            preview_server: std::sync::Arc::new(std::sync::Mutex::new(None)),
             project_root,
             pending_quit_confirm: false,
             status: String::new(),
             tick: 0,
             should_quit: false,
+            run_started_at: None,
+            phase_started_at: None,
         };
         app.load_history();
         if app.mode == AppMode::Chat {
@@ -300,6 +588,341 @@ impl App {
         }
         app.refresh_status();
         app
+    }
+
+    /// Resolve which "brain" runs the pipeline, in precedence order:
+    /// project-level provider > global provider > host CLI backend > offline.
+    ///
+    /// Reads `.superdevrc` for a project-level provider pin so one machine can
+    /// use different models per project. Mirrors the override semantics of
+    /// [`crate::config::UserConfig::effective_provider`].
+    #[must_use]
+    pub fn brain_spec(&self) -> crate::BrainSpec {
+        // Project-level override (from .superdevrc [model] provider).
+        let proj_cfg = super_dev_agent::config::load_project_config(&self.project_root);
+        let proj_provider = proj_cfg.model.provider.as_deref();
+        if let Some(p) = self.config.effective_provider(proj_provider) {
+            return crate::BrainSpec::CustomApi(p.clone());
+        }
+        // Host CLI backend.
+        if let Some(id) = &self.backend {
+            if !id.is_empty() && id != "offline" {
+                return crate::BrainSpec::HostCli(id.clone());
+            }
+        }
+        crate::BrainSpec::Offline
+    }
+
+    /// Build the numbered preset menu the wizard shows on the first step.
+    fn preset_menu_lines() -> &'static String {
+        static CACHE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+        CACHE.get_or_init(|| {
+            let mut out = String::new();
+            for (i, p) in PROVIDER_PRESETS.iter().enumerate() {
+                let keyhint = if p.needs_key {
+                    format!("key=${{{}}}", p.env_var)
+                } else {
+                    "无需 key".to_string()
+                };
+                out.push_str(&format!(
+                    "  {}. {:<14} {} ({})\n",
+                    i + 1,
+                    p.id,
+                    p.label,
+                    keyhint,
+                ));
+            }
+            out.push_str("  0. custom (自定义 URL)");
+            out
+        })
+    }
+
+    /// Begin the custom-API setup wizard: switch to Chat, push the opening
+    /// question (preset chooser), and arm `provider_wizard`. Called from the
+    /// picker's custom-API entry and from `/provider setup`.
+    pub fn start_provider_wizard(&mut self) {
+        self.mode = AppMode::Chat;
+        self.provider_wizard = Some(ProviderWizard::new());
+        self.push(
+            ChatRole::SuperDev,
+            "🔧 接入第三方 API。输入预设名字或序号,或输入 `0` / `custom` 自定义 URL。Esc 取消。"
+                .to_string(),
+        );
+        self.push(ChatRole::SuperDev, Self::preset_menu_lines().clone());
+        self.refresh_status();
+    }
+
+    /// Cancel an in-progress wizard without saving anything. Triggered by Esc.
+    pub fn cancel_provider_wizard(&mut self) {
+        if self.provider_wizard.take().is_some() {
+            self.push(
+                ChatRole::System,
+                "已取消第三方 API 设置向导(未保存任何配置)。".to_string(),
+            );
+        }
+    }
+
+    /// Consume one typed answer and advance the wizard state machine. Called
+    /// from `submit_text` when `provider_wizard` is `Some`.
+    fn wizard_consume(&mut self, answer: &str) -> Action {
+        let ans = answer.trim();
+        self.push(ChatRole::You, answer.to_string());
+
+        let step = self
+            .provider_wizard
+            .as_ref()
+            .map_or(WizardStep::Done, |w| w.step);
+        match step {
+            WizardStep::ChoosePreset => self.wizard_choose_preset(ans),
+            WizardStep::ConfirmModel => self.wizard_confirm_model(ans),
+            WizardStep::EnterName => self.wizard_enter(ans, "name", WizardStep::EnterKind),
+            WizardStep::EnterKind => self.wizard_enter(ans, "kind", WizardStep::EnterUrl),
+            WizardStep::EnterUrl => self.wizard_enter(ans, "base_url", WizardStep::EnterModel),
+            WizardStep::EnterModel => self.wizard_enter(ans, "model", WizardStep::EnterKey),
+            WizardStep::EnterKey => self.wizard_enter_key(ans),
+            WizardStep::Verifying => {
+                self.push(ChatRole::System, "正在验证连通性,请稍候…".to_string());
+                Action::None
+            }
+            WizardStep::Done => Action::None,
+        }
+    }
+
+    /// Step: resolve the preset id / ordinal / "custom".
+    fn wizard_choose_preset(&mut self, ans: &str) -> Action {
+        let preset: Option<ProviderPreset> = if ans == "0" || ans.eq_ignore_ascii_case("custom") {
+            None
+        } else if let Ok(n) = ans.parse::<usize>() {
+            PROVIDER_PRESETS
+                .get(n.checked_sub(1).unwrap_or(usize::MAX))
+                .copied()
+        } else {
+            find_preset(ans).copied()
+        };
+        if preset.is_none() && !(ans == "0" || ans.eq_ignore_ascii_case("custom")) {
+            self.push(
+                ChatRole::System,
+                format!(
+                    "未知预设 `{ans}`。输入预设名(如 deepseek)、序号、或 `0` 自定义。Esc 取消。"
+                ),
+            );
+            return Action::None;
+        }
+
+        // Mutate the wizard, collecting the message separately so the mutable
+        // borrow of self.provider_wizard ends before self.push.
+        let (step, msg) = if let Some(p) = preset {
+            let label = p.label;
+            let kind = p.kind;
+            let base = p.base_url;
+            let model = p.default_model;
+            let w = self.provider_wizard.as_mut().expect("wizard active");
+            w.preset = Some(p);
+            w.name = w.preset.as_ref().expect("just set").id.to_string();
+            w.kind = kind.to_string();
+            w.base_url = base.to_string();
+            w.model = model.to_string();
+            w.error = None;
+            (
+                WizardStep::ConfirmModel,
+                format!(
+                    "已选 {label} ({kind}, {base})。默认 model: `{model}`。\n                       想换 model 就输入新的 model id;不改就输入 `ok`。",
+                ),
+            )
+        } else {
+            let w = self.provider_wizard.as_mut().expect("wizard active");
+            w.preset = None;
+            w.error = None;
+            (
+                WizardStep::EnterName,
+                "自定义 URL。先输入 provider 名(英文,如 my-deepseek):".to_string(),
+            )
+        };
+        {
+            let w = self.provider_wizard.as_mut().expect("wizard active");
+            w.step = step;
+        }
+        self.push(ChatRole::SuperDev, msg);
+        Action::None
+    }
+    /// Step: confirm or override the model (preset path).
+    fn wizard_confirm_model(&mut self, ans: &str) -> Action {
+        // Collect everything we need from the wizard, then end the borrow
+        // before calling self.push / self.wizard_launch_probe.
+        let (needs_key, env_hint) = {
+            let w = self.provider_wizard.as_mut().expect("wizard active");
+            if !ans.eq_ignore_ascii_case("ok") && !ans.is_empty() {
+                w.model = ans.to_string();
+            }
+            w.error = None;
+            let needs_key = w.preset.is_none_or(|p| p.needs_key);
+            let env_hint = w.preset.map_or(String::new(), |p| {
+                format!(
+                    "建议先在终端 export {}=... 然后填 ${{{}}}",
+                    p.env_var, p.env_var
+                )
+            });
+            (needs_key, env_hint)
+        };
+        if !needs_key {
+            // No key needed (local server) — go straight to probe.
+            return self.wizard_launch_probe();
+        }
+        {
+            let w = self.provider_wizard.as_mut().expect("wizard active");
+            w.step = WizardStep::EnterKey;
+        }
+        self.push(
+            ChatRole::SuperDev,
+            format!("输入 API key(可填 ${{ENV_VAR}} 引用环境变量)。{env_hint}"),
+        );
+        Action::None
+    }
+
+    /// Generic step: store `ans` into the named field, advance to `next`.
+    fn wizard_enter(&mut self, ans: &str, field: &str, next: WizardStep) -> Action {
+        if ans.is_empty() {
+            self.push(
+                ChatRole::System,
+                "不能为空,请重新输入(Esc 取消)。".to_string(),
+            );
+            return Action::None;
+        }
+        // Validate first (no wizard mutation yet) so we can self.push on error.
+        match field {
+            "kind" => {
+                let k = ans.to_ascii_lowercase();
+                if k != "openai" && k != "anthropic" {
+                    self.push(
+                        ChatRole::System,
+                        "kind 只能是 `openai` 或 `anthropic`,重新输入。".to_string(),
+                    );
+                    return Action::None;
+                }
+            }
+            "base_url" if !ans.starts_with("http") => {
+                self.push(
+                    ChatRole::System,
+                    "base_url 必须以 http:// 或 https:// 开头,重新输入。".to_string(),
+                );
+                return Action::None;
+            }
+            _ => {}
+        }
+        // Mutate, then end the borrow before pushing the next prompt.
+        let prompt = {
+            let w = self.provider_wizard.as_mut().expect("wizard active");
+            match field {
+                "name" => w.name = ans.to_string(),
+                "kind" => w.kind = ans.to_ascii_lowercase(),
+                "base_url" => w.base_url = ans.to_string(),
+                "model" => w.model = ans.to_string(),
+                _ => {}
+            }
+            w.step = next;
+            w.error = None;
+            match next {
+                WizardStep::EnterKind => "输入协议类型: openai 或 anthropic".to_string(),
+                WizardStep::EnterUrl => "输入 API 根地址(如 https://api.x.com/v1):".to_string(),
+                WizardStep::EnterModel => "输入 model id:".to_string(),
+                WizardStep::EnterKey => "输入 API key(可填 ${ENV_VAR} 引用环境变量):".to_string(),
+                _ => String::new(),
+            }
+        };
+        if !prompt.is_empty() {
+            self.push(ChatRole::SuperDev, prompt);
+        }
+        Action::None
+    }
+
+    /// Step: capture the API key, then launch the probe.
+    fn wizard_enter_key(&mut self, ans: &str) -> Action {
+        if ans.is_empty() {
+            self.push(
+                ChatRole::System,
+                "key 不能为空,重新输入(Esc 取消)。".to_string(),
+            );
+            return Action::None;
+        }
+        let w = self.provider_wizard.as_mut().expect("wizard active");
+        w.api_key = ans.to_string();
+        w.error = None;
+        self.wizard_launch_probe()
+    }
+
+    /// Freeze the wizard into a probe action. Sets step to Verifying so
+    /// further input is locked until the probe result arrives.
+    fn wizard_launch_probe(&mut self) -> Action {
+        let w = self.provider_wizard.as_mut().expect("wizard active");
+        w.step = WizardStep::Verifying;
+        let snapshot = (
+            w.name.clone(),
+            w.kind.clone(),
+            w.base_url.clone(),
+            w.api_key.clone(),
+            w.model.clone(),
+        );
+        self.push(
+            ChatRole::SuperDev,
+            format!("正在验证 {} ({}) 连通性…", snapshot.0, snapshot.4),
+        );
+        Action::ProbeProvider {
+            name: snapshot.0,
+            kind: snapshot.1,
+            base_url: snapshot.2,
+            api_key: snapshot.3,
+            model: snapshot.4,
+        }
+    }
+
+    /// Called by `apply_engine` on a successful probe: commit the provider
+    /// config, set it active, clear the wizard.
+    pub fn wizard_commit_verified(&mut self, name: &str) {
+        if let Some(w) = self.provider_wizard.take() {
+            let p = crate::config::ProviderConfig {
+                kind: w.kind,
+                base_url: w.base_url,
+                api_key: w.api_key,
+                model: w.model,
+            };
+            self.config.providers.insert(name.to_string(), p);
+            self.config.default_provider = Some(name.to_string());
+            self.backend = None;
+            self.backend_label = name.to_string();
+            self.config.backend = None;
+            if let Err(e) = crate::config::save_to(&self.config, &self.config_path) {
+                self.push(
+                    ChatRole::System,
+                    format!("(无法写入 {}: {e})", self.config_path.display()),
+                );
+            }
+            self.push(
+                ChatRole::SuperDev,
+                format!("✓ 验证通过,已保存并启用 provider `{name}`。下一个 run 起直接调用此 API。"),
+            );
+            self.refresh_status();
+        }
+    }
+
+    /// Called by `apply_engine` on a failed probe: rewind to the key step so
+    /// the user can fix the key / model, showing the error.
+    pub fn wizard_probe_failed(&mut self, detail: &str) {
+        if let Some(w) = self.provider_wizard.as_mut() {
+            // If the preset needs no key, the only fixable inputs are via
+            // custom path — but for local servers a failure usually means the
+            // server isn't running. Still rewind to EnterKey when present,
+            // otherwise stay on Verifying with a hint to restart the wizard.
+            w.step = if w.preset.is_none_or(|p| p.needs_key) {
+                WizardStep::EnterKey
+            } else {
+                WizardStep::ConfirmModel
+            };
+            w.error = Some(detail.to_string());
+        }
+        self.push(
+            ChatRole::System,
+            format!("✗ 验证失败:{detail}\n  请检查 key / model / base_url 是否正确,重新输入(Esc 取消)。"),
+        );
     }
 
     fn history_path(&self) -> std::path::PathBuf {
@@ -434,7 +1057,15 @@ impl App {
             .phases
             .iter()
             .find(|r| r.status == PhaseStatus::Running)
-            .map(|r| format!(" {} {}", self.spinner(), r.phase.id()))
+            .map(|r| {
+                // Live per-phase elapsed so a multi-minute worker call
+                // visibly advances instead of looking frozen.
+                let elapsed = self
+                    .phase_started_at
+                    .map(|t| format!(" {}", fmt_elapsed(t.elapsed().as_secs())))
+                    .unwrap_or_default();
+                format!(" {} {}{elapsed}", self.spinner(), r.phase.id())
+            })
             .unwrap_or_default();
         let gate_label = self
             .active_gate
@@ -451,9 +1082,16 @@ impl App {
             .as_deref()
             .map(|s| format!(" · 🎨 {s}"))
             .unwrap_or_default();
+        // Total wall-clock since the block started, shown while running so
+        // the user has a clear "it's been N minutes" signal.
+        let total_elapsed = self
+            .run_started_at
+            .filter(|_| !self.finished && self.active_gate.is_none())
+            .map(|t| format!(" · ⏱ {}", fmt_elapsed(t.elapsed().as_secs())))
+            .unwrap_or_default();
         self.status = format!(
-            "● {} · {}{}{}{}{}",
-            self.backend_label, dots, running, gate_label, done_label, ds_short
+            "● {} · {}{}{}{}{}{}",
+            self.backend_label, dots, running, gate_label, done_label, ds_short, total_elapsed
         );
     }
 
@@ -593,17 +1231,15 @@ impl App {
     pub const SLASH_VERBS: &'static [(&'static str, &'static str)] = &[
         ("claude", "switch worker to Claude Code CLI"),
         ("codex", "switch worker to Codex CLI"),
-        ("gemini", "switch worker to Gemini CLI"),
-        ("droid", "switch worker to Droid CLI"),
-        ("opencode", "switch worker to OpenCode CLI"),
-        ("qwen", "switch worker to Qwen Code CLI"),
-        ("copilot", "switch worker to Copilot CLI"),
-        ("trae", "switch worker to Trae CLI"),
-        ("codebuddy", "switch worker to CodeBuddy CLI"),
-        ("qoder", "switch worker to Qoder CLI"),
-        ("kimi", "switch worker to Kimi Code CLI"),
         ("offline", "switch worker to offline templates"),
         ("model", "set the model id (e.g. /model claude-opus-4-7)"),
+        (
+            "provider",
+            "custom API: /provider [add|key|remove|off|<name>]",
+        ),
+        ("preview", "start the dev server + open the browser"),
+        ("stop-preview", "stop the running preview dev server"),
+        ("deploy", "run the recorded deploy command to go live"),
         (
             "design",
             "pick a design system (e.g. /design modern-minimal)",
@@ -613,6 +1249,7 @@ impl App {
             "pick a seed template (e.g. /template dashboard)",
         ),
         ("run", "start a new run (/run [slug] <requirement>)"),
+        ("runs", "view run history and phase timing"),
         ("redo", "re-run the current requirement from scratch"),
         ("config", "show all current configuration"),
         ("init", "write super-dev.yaml manifest"),
@@ -635,6 +1272,10 @@ impl App {
 
     /// Match the verbs prefixed by what comes after `/` in the current
     /// input. Empty input or non-slash input → empty list.
+    ///
+    /// Combines the static [`SLASH_VERBS`] with the dynamic per-backend
+    /// verbs (so typing `/go` suggests `/goose`, typing `/am` suggests
+    /// `/claude`, `/codex`, etc.) — kept in sync with `BACKEND_IDS`.
     #[must_use]
     pub fn palette_matches(&self) -> Vec<(&'static str, &'static str)> {
         if !self.input.starts_with('/') {
@@ -648,11 +1289,20 @@ impl App {
             .next()
             .unwrap_or("")
             .to_ascii_lowercase();
-        Self::SLASH_VERBS
+        let mut out: Vec<(&'static str, &'static str)> = Self::SLASH_VERBS
             .iter()
             .filter(|(verb, _)| verb.starts_with(typed.as_str()))
             .copied()
-            .collect()
+            .collect();
+        // Skip ids already covered by the static list (the 11 flagship
+        // backends) to avoid duplicate palette rows.
+        let known: std::collections::HashSet<&str> = out.iter().map(|(v, _)| *v).collect();
+        for (id, hint) in backend_palette_verbs() {
+            if !known.contains(id) && id.starts_with(typed.as_str()) {
+                out.push((id, hint));
+            }
+        }
+        out
     }
 
     /// Replace the input with `/{verb} ` (with trailing space so the
@@ -736,6 +1386,7 @@ impl App {
                 self.slug = slug;
                 self.requirement.clone_from(&requirement);
                 self.run_started = true;
+                self.run_started_at = Some(std::time::Instant::now());
                 self.push(
                     ChatRole::SuperDev,
                     format!("流水线启动:{requirement}\n按 9 阶段流程交付,关键节点会停下让你审。"),
@@ -743,6 +1394,7 @@ impl App {
             }
             EngineEvent::PhaseStarted { phase } => {
                 self.set_phase(phase, PhaseStatus::Running);
+                self.phase_started_at = Some(std::time::Instant::now());
                 self.push(ChatRole::SuperDev, format!("▶ phase {} 开始…", phase.id()));
             }
             EngineEvent::ArtifactWritten { phase, path } => {
@@ -761,10 +1413,20 @@ impl App {
             }
             EngineEvent::GateOpened { gate } => {
                 self.active_gate = Some(gate);
+                // Block paused at a gate — stop the live elapsed counters
+                // so the status bar doesn't keep ticking while we wait on
+                // the user.
+                self.run_started_at = None;
+                self.phase_started_at = None;
                 self.push(
                     ChatRole::Gate,
                     gate_card(gate, &self.slug, &self.project_root),
                 );
+                // When the preview gate opens, surface the frontend's
+                // recorded Preview URL so the user knows where to look.
+                if gate == super_dev_agent::gates::Gate::PreviewConfirm {
+                    self.maybe_announce_preview();
+                }
             }
             EngineEvent::BlockCompleted {
                 final_phase,
@@ -773,6 +1435,8 @@ impl App {
                 if paused_at.is_none() && final_phase == Phase::Delivery {
                     self.finished = true;
                     self.active_gate = None;
+                    self.run_started_at = None;
+                    self.phase_started_at = None;
                     let release = self.project_root.join("release");
                     let zip_info = std::fs::read_dir(&release)
                         .ok()
@@ -857,10 +1521,34 @@ impl App {
                 stderr,
             } => {
                 let snippet = stderr.lines().next().unwrap_or("").trim();
+                // Turn a raw build failure into an actionable next step
+                // instead of a dead-end error code. Match the most common
+                // failure signatures and route the user to the fix.
+                let lower = stderr.to_ascii_lowercase();
+                let action = if lower.contains("command not found")
+                    || lower.contains("not found")
+                    || lower.contains("no such file")
+                {
+                    "→ 构建工具缺失。用 /doctor 检查环境,或安装缺失的依赖后用 /redo 重跑。"
+                } else if lower.contains("cannot find module")
+                    || lower.contains("module not found")
+                    || lower.contains("unresolved import")
+                    || lower.contains("could not resolve")
+                {
+                    "→ 依赖未安装。先装依赖(npm/pnpm install、cargo fetch),再 /redo 重跑。"
+                } else if lower.contains("type error")
+                    || lower.contains("ts(")
+                    || lower.contains("expected")
+                    || lower.contains("mismatched types")
+                {
+                    "→ 类型/语法错误。用 /revise \"修复构建错误\" 让 worker 修,或手动改后 /redo。"
+                } else {
+                    "→ 用 /revise \"修复构建错误\" 让 worker 修复,或查看上方 worker 输出定位问题。"
+                };
                 self.push(
                     ChatRole::System,
                     format!(
-                        "✗ verify [{}] FAILED (exit {exit_code}): {snippet}",
+                        "✗ verify [{}] FAILED (exit {exit_code}): {snippet}\n  {action}",
                         phase.id()
                     ),
                 );
@@ -888,8 +1576,41 @@ impl App {
                     self.push(ChatRole::Host, trimmed);
                 }
             }
+            EngineEvent::ProviderVerified {
+                name,
+                model,
+                ok,
+                detail,
+            } => {
+                if ok {
+                    self.wizard_commit_verified(&name);
+                } else {
+                    self.wizard_probe_failed(&detail);
+                }
+                let _ = model;
+            }
             EngineEvent::Note(note) => {
                 self.push(ChatRole::System, note);
+            }
+            EngineEvent::SubTaskStarted {
+                phase,
+                task_id,
+                label,
+            } => {
+                self.push(
+                    ChatRole::System,
+                    format!("▸ {phase:?} subtask `{task_id}` started: {label}"),
+                );
+            }
+            EngineEvent::SubTaskCompleted { phase, task_id, ok } => {
+                let mark = if ok { "✓" } else { "✗" };
+                self.push(
+                    ChatRole::System,
+                    format!(
+                        "{mark} {phase:?} subtask `{task_id}` {}",
+                        if ok { "done" } else { "failed" }
+                    ),
+                );
             }
         }
         self.refresh_status();
@@ -945,7 +1666,13 @@ impl App {
                 Action::None
             }
             KeyCode::Enter => {
-                let chosen = &self.picker_items[self.picker_selected];
+                let chosen = self.picker_items[self.picker_selected].clone();
+                // The custom-API entry launches the setup wizard instead of
+                // committing a backend.
+                if chosen.launches_wizard {
+                    self.start_provider_wizard();
+                    return Action::None;
+                }
                 // Refuse if the chosen host is unavailable.
                 if !chosen.ready {
                     self.push(
@@ -957,8 +1684,7 @@ impl App {
                     );
                     return Action::None;
                 }
-                let backend_id = chosen.backend_id.clone();
-                self.commit_backend(backend_id);
+                self.commit_backend(chosen.backend_id.clone());
                 self.mode = AppMode::Chat;
                 self.push_greeting();
                 self.refresh_status();
@@ -986,6 +1712,13 @@ impl App {
         match key {
             // ---- exit handling ----
             KeyCode::Esc => {
+                // While the provider-setup wizard is active, Esc cancels the
+                // wizard (without quitting) instead of leaving the app — the
+                // user is mid-setup, not trying to exit.
+                if self.provider_wizard.is_some() {
+                    self.cancel_provider_wizard();
+                    return Action::None;
+                }
                 if self.is_pipeline_active() && !self.pending_quit_confirm {
                     self.pending_quit_confirm = true;
                     self.push(
@@ -1090,6 +1823,13 @@ impl App {
     /// gate is the documented shortcut for "approve / continue" — match
     /// the gate card so users don't have to type `/continue` every time.
     fn submit_text(&mut self, text: String) -> Action {
+        // The provider-setup wizard claims plain-text Enter while it is active —
+        // the typed text is the answer to the current wizard question, not a
+        // requirement or gate approval. Checked before the "You" echo so the
+        // wizard owns the full conversation framing.
+        if self.provider_wizard.is_some() {
+            return self.wizard_consume(&text);
+        }
         self.push(ChatRole::You, text.clone());
         if let Some(gate) = self.active_gate {
             if matches!(text.trim(), "c" | "C") {
@@ -1197,15 +1937,6 @@ impl App {
             }
             "claude" | "claude-code" => self.slash_backend(Some("claude-code")),
             "codex" => self.slash_backend(Some("codex")),
-            "gemini" => self.slash_backend(Some("gemini")),
-            "droid" => self.slash_backend(Some("droid")),
-            "opencode" => self.slash_backend(Some("opencode")),
-            "qwen" => self.slash_backend(Some("qwen")),
-            "copilot" => self.slash_backend(Some("copilot")),
-            "trae" | "trae-cli" => self.slash_backend(Some("trae")),
-            "codebuddy" => self.slash_backend(Some("codebuddy")),
-            "qoder" | "qodercli" => self.slash_backend(Some("qoder")),
-            "kimi" => self.slash_backend(Some("kimi")),
             "offline" => self.slash_backend(None),
             "init" => {
                 let slug = if self.slug.is_empty() {
@@ -1305,11 +2036,19 @@ impl App {
                 self.open_diff_overlay(rest);
                 Action::None
             }
+            "runs" | "history-runs" => {
+                self.open_runs_overlay();
+                Action::None
+            }
             "history" => {
                 self.open_history_overlay();
                 Action::None
             }
             "model" => self.slash_model(rest),
+            "provider" => self.slash_provider(rest),
+            "preview" => self.slash_preview(),
+            "stop-preview" => self.slash_stop_preview(),
+            "deploy" => self.slash_deploy(),
             "design" => self.slash_design(rest),
             "template" => self.slash_template(rest),
             "run" => self.slash_run(rest),
@@ -1339,6 +2078,15 @@ impl App {
                 Action::None
             }
             _ => {
+                // Dynamic backend verbs: any registered host id (or the
+                // `antigravity` alias) typed after `/` switches the worker.
+                // This keeps the TUI in lock-step with super-dev-host's
+                // BACKEND_IDS without enumerating 23 match arms that drift.
+                // The 11 hand-listed arms above are kept as fast-path + for
+                // their CLI-binary aliases (e.g. /trae-cli, /qodercli).
+                if verb == "antigravity" || super_dev_host::driver_for(&verb).is_some() {
+                    return Some(self.slash_backend(Some(&verb)));
+                }
                 let hint = Self::did_you_mean(&verb)
                     .map(|s| format!(" 是想用 `/{s}` 吗?"))
                     .unwrap_or_default();
@@ -1363,13 +2111,24 @@ impl App {
         if let Some((verb, _)) = Self::SLASH_VERBS.iter().find(|(v, _)| v.starts_with(typed)) {
             return Some(verb);
         }
-        // Otherwise Levenshtein ≤ 2 against known verbs.
+        // Also consider the dynamic backend verbs (goose, amp, junie, …).
+        if let Some((verb, _)) = backend_palette_verbs()
+            .iter()
+            .find(|(v, _)| v.starts_with(typed))
+        {
+            return Some(verb);
+        }
+        // Otherwise Levenshtein ≤ 2 against known verbs (static + dynamic).
         let typed_lower = typed.to_ascii_lowercase();
         let (mut best, mut best_dist) = (None, usize::MAX);
-        for (verb, _) in Self::SLASH_VERBS {
+        let all_verbs = Self::SLASH_VERBS
+            .iter()
+            .map(|(v, _)| *v)
+            .chain(backend_palette_verbs().iter().map(|(v, _)| *v));
+        for verb in all_verbs {
             let d = lev(&typed_lower, verb);
             if d < best_dist && d <= 2 {
-                best = Some(*verb);
+                best = Some(verb);
                 best_dist = d;
             }
         }
@@ -1414,6 +2173,228 @@ impl App {
             ChatRole::System,
             format!("model 切换为 `{arg}` — 下一个 run 起用此 model。"),
         );
+        Action::None
+    }
+    /// `/provider` — manage custom OpenAI-compatible / Anthropic API endpoints.
+    ///
+    /// Forms:
+    /// - `/provider`                 list configured providers + the active one
+    /// - `/provider <name>`          switch to a named provider (custom API mode)
+    /// - `/provider off`             disable custom provider (fall back to host CLI / offline)
+    /// - `/provider add <name> <kind> <base_url> <model>`  register a provider
+    /// - `/provider key <name> <key-or-${ENV}>`  set/rotate a provider's api key
+    /// - `/provider remove <name>`   delete a provider
+    ///
+    /// Selecting a provider is mutually exclusive with `/backend`: a custom API
+    /// wins (matches `brain_spec` precedence). `/provider off` restores the
+    /// host-CLI / offline path.
+    fn slash_provider(&mut self, arg: &str) -> Action {
+        let mut parts = arg.split_whitespace();
+        match parts.next() {
+            None => self.slash_provider_list(),
+            Some("off") => {
+                self.config.default_provider = None;
+                if let Err(e) = crate::config::save_to(&self.config, &self.config_path) {
+                    self.push(
+                        ChatRole::System,
+                        format!("(无法写入 {}: {e})", self.config_path.display()),
+                    );
+                }
+                self.push(
+                    ChatRole::System,
+                    "已关闭自定义 provider — 回退到 host CLI / offline。".to_string(),
+                );
+                self.refresh_status();
+                Action::BackendChanged
+            }
+            Some("setup") => {
+                self.start_provider_wizard();
+                Action::None
+            }
+            Some("add") => self.slash_provider_add(parts.collect::<Vec<_>>().as_slice()),
+            Some("key") => self.slash_provider_set_key(parts.collect::<Vec<_>>().as_slice()),
+            Some("remove") => self.slash_provider_remove(parts.collect::<Vec<_>>().as_slice()),
+            Some(name) => {
+                if !self.config.providers.contains_key(name) {
+                    self.push(
+                        ChatRole::System,
+                        format!(
+                            "provider `{name}` 不存在。用 /provider 查看已配置的;\n  \
+                             添加:/provider add {name} openai https://api.x.com/v1 <model>"
+                        ),
+                    );
+                    return Action::None;
+                }
+                self.config.default_provider = Some(name.to_string());
+                // A custom provider supersedes the host CLI; clear the backend
+                // field so the status line and brain_spec agree.
+                self.backend = None;
+                self.backend_label = name.to_string();
+                self.config.backend = None;
+                if let Err(e) = crate::config::save_to(&self.config, &self.config_path) {
+                    self.push(
+                        ChatRole::System,
+                        format!("(无法写入 {}: {e})", self.config_path.display()),
+                    );
+                }
+                let p = self.config.providers.get(name).expect("just checked");
+                self.push(
+                    ChatRole::SuperDev,
+                    format!(
+                        "已切换到自定义 provider `{name}` — {kind} · {base} · {model}\n  \
+                         下一个 run 起直接调用此 API。/provider off 可回退。",
+                        kind = p.kind,
+                        base = p.base_url,
+                        model = p.model
+                    ),
+                );
+                self.refresh_status();
+                Action::BackendChanged
+            }
+        }
+    }
+
+    fn slash_provider_list(&mut self) -> Action {
+        if self.config.providers.is_empty() {
+            self.push(
+                ChatRole::System,
+                "还没有配置任何自定义 provider。添加示例:\n  \
+                 /provider add deepseek openai https://api.deepseek.com/v1 deepseek-chat\n  \
+                 然后 /provider key deepseek ${DEEPSEEK_API_KEY}\n  \
+                 再 /provider deepseek 即可启用。\n  \
+                 kind 支持 `openai`(兼容 DeepSeek/OpenRouter/Groq/Ollama 等)或 `anthropic`。"
+                    .to_string(),
+            );
+            return Action::None;
+        }
+        let active = self.config.default_provider.as_deref().unwrap_or("(无)");
+        let mut body = format!("自定义 provider(当前激活: {active}):\n");
+        for (name, p) in &self.config.providers {
+            let key_state = if p.api_key.trim().is_empty() {
+                "⚠ 未设置 key"
+            } else if p.api_key.starts_with("${") {
+                "env"
+            } else {
+                "literal"
+            };
+            body.push_str(&format!(
+                "  • {name}  [{kind}] {base}  model={model}  key={key_state}\n",
+                kind = p.kind,
+                base = p.base_url,
+                model = p.model,
+            ));
+        }
+        body.push_str("切换:/provider <name> · 关闭:/provider off");
+        self.push(ChatRole::System, body);
+        Action::None
+    }
+
+    fn slash_provider_add(&mut self, args: &[&str]) -> Action {
+        if args.len() != 4 {
+            self.push(
+                ChatRole::System,
+                "用法:/provider add <name> <kind> <base_url> <model>\n  \
+                 示例:/provider add deepseek openai https://api.deepseek.com/v1 deepseek-chat\n  \
+                 kind = `openai` 或 `anthropic`\n  \
+                 添加后再 /provider key <name> <key 或 ${ENV}> 设置密钥。"
+                    .to_string(),
+            );
+            return Action::None;
+        }
+        let name = args[0].to_string();
+        let kind = args[1].to_ascii_lowercase();
+        if kind != "openai" && kind != "anthropic" {
+            self.push(
+                ChatRole::System,
+                format!("kind `{kind}` 不支持 —— 只能是 `openai` 或 `anthropic`。"),
+            );
+            return Action::None;
+        }
+        let p = crate::config::ProviderConfig {
+            kind,
+            base_url: args[2].to_string(),
+            api_key: String::new(),
+            model: args[3].to_string(),
+        };
+        self.config.providers.insert(name.clone(), p);
+        if let Err(e) = crate::config::save_to(&self.config, &self.config_path) {
+            self.push(
+                ChatRole::System,
+                format!("(无法写入 {}: {e})", self.config_path.display()),
+            );
+        }
+        self.push(
+            ChatRole::SuperDev,
+            format!(
+                "已添加 provider `{name}`。下一步设置密钥:\n  \
+                 /provider key {name} <你的 key 或 ${{ENV_VAR}}>\n  \
+                 然后用 /provider {name} 启用。"
+            ),
+        );
+        Action::None
+    }
+
+    fn slash_provider_set_key(&mut self, args: &[&str]) -> Action {
+        if args.len() != 2 {
+            self.push(
+                ChatRole::System,
+                "用法:/provider key <name> <key 或 ${ENV_VAR}>\n  \
+                 示例:/provider key deepseek ${DEEPSEEK_API_KEY}"
+                    .to_string(),
+            );
+            return Action::None;
+        }
+        let name = args[0];
+        let keyval = args[1].to_string();
+        match self.config.providers.get_mut(name) {
+            Some(p) => {
+                p.api_key = keyval.clone();
+                if let Err(e) = crate::config::save_to(&self.config, &self.config_path) {
+                    self.push(
+                        ChatRole::System,
+                        format!("(无法写入 {}: {e})", self.config_path.display()),
+                    );
+                }
+                let masked = if keyval.starts_with("${") {
+                    keyval
+                } else {
+                    format!("{}…", &keyval[..keyval.len().min(8)])
+                };
+                self.push(
+                    ChatRole::System,
+                    format!("provider `{name}` 的 key 已更新为 {masked}。"),
+                );
+            }
+            None => {
+                self.push(
+                    ChatRole::System,
+                    format!("provider `{name}` 不存在 —— 先 /provider add。"),
+                );
+            }
+        }
+        Action::None
+    }
+
+    fn slash_provider_remove(&mut self, args: &[&str]) -> Action {
+        if args.is_empty() {
+            self.push(ChatRole::System, "用法:/provider remove <name>".to_string());
+            return Action::None;
+        }
+        let name = args[0];
+        if self.config.providers.remove(name).is_some() {
+            if self.config.default_provider.as_deref() == Some(name) {
+                self.config.default_provider = None;
+            }
+            if let Err(e) = crate::config::save_to(&self.config, &self.config_path) {
+                self.push(
+                    ChatRole::System,
+                    format!("(无法写入 {}: {e})", self.config_path.display()),
+                );
+            }
+            self.push(ChatRole::System, format!("已删除 provider `{name}`。"));
+        } else {
+            self.push(ChatRole::System, format!("provider `{name}` 不存在。"));
+        }
         Action::None
     }
 
@@ -1742,10 +2723,19 @@ impl App {
             }
         }
 
-        // Knowledge RAG info — show which domains would be queried per phase
-        body.push_str("\n## Knowledge RAG mapping\n\n");
+        // Knowledge RAG info — reflect the configured retrieval engine.
+        let project_cfg = super_dev_agent::config::load_project_config(&self.project_root);
+        let rag_engine =
+            if project_cfg.knowledge.enabled && project_cfg.knowledge.engine == "hybrid" {
+                "BM25 + vector hybrid (RRF-fused)"
+            } else if project_cfg.knowledge.enabled {
+                "BM25 (keyword inverted index)"
+            } else {
+                "keyword-scoring (legacy)"
+            };
+        body.push_str(&format!("\n## Knowledge RAG ({rag_engine})\n\n"));
         body.push_str("| Phase | Knowledge domains |\n|---|---|\n");
-        body.push_str("| research | ALL (308 files, keyword-ranked) |\n");
+        body.push_str("| research | ALL (whole-tree scan) |\n");
         body.push_str("| docs | product, architecture, design, frontend, industries |\n");
         body.push_str("| spec | development, governance, product |\n");
         body.push_str("| frontend | frontend, design, design-systems, seed-templates |\n");
@@ -1919,12 +2909,44 @@ impl App {
             self.history_path().display()
         ));
         body.push_str(&format!("history entries: {}\n", self.input_history.len()));
+
+        // .superdevrc project config
+        let rc_path = self.project_root.join(".superdevrc");
+        if rc_path.is_file() {
+            let cfg = super_dev_agent::config::load_project_config(&self.project_root);
+            body.push_str("\n## Project Config (.superdevrc)\n\n");
+            body.push_str(&format!("quality threshold:   {}\n", cfg.quality.threshold));
+            body.push_str(&format!(
+                "max review rounds:   {}\n",
+                cfg.pipeline.max_review_rounds
+            ));
+            if !cfg.pipeline.skip_phases.is_empty() {
+                body.push_str(&format!(
+                    "skip phases:         {}\n",
+                    cfg.pipeline.skip_phases.join(", ")
+                ));
+            }
+            if !cfg.quality.skip_checks.is_empty() {
+                body.push_str(&format!(
+                    "skip checks:         {}\n",
+                    cfg.quality.skip_checks.join(", ")
+                ));
+            }
+            if let Some(ref ck) = cfg.experts.custom_knowledge {
+                body.push_str(&format!("custom knowledge:    {ck}\n"));
+            }
+        } else {
+            body.push_str("\n## Project Config\n\n");
+            body.push_str("  no .superdevrc — using defaults (threshold=90, rounds=3)\n");
+        }
+
         body.push_str("\n## How to change\n\n");
         body.push_str("  /claude /codex /gemini ...    switch worker\n");
         body.push_str("  /model <id>                   switch model\n");
         body.push_str("  /design <name>                switch design system\n");
         body.push_str("  /template <name>              switch seed template\n");
         body.push_str("  /run <slug> <req>             set slug + requirement\n");
+        body.push_str("  edit .superdevrc               project-level overrides\n");
         self.overlay = Some(Overlay::from_body(" config — Esc close ", &body));
     }
 
@@ -2029,6 +3051,59 @@ impl App {
             }
         }
         count
+    }
+
+    fn open_runs_overlay(&mut self) {
+        let path = self.project_root.join(".super-dev/runs.jsonl");
+        let mut body = String::from("Run History\n===========\n\n");
+        match std::fs::read_to_string(&path) {
+            Ok(content) if !content.trim().is_empty() => {
+                body.push_str("| # | Timestamp | Slug | Quality | Artifacts |\n");
+                body.push_str("|---|---|---|---|---|\n");
+                for (i, line) in content.lines().rev().take(20).enumerate() {
+                    if let Ok(v) = serde_json::from_str::<serde_json::Value>(line) {
+                        let ts = v["timestamp"].as_str().unwrap_or("?");
+                        let slug = v["slug"].as_str().unwrap_or("?");
+                        let passed = if v["quality_passed"].as_bool().unwrap_or(false) {
+                            "✓ PASS"
+                        } else {
+                            "✗ FAIL"
+                        };
+                        let count = v["artifact_count"].as_u64().unwrap_or(0);
+                        body.push_str(&format!(
+                            "| {} | {} | {} | {} | {} |\n",
+                            i + 1,
+                            &ts[..16.min(ts.len())],
+                            slug,
+                            passed,
+                            count
+                        ));
+                    }
+                }
+            }
+            _ => {
+                body.push_str("No runs yet. Start one by typing a requirement.\n");
+            }
+        }
+        // Phase timing
+        let timing_path = self.project_root.join(".super-dev/phase-timing.jsonl");
+        if let Ok(content) = std::fs::read_to_string(&timing_path) {
+            body.push_str("\n## Phase Timing (latest run)\n\n");
+            body.push_str("| Phase | Duration |\n|---|---|\n");
+            for line in content.lines().rev().take(9) {
+                if let Ok(v) = serde_json::from_str::<serde_json::Value>(line) {
+                    let phase = v["phase"].as_str().unwrap_or("?");
+                    let ms = v["elapsed_ms"].as_u64().unwrap_or(0);
+                    #[allow(clippy::cast_precision_loss)]
+                    let secs = ms as f64 / 1000.0;
+                    body.push_str(&format!("| {phase} | {secs:.1}s |\n"));
+                }
+            }
+        }
+        self.overlay = Some(Overlay::from_body(
+            " /runs — run history · Esc close ",
+            &body,
+        ));
     }
 
     fn open_version_overlay(&mut self) {
@@ -2171,6 +3246,68 @@ impl App {
                 .collect();
             body.push_str(&labels.join(" · "));
             body.push('\n');
+        }
+
+        // Knowledge base health
+        body.push_str("\nknowledge base:\n");
+        let experts_dir = self.project_root.join("knowledge/experts");
+        if experts_dir.is_dir() {
+            let roles: Vec<_> = std::fs::read_dir(&experts_dir)
+                .ok()
+                .map(|rd| {
+                    rd.filter_map(Result::ok)
+                        .filter(|e| e.path().is_dir())
+                        .map(|e| e.file_name().to_string_lossy().to_string())
+                        .collect()
+                })
+                .unwrap_or_default();
+            body.push_str(&format!(
+                "  ✓ {} expert roles: {}\n",
+                roles.len(),
+                roles.join(", ")
+            ));
+        } else {
+            body.push_str("  ⚠ no knowledge/experts/ directory\n");
+        }
+        let knowledge_dir = self.project_root.join("knowledge");
+        if knowledge_dir.is_dir() {
+            let md_count = walkdir_count_md(&knowledge_dir);
+            body.push_str(&format!("  ✓ {md_count} knowledge files total\n"));
+        }
+
+        // .superdevrc
+        let rc_path = self.project_root.join(".superdevrc");
+        body.push_str("\nproject config:\n");
+        if rc_path.is_file() {
+            let cfg = super_dev_agent::config::load_project_config(&self.project_root);
+            body.push_str(&format!(
+                "  ✓ .superdevrc (threshold={}, rounds={})\n",
+                cfg.quality.threshold, cfg.pipeline.max_review_rounds
+            ));
+        } else {
+            body.push_str("  ○ no .superdevrc (using defaults)\n");
+        }
+
+        // Audit trail
+        body.push_str("\naudit trail:\n");
+        let audit_dir = self.project_root.join(".super-dev/audit");
+        if audit_dir.is_dir() {
+            for name in [
+                "tool-calls.jsonl",
+                "frontend-api-calls.jsonl",
+                "verify.jsonl",
+            ] {
+                let p = audit_dir.join(name);
+                if p.is_file() {
+                    let lines = std::fs::read_to_string(&p)
+                        .map_or(0, |t| t.lines().filter(|l| !l.trim().is_empty()).count());
+                    body.push_str(&format!("  ✓ {name} ({lines} entries)\n"));
+                } else {
+                    body.push_str(&format!("  ○ {name} (not yet created)\n"));
+                }
+            }
+        } else {
+            body.push_str("  ○ no audit trail yet (run a pipeline first)\n");
         }
 
         self.overlay = Some(Overlay::from_body(" doctor — press Esc to close ", &body));
@@ -2383,6 +3520,153 @@ impl App {
         }
     }
 
+    /// Path to the frontend-notes markdown the worker writes (holds the
+    /// `## Preview URL` + `## Run command` sections).
+    fn frontend_notes_path(&self) -> std::path::PathBuf {
+        self.project_root
+            .join("output")
+            .join(format!("{}-frontend-notes.md", self.slug))
+    }
+
+    /// Extract the `## Preview URL` value from the frontend-notes file.
+    /// Returns `None` when the file is missing or the section is empty.
+    #[must_use]
+    pub fn preview_url_from_notes(&self) -> Option<String> {
+        let body = std::fs::read_to_string(self.frontend_notes_path()).ok()?;
+        parse_notes_section(&body, "Preview URL")
+            .map(str::to_string)
+            .filter(|u| u.starts_with("http"))
+    }
+
+    /// Extract the `## Run command` value from the frontend-notes file.
+    #[must_use]
+    pub fn run_command_from_notes(&self) -> Option<String> {
+        let body = std::fs::read_to_string(self.frontend_notes_path()).ok()?;
+        parse_notes_section(&body, "Run command").map(str::to_string)
+    }
+
+    /// `/preview` — read the Preview URL the worker recorded, start the dev
+    /// server in the background, open the browser, and tell the user. Falls
+    /// back to a clear hint when no notes / no URL yet.
+    fn slash_preview(&mut self) -> Action {
+        // If a server is already running, just re-open the browser.
+        let already = self.preview_server.lock().is_ok_and(|g| g.is_some());
+        if already {
+            if let Some(url) = self.preview_url_from_notes() {
+                let _ = open_browser(&url);
+                self.push(
+                    ChatRole::System,
+                    format!("预览已在运行,重新打开浏览器:{url}"),
+                );
+            }
+            return Action::None;
+        }
+
+        let Some(url) = self.preview_url_from_notes() else {
+            self.push(
+                ChatRole::System,
+                "还没有可预览的前端。先输入需求跑完到 frontend 阶段(会停在预览 gate),\n                   或确认宿主已把 Preview URL 写进 output/xxx-frontend-notes.md。".to_string(),
+            );
+            return Action::None;
+        };
+
+        // Start the dev server so the URL is actually live. We use the run
+        // command the worker recorded; if absent we cannot start it and just
+        // open the URL (it may already be up from the worker's probe).
+        if let Some(cmd) = self.run_command_from_notes() {
+            self.push(
+                ChatRole::SuperDev,
+                format!("启动 dev server 并打开预览:{url}\n  命令:`{cmd}`"),
+            );
+            Action::StartPreview { url, command: cmd }
+        } else {
+            let _ = open_browser(&url);
+            self.push(
+                ChatRole::System,
+                format!(
+                    "已打开预览:{url}\n  (未找到 Run command,如页面打不开请手动启动 dev server)"
+                ),
+            );
+            Action::None
+        }
+    }
+
+    /// `/stop-preview` — kill the background dev server if one is running.
+    fn slash_stop_preview(&mut self) -> Action {
+        let killed = self
+            .preview_server
+            .lock()
+            .is_ok_and(|mut g| g.take().is_some_and(|mut c| c.start_kill().is_ok()));
+        if killed {
+            self.push(ChatRole::System, "已停止预览 dev server。".to_string());
+        } else {
+            self.push(ChatRole::System, "没有正在运行的预览 server。".to_string());
+        }
+        Action::None
+    }
+
+    /// Path to the delivery-notes markdown (holds deploy/URL/run sections).
+    fn delivery_notes_path(&self) -> std::path::PathBuf {
+        self.project_root
+            .join("output")
+            .join(format!("{}-delivery-notes.md", self.slug))
+    }
+
+    /// Read the `## Deploy command` the worker recorded.
+    #[must_use]
+    pub fn deploy_command_from_notes(&self) -> Option<String> {
+        let body = std::fs::read_to_string(self.delivery_notes_path()).ok()?;
+        parse_notes_section(&body, "Deploy command").map(str::to_string)
+    }
+
+    /// Read the `## Frontend URL` (live URL after a deploy).
+    #[must_use]
+    pub fn deploy_url_from_notes(&self) -> Option<String> {
+        let body = std::fs::read_to_string(self.delivery_notes_path()).ok()?;
+        parse_notes_section(&body, "Frontend URL")
+            .map(str::to_string)
+            .filter(|u| u.starts_with("http"))
+    }
+
+    /// `/deploy` — run the deploy command the worker recorded so the project
+    /// goes live. The command typically logs into a platform CLI and pushes
+    /// (e.g. `npx vercel --prod`). We run it in the foreground so its login
+    /// prompts / output reach the user; the URL is surfaced after.
+    fn slash_deploy(&mut self) -> Action {
+        let Some(cmd) = self.deploy_command_from_notes() else {
+            self.push(
+                ChatRole::System,
+                "还没有部署指令。先跑完到 delivery 阶段(宿主会把部署命令写进 \
+                 output/xxx-delivery-notes.md),或确认宿主已填 `## Deploy command`。"
+                    .to_string(),
+            );
+            return Action::None;
+        };
+        self.push(
+            ChatRole::SuperDev,
+            format!("开始部署,执行:`{cmd}`\n  (这可能需要登录平台 CLI,按提示操作)"),
+        );
+        Action::RunDeploy { command: cmd }
+    }
+
+    /// Called by `apply_engine` when the preview gate opens: surface the
+    /// recorded URL so the user knows where to look before pressing `c`.
+    pub fn maybe_announce_preview(&mut self) {
+        if let Some(url) = self.preview_url_from_notes() {
+            self.push(
+                ChatRole::SuperDev,
+                format!(
+                    "🖥 前端已生成,预览地址:{url}\n                       在浏览器打开查看效果。满意就输入 c 继续(进入后端);\n                       要改就描述修改意见。也可 /preview 自动启动 dev server、/stop-preview 停止。"
+                ),
+            );
+        } else {
+            self.push(
+                ChatRole::System,
+                "前端已生成,但宿主未记录 Preview URL。\n                   可手动打开项目运行 dev server 预览,或 /preview 尝试自动启动。".to_string(),
+            );
+        }
+    }
+
     /// Advance the spinner animation frame; status bar is regenerated
     /// so the spinner glyph actually rotates while a phase is running.
     pub fn tick(&mut self) {
@@ -2398,9 +3682,85 @@ impl App {
     }
 }
 
+/// Parse a `## <heading>` section out of a markdown body and return the first
+/// non-empty, non-italic-placeholder line under it. Returns `None` when the
+/// section is absent or only contains placeholder text (`_(…)_`).
+fn parse_notes_section<'a>(body: &'a str, heading: &str) -> Option<&'a str> {
+    let needle = format!("## {heading}");
+    let after = body.split(&needle).nth(1)?;
+    // Take lines until the next `## ` heading.
+    for line in after.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if trimmed.starts_with("## ") {
+            break;
+        }
+        // Skip italic placeholder lines like `_(example)_`.
+        if trimmed.starts_with("_(") || trimmed.starts_with('_') {
+            continue;
+        }
+        return Some(trimmed);
+    }
+    None
+}
+
+/// Best-effort cross-platform "open URL in default browser". Uses `open` on
+/// macOS, `xdg-open` on Linux, `start` on Windows. Failures are silent — the
+/// user can copy the URL manually.
+fn open_browser(url: &str) -> std::io::Result<()> {
+    #[cfg(target_os = "macos")]
+    let prog = "open";
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let prog = "xdg-open";
+    #[cfg(target_os = "windows")]
+    let prog = "cmd";
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new(prog)
+            .args(["/C", "start", "", url])
+            .spawn()?;
+        return Ok(());
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        std::process::Command::new(prog).arg(url).spawn()?;
+        Ok(())
+    }
+}
+
+/// Slash-verb entries for every registered host backend, derived from
+/// `super_dev_host::BACKEND_IDS` so the palette + did-you-mean can never
+/// drift from the driver registry. Each entry is `(id, "switch worker to <display>")`.
+///
+/// Computed once and cached in a [`OnceLock`] (the backend registry is
+/// immutable for the process lifetime), so callers get `&'static` refs
+/// without per-keystroke allocation or leaks.
+fn backend_palette_verbs() -> &'static [(&'static str, &'static str)] {
+    static CACHE: std::sync::OnceLock<Vec<(&'static str, &'static str)>> =
+        std::sync::OnceLock::new();
+    CACHE.get_or_init(|| {
+        super_dev_host::BACKEND_IDS
+            .iter()
+            .map(|id| {
+                let display = super_dev_host::driver_for(id)
+                    .map_or_else(|| (*id).to_string(), |d| d.display_name().to_string());
+                // Leak once at first use: the registry never changes, so the
+                // table is process-lived. This is the standard pattern for
+                // turning runtime-built data into &'static for const-shaped APIs.
+                let hint: &'static str =
+                    Box::leak(format!("switch worker to {display}").into_boxed_str());
+                (*id, hint)
+            })
+            .collect()
+    })
+}
+
 /// The fixed set of options the picker shows. Probe results refine the
 /// labels at runtime.
 fn default_picker_items() -> Vec<PickerItem> {
+    // Group 1: logged-in host CLIs (no API key needed).
     let mut items: Vec<PickerItem> = super_dev_host::BACKEND_IDS
         .iter()
         .map(|id| {
@@ -2411,14 +3771,28 @@ fn default_picker_items() -> Vec<PickerItem> {
                 label: display,
                 ready: false,
                 detail: "detecting…".to_string(),
+                group: PickerGroup::HostCli,
+                launches_wizard: false,
             }
         })
         .collect();
+    // Group 2: custom API entry — launches the setup wizard.
+    items.push(PickerItem {
+        backend_id: None,
+        label: "接入第三方 API…".to_string(),
+        ready: true,
+        detail: "DeepSeek / OpenRouter / Ollama / 智谱 / 百炼… 自带 key".to_string(),
+        group: PickerGroup::CustomApi,
+        launches_wizard: true,
+    });
+    // Group 3: offline templates.
     items.push(PickerItem {
         backend_id: None,
         label: "offline".to_string(),
         ready: true,
         detail: "deterministic templates (no AI; demos / CI)".to_string(),
+        group: PickerGroup::Offline,
+        launches_wizard: false,
     });
     items
 }
@@ -2488,13 +3862,18 @@ fn lev(a: &str, b: &str) -> usize {
 /// actually means.
 fn gate_card(gate: Gate, slug: &str, project_root: &std::path::Path) -> String {
     let slug = if slug.is_empty() { "<slug>" } else { slug };
-    let (title, artifacts, next) = match gate {
+    let (title, artifacts, checklist, next) = match gate {
         Gate::DocsConfirm => (
             "docs_confirm — three core docs are ready for review",
             vec![
                 format!("output/{slug}-prd.md"),
                 format!("output/{slug}-architecture.md"),
                 format!("output/{slug}-uiux.md"),
+            ],
+            vec![
+                "PRD: 目标 / 范围 / 验收标准是否覆盖你真正要做的事?",
+                "架构: API 接口、数据模型、技术选型是否合理?",
+                "设计: 配色 / 字体 / 组件 token 是否符合预期, 有无暗色模式?",
             ],
             "审核三份核心文档,确认后再进入 spec / frontend。",
         ),
@@ -2503,6 +3882,11 @@ fn gate_card(gate: Gate, slug: &str, project_root: &std::path::Path) -> String {
             vec![
                 format!("output/{slug}-frontend-notes.md"),
                 format!("output/{slug}-execution-plan.md"),
+            ],
+            vec![
+                "前端是否按 UIUX 设计系统实现(图标库 / token / 排版)?",
+                "页面结构和交互流是否匹配 PRD 的用户故事?",
+                "fetch 的接口地址是否和架构文档里的 API 一致?",
             ],
             "审核前端可运行预览,确认后再进入 backend / quality / delivery。",
         ),
@@ -2554,6 +3938,10 @@ fn gate_card(gate: Gate, slug: &str, project_root: &std::path::Path) -> String {
             ));
         }
     }
+    out.push_str("  审批清单(确认这些再通过):\n");
+    for item in &checklist {
+        out.push_str(&format!("    □ {item}\n"));
+    }
     out.push_str("  操作:\n");
     out.push_str("    · /continue 或 c        → 通过 gate\n");
     out.push_str("    · /revise <修订说明>     → worker 重做\n");
@@ -2575,6 +3963,37 @@ fn refresh_picker_with_probes(items: &mut [PickerItem], probes: &[BackendInfo]) 
     }
 }
 
+/// Format a duration in seconds as a compact `m:ss` (or `s` when under a
+/// minute) human counter for the status bar.
+fn fmt_elapsed(secs: u64) -> String {
+    if secs < 60 {
+        format!("{secs}s")
+    } else {
+        format!("{}:{:02}", secs / 60, secs % 60)
+    }
+}
+
+fn walkdir_count_md_inner(d: &std::path::Path, c: &mut usize, depth: usize) {
+    if depth > 6 {
+        return;
+    }
+    let Ok(rd) = std::fs::read_dir(d) else { return };
+    for e in rd.flatten() {
+        let p = e.path();
+        if p.is_dir() {
+            walkdir_count_md_inner(&p, c, depth + 1);
+        } else if p.extension().and_then(|s| s.to_str()) == Some("md") {
+            *c += 1;
+        }
+    }
+}
+
+fn walkdir_count_md(dir: &std::path::Path) -> usize {
+    let mut count = 0;
+    walkdir_count_md_inner(dir, &mut count, 0);
+    count
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2592,6 +4011,189 @@ mod tests {
             std::path::PathBuf::from("/tmp/sd-test-config.toml"),
             std::path::PathBuf::from("/tmp/sd-test-workspace"),
         )
+    }
+
+    #[test]
+    fn provider_presets_are_well_formed() {
+        assert!(
+            !PROVIDER_PRESETS.is_empty(),
+            "preset catalog must not be empty"
+        );
+        let mut seen = std::collections::HashSet::new();
+        for p in PROVIDER_PRESETS {
+            assert!(!p.id.is_empty(), "preset id empty");
+            assert!(seen.insert(p.id), "duplicate preset id: {}", p.id);
+            assert!(
+                p.kind == "openai" || p.kind == "anthropic",
+                "preset {} has bad kind {}",
+                p.id,
+                p.kind
+            );
+            assert!(!p.base_url.is_empty(), "preset {} base_url empty", p.id);
+            assert!(
+                p.base_url.starts_with("http"),
+                "preset {} base_url not http",
+                p.id
+            );
+            assert!(!p.default_model.is_empty(), "preset {} model empty", p.id);
+            if p.needs_key {
+                assert!(
+                    !p.env_var.is_empty(),
+                    "preset {} needs key but env_var empty",
+                    p.id
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn find_preset_case_insensitive() {
+        assert!(find_preset("deepseek").is_some());
+        assert!(find_preset("DeepSeek").is_some());
+        assert!(find_preset("OPENROUTER").is_some());
+        assert!(find_preset("ghost").is_none());
+    }
+
+    #[test]
+    fn find_preset_covers_local_no_key() {
+        let ollama = find_preset("ollama").expect("ollama preset");
+        assert!(!ollama.needs_key);
+        assert!(ollama.env_var.is_empty());
+    }
+
+    #[test]
+    fn default_picker_items_has_three_groups_and_wizard_entry() {
+        let items = default_picker_items();
+        let groups: Vec<_> = items.iter().map(|i| i.group).collect();
+        assert!(
+            groups.contains(&PickerGroup::HostCli),
+            "missing HostCli group"
+        );
+        assert!(
+            groups.contains(&PickerGroup::CustomApi),
+            "missing CustomApi group"
+        );
+        assert!(
+            groups.contains(&PickerGroup::Offline),
+            "missing Offline group"
+        );
+        let wizard = items.iter().find(|i| i.launches_wizard);
+        assert!(wizard.is_some(), "no wizard entry");
+        assert_eq!(wizard.unwrap().group, PickerGroup::CustomApi);
+    }
+
+    #[test]
+    fn parse_notes_section_extracts_url() {
+        let body = "# Frontend notes\n\n## Preview URL\n\nhttp://localhost:5173\n\n## Run command\n\ncd web && npm run dev\n";
+        assert_eq!(
+            parse_notes_section(body, "Preview URL"),
+            Some("http://localhost:5173")
+        );
+        assert_eq!(
+            parse_notes_section(body, "Run command"),
+            Some("cd web && npm run dev")
+        );
+    }
+
+    #[test]
+    fn parse_notes_section_skips_placeholder() {
+        let body = "## Preview URL\n\n_(worker fills this)_\n\nhttp://localhost:3000\n";
+        // Skips the italic placeholder, returns the real URL.
+        assert_eq!(
+            parse_notes_section(body, "Preview URL"),
+            Some("http://localhost:3000")
+        );
+    }
+
+    #[test]
+    fn parse_notes_section_missing_returns_none() {
+        assert_eq!(parse_notes_section("no headings here", "Preview URL"), None);
+    }
+
+    #[test]
+    fn parse_notes_section_stops_at_next_heading() {
+        let body = "## Preview URL\n\nhttp://localhost:5173\n\n## Other\n\nhttp://wrong\n";
+        assert_eq!(
+            parse_notes_section(body, "Preview URL"),
+            Some("http://localhost:5173")
+        );
+    }
+
+    #[test]
+    fn preview_url_from_notes_reads_file() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let slug = "demo";
+        std::fs::create_dir_all(tmp.path().join("output")).unwrap();
+        std::fs::write(
+            tmp.path()
+                .join("output")
+                .join(format!("{slug}-frontend-notes.md")),
+            "# Notes\n\n## Preview URL\n\nhttp://localhost:4321\n\n## Run command\n\nnpm run dev\n",
+        )
+        .unwrap();
+        let app = App::new(
+            slug.to_string(),
+            UserConfig {
+                backend: Some("offline".into()),
+                ..Default::default()
+            },
+            tmp.path().join("config.toml"),
+            tmp.path().to_path_buf(),
+        );
+        assert_eq!(
+            app.preview_url_from_notes().as_deref(),
+            Some("http://localhost:4321")
+        );
+        assert_eq!(app.run_command_from_notes().as_deref(), Some("npm run dev"));
+    }
+
+    #[test]
+    fn slash_preview_with_no_notes_gives_hint() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let mut app = App::new(
+            "demo".to_string(),
+            UserConfig {
+                backend: Some("offline".into()),
+                ..Default::default()
+            },
+            tmp.path().join("config.toml"),
+            tmp.path().to_path_buf(),
+        );
+        // No output dir / notes file → guidance message, no StartPreview.
+        let action = app.slash_preview();
+        assert!(matches!(action, Action::None));
+        assert!(app.history.iter().any(|m| m.body.contains("还没有可预览")));
+    }
+
+    #[test]
+    fn slash_preview_with_url_and_command_emits_start() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let slug = "demo";
+        std::fs::create_dir_all(tmp.path().join("output")).unwrap();
+        std::fs::write(
+            tmp.path()
+                .join("output")
+                .join(format!("{slug}-frontend-notes.md")),
+            "## Preview URL\n\nhttp://localhost:5173\n\n## Run command\n\ncd web && npm run dev\n",
+        )
+        .unwrap();
+        let mut app = App::new(
+            slug.to_string(),
+            UserConfig {
+                backend: Some("offline".into()),
+                ..Default::default()
+            },
+            tmp.path().join("config.toml"),
+            tmp.path().to_path_buf(),
+        );
+        let action = app.slash_preview();
+        match action {
+            Action::StartPreview { url, command } => {
+                assert_eq!(url, "http://localhost:5173");
+                assert_eq!(command, "cd web && npm run dev");
+            }
+            other => panic!("expected StartPreview, got {other:?}"),
+        }
     }
 
     #[test]
@@ -3130,6 +4732,589 @@ mod tests {
         let loaded = crate::config::load_from(&cfg_path);
         assert_eq!(loaded.model.as_deref(), Some("claude-opus-4-7"));
     }
+    // ---- /provider custom-API commands ----
+
+    #[test]
+    fn slash_provider_list_empty_prints_help() {
+        let mut a = fresh_app(Some("offline"));
+        for c in "/provider".chars() {
+            let _ = a.apply_key(KeyCode::Char(c));
+        }
+        let _ = a.apply_key(KeyCode::Enter);
+        assert!(a
+            .history
+            .iter()
+            .any(|m| m.body.contains("还没有配置任何自定义 provider")));
+    }
+
+    #[test]
+    fn slash_provider_add_then_key_then_switch_flow() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let cfg_path = tmp.path().join("config.toml");
+        let cfg = UserConfig {
+            backend: Some("offline".into()),
+            ..Default::default()
+        };
+        let mut app = App::new("demo", cfg, cfg_path.clone(), tmp.path().to_path_buf());
+
+        for c in "/provider add deepseek openai https://api.deepseek.com/v1 deepseek-chat".chars() {
+            let _ = app.apply_key(KeyCode::Char(c));
+        }
+        let _ = app.apply_key(KeyCode::Enter);
+        assert!(app.config.providers.contains_key("deepseek"));
+        let p = app.config.providers.get("deepseek").unwrap();
+        assert_eq!(p.kind, "openai");
+        assert_eq!(p.model, "deepseek-chat");
+        assert!(p.api_key.is_empty(), "key starts empty");
+
+        for c in "/provider key deepseek sk-real-123".chars() {
+            let _ = app.apply_key(KeyCode::Char(c));
+        }
+        let _ = app.apply_key(KeyCode::Enter);
+        assert_eq!(app.config.providers["deepseek"].api_key, "sk-real-123");
+
+        for c in "/provider deepseek".chars() {
+            let _ = app.apply_key(KeyCode::Char(c));
+        }
+        let _ = app.apply_key(KeyCode::Enter);
+        assert_eq!(app.config.default_provider.as_deref(), Some("deepseek"));
+        assert!(app.backend.is_none(), "custom provider supersedes backend");
+        assert!(matches!(app.brain_spec(), crate::BrainSpec::CustomApi(_)));
+
+        let loaded = crate::config::load_from(&cfg_path);
+        assert!(loaded.providers.contains_key("deepseek"));
+        assert_eq!(loaded.default_provider.as_deref(), Some("deepseek"));
+    }
+
+    #[test]
+    fn slash_provider_off_clears_default() {
+        let mut providers = std::collections::BTreeMap::new();
+        providers.insert(
+            "p".into(),
+            crate::config::ProviderConfig {
+                kind: "openai".into(),
+                base_url: "https://x".into(),
+                api_key: "k".into(),
+                model: "m".into(),
+            },
+        );
+        let tmp = tempfile::TempDir::new().unwrap();
+        let cfg = UserConfig {
+            backend: None,
+            default_provider: Some("p".into()),
+            providers,
+            ..Default::default()
+        };
+        let mut app = App::new(
+            "demo",
+            cfg,
+            tmp.path().join("config.toml"),
+            tmp.path().to_path_buf(),
+        );
+        assert!(matches!(app.brain_spec(), crate::BrainSpec::CustomApi(_)));
+        for c in "/provider off".chars() {
+            let _ = app.apply_key(KeyCode::Char(c));
+        }
+        let _ = app.apply_key(KeyCode::Enter);
+        assert!(app.config.default_provider.is_none());
+        assert!(matches!(app.brain_spec(), crate::BrainSpec::Offline));
+    }
+
+    #[test]
+    fn slash_provider_remove_drops_entry() {
+        let mut providers = std::collections::BTreeMap::new();
+        providers.insert(
+            "x".into(),
+            crate::config::ProviderConfig {
+                kind: "openai".into(),
+                base_url: "https://x".into(),
+                api_key: "k".into(),
+                model: "m".into(),
+            },
+        );
+        let tmp = tempfile::TempDir::new().unwrap();
+        let cfg = UserConfig {
+            backend: Some("offline".into()),
+            providers,
+            ..Default::default()
+        };
+        let mut app = App::new(
+            "demo",
+            cfg,
+            tmp.path().join("config.toml"),
+            tmp.path().to_path_buf(),
+        );
+        for c in "/provider remove x".chars() {
+            let _ = app.apply_key(KeyCode::Char(c));
+        }
+        let _ = app.apply_key(KeyCode::Enter);
+        assert!(!app.config.providers.contains_key("x"));
+    }
+
+    #[test]
+    fn slash_provider_add_rejects_bad_kind() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let cfg = UserConfig {
+            backend: Some("offline".into()),
+            ..Default::default()
+        };
+        let mut app = App::new(
+            "demo",
+            cfg,
+            tmp.path().join("config.toml"),
+            tmp.path().to_path_buf(),
+        );
+        for c in "/provider add p quantum https://x m".chars() {
+            let _ = app.apply_key(KeyCode::Char(c));
+        }
+        let _ = app.apply_key(KeyCode::Enter);
+        assert!(!app.config.providers.contains_key("p"));
+        assert!(app.history.iter().any(|m| m.body.contains("不支持")));
+    }
+
+    #[test]
+    fn slash_provider_switch_unknown_errors() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let cfg = UserConfig {
+            backend: Some("offline".into()),
+            ..Default::default()
+        };
+        let mut app = App::new(
+            "demo",
+            cfg,
+            tmp.path().join("config.toml"),
+            tmp.path().to_path_buf(),
+        );
+        for c in "/provider ghost".chars() {
+            let _ = app.apply_key(KeyCode::Char(c));
+        }
+        let _ = app.apply_key(KeyCode::Enter);
+        assert!(app.history.iter().any(|m| m.body.contains("不存在")));
+        assert!(app.config.default_provider.is_none());
+    }
+
+    #[test]
+    fn brain_spec_host_cli_when_no_provider() {
+        let app = fresh_app(Some("codex"));
+        assert!(matches!(app.brain_spec(), crate::BrainSpec::HostCli(_)));
+    }
+
+    #[test]
+    fn brain_spec_offline_when_backend_offline() {
+        let app = fresh_app(Some("offline"));
+        assert!(matches!(app.brain_spec(), crate::BrainSpec::Offline));
+    }
+
+    // ---- provider setup wizard ----
+
+    fn type_and_enter(app: &mut App, text: &str) {
+        for c in text.chars() {
+            let _ = app.apply_key(KeyCode::Char(c));
+        }
+        let _ = app.apply_key(KeyCode::Enter);
+    }
+
+    #[test]
+    fn wizard_starts_via_provider_setup_slash_command() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let cfg = UserConfig {
+            backend: Some("offline".into()),
+            ..Default::default()
+        };
+        let mut app = App::new(
+            "demo",
+            cfg,
+            tmp.path().join("config.toml"),
+            tmp.path().to_path_buf(),
+        );
+        assert!(app.provider_wizard.is_none());
+        type_and_enter(&mut app, "/provider setup");
+        assert!(app.provider_wizard.is_some(), "wizard should be armed");
+        assert_eq!(
+            app.provider_wizard.as_ref().unwrap().step,
+            WizardStep::ChoosePreset,
+        );
+        // The preset menu was pushed as a SuperDev message.
+        assert!(app.history.iter().any(|m| m.body.contains("deepseek")));
+    }
+
+    #[test]
+    fn wizard_preset_selection_advances_to_confirm_model() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let cfg = UserConfig {
+            backend: Some("offline".into()),
+            ..Default::default()
+        };
+        let mut app = App::new(
+            "demo",
+            cfg,
+            tmp.path().join("config.toml"),
+            tmp.path().to_path_buf(),
+        );
+        type_and_enter(&mut app, "/provider setup");
+        type_and_enter(&mut app, "deepseek");
+        let w = app.provider_wizard.as_ref().expect("wizard active");
+        assert_eq!(w.step, WizardStep::ConfirmModel);
+        assert_eq!(w.kind, "openai");
+        assert_eq!(w.base_url, "https://api.deepseek.com/v1");
+        assert_eq!(w.model, "deepseek-chat");
+        assert!(w.preset.is_some());
+    }
+
+    #[test]
+    fn wizard_confirm_model_then_key_launches_probe() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let cfg = UserConfig {
+            backend: Some("offline".into()),
+            ..Default::default()
+        };
+        let mut app = App::new(
+            "demo",
+            cfg,
+            tmp.path().join("config.toml"),
+            tmp.path().to_path_buf(),
+        );
+        type_and_enter(&mut app, "/provider setup");
+        type_and_enter(&mut app, "deepseek");
+        // Confirm model (ok = keep default).
+        let action = {
+            for c in "ok".chars() {
+                let _ = app.apply_key(KeyCode::Char(c));
+            }
+            app.apply_key(KeyCode::Enter)
+        };
+        // After model confirm we land on EnterKey.
+        assert_eq!(
+            app.provider_wizard.as_ref().unwrap().step,
+            WizardStep::EnterKey,
+        );
+        // Enter the key → should produce a ProbeProvider action + Verifying.
+        let action2 = {
+            for c in "sk-test-123".chars() {
+                let _ = app.apply_key(KeyCode::Char(c));
+            }
+            app.apply_key(KeyCode::Enter)
+        };
+        assert!(
+            matches!(action2, Action::ProbeProvider { ref name, .. } if name == "deepseek"),
+            "expected ProbeProvider, got {action2:?}"
+        );
+        assert_eq!(
+            app.provider_wizard.as_ref().unwrap().step,
+            WizardStep::Verifying,
+        );
+        let _ = action;
+    }
+
+    #[test]
+    fn wizard_local_preset_skips_key_and_probes() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let cfg = UserConfig {
+            backend: Some("offline".into()),
+            ..Default::default()
+        };
+        let mut app = App::new(
+            "demo",
+            cfg,
+            tmp.path().join("config.toml"),
+            tmp.path().to_path_buf(),
+        );
+        type_and_enter(&mut app, "/provider setup");
+        type_and_enter(&mut app, "ollama");
+        // ollama needs_key=false → model confirm goes straight to probe.
+        let action = {
+            for c in "ok".chars() {
+                let _ = app.apply_key(KeyCode::Char(c));
+            }
+            app.apply_key(KeyCode::Enter)
+        };
+        assert!(
+            matches!(action, Action::ProbeProvider { ref name, .. } if name == "ollama"),
+            "local preset should probe immediately"
+        );
+        assert_eq!(
+            app.provider_wizard.as_ref().unwrap().step,
+            WizardStep::Verifying,
+        );
+    }
+
+    #[test]
+    fn wizard_custom_path_collects_all_fields() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let cfg = UserConfig {
+            backend: Some("offline".into()),
+            ..Default::default()
+        };
+        let mut app = App::new(
+            "demo",
+            cfg,
+            tmp.path().join("config.toml"),
+            tmp.path().to_path_buf(),
+        );
+        type_and_enter(&mut app, "/provider setup");
+        type_and_enter(&mut app, "0"); // custom
+        assert_eq!(
+            app.provider_wizard.as_ref().unwrap().step,
+            WizardStep::EnterName
+        );
+        type_and_enter(&mut app, "my-endpoint");
+        type_and_enter(&mut app, "openai");
+        type_and_enter(&mut app, "https://api.example.com/v1");
+        let action = {
+            for c in "gpt-test".chars() {
+                let _ = app.apply_key(KeyCode::Char(c));
+            }
+            // EnterKey is next after EnterModel
+            app.apply_key(KeyCode::Enter) // EnterModel
+        };
+        // Now at EnterKey
+        assert_eq!(
+            app.provider_wizard.as_ref().unwrap().step,
+            WizardStep::EnterKey,
+        );
+        assert_eq!(app.provider_wizard.as_ref().unwrap().name, "my-endpoint");
+        assert_eq!(
+            app.provider_wizard.as_ref().unwrap().base_url,
+            "https://api.example.com/v1"
+        );
+        let _ = action;
+    }
+
+    #[test]
+    fn wizard_esc_cancels_without_saving() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let cfg = UserConfig {
+            backend: Some("offline".into()),
+            ..Default::default()
+        };
+        let mut app = App::new(
+            "demo",
+            cfg,
+            tmp.path().join("config.toml"),
+            tmp.path().to_path_buf(),
+        );
+        type_and_enter(&mut app, "/provider setup");
+        assert!(app.provider_wizard.is_some());
+        let _ = app.apply_key(KeyCode::Esc);
+        assert!(app.provider_wizard.is_none(), "Esc must cancel the wizard");
+        assert!(!app.should_quit, "Esc in wizard must NOT quit the app");
+        assert!(app.history.iter().any(|m| m.body.contains("已取消")));
+    }
+
+    #[test]
+    fn wizard_unknown_preset_errors_and_stays() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let cfg = UserConfig {
+            backend: Some("offline".into()),
+            ..Default::default()
+        };
+        let mut app = App::new(
+            "demo",
+            cfg,
+            tmp.path().join("config.toml"),
+            tmp.path().to_path_buf(),
+        );
+        type_and_enter(&mut app, "/provider setup");
+        type_and_enter(&mut app, "ghost-provider");
+        assert_eq!(
+            app.provider_wizard.as_ref().unwrap().step,
+            WizardStep::ChoosePreset,
+            "unknown preset must not advance"
+        );
+        assert!(app.history.iter().any(|m| m.body.contains("未知预设")));
+    }
+
+    #[test]
+    fn provider_verified_ok_commits_and_clears_wizard() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let cfg = UserConfig {
+            backend: Some("offline".into()),
+            ..Default::default()
+        };
+        let mut app = App::new(
+            "demo",
+            cfg,
+            tmp.path().join("config.toml"),
+            tmp.path().to_path_buf(),
+        );
+        // Arm wizard manually + fill fields, then simulate a successful probe.
+        app.provider_wizard = Some(ProviderWizard {
+            step: WizardStep::Verifying,
+            preset: find_preset("deepseek").copied(),
+            name: "deepseek".into(),
+            kind: "openai".into(),
+            base_url: "https://api.deepseek.com/v1".into(),
+            model: "deepseek-chat".into(),
+            api_key: "sk-real".into(),
+            error: None,
+        });
+        app.apply_engine(EngineEvent::ProviderVerified {
+            name: "deepseek".into(),
+            model: "deepseek-chat".into(),
+            ok: true,
+            detail: "返回 5 tokens".into(),
+        });
+        assert!(app.provider_wizard.is_none(), "wizard cleared on success");
+        assert!(app.config.providers.contains_key("deepseek"));
+        assert_eq!(app.config.default_provider.as_deref(), Some("deepseek"));
+        assert_eq!(app.config.providers["deepseek"].api_key, "sk-real",);
+        // Persisted.
+        let loaded = crate::config::load_from(&tmp.path().join("config.toml"));
+        assert!(loaded.providers.contains_key("deepseek"));
+    }
+
+    #[test]
+    fn provider_verified_fail_rewinds_to_key_step() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let cfg = UserConfig {
+            backend: Some("offline".into()),
+            ..Default::default()
+        };
+        let mut app = App::new(
+            "demo",
+            cfg,
+            tmp.path().join("config.toml"),
+            tmp.path().to_path_buf(),
+        );
+        app.provider_wizard = Some(ProviderWizard {
+            step: WizardStep::Verifying,
+            preset: find_preset("deepseek").copied(),
+            name: "deepseek".into(),
+            kind: "openai".into(),
+            base_url: "https://api.deepseek.com/v1".into(),
+            model: "deepseek-chat".into(),
+            api_key: "sk-bad".into(),
+            error: None,
+        });
+        app.apply_engine(EngineEvent::ProviderVerified {
+            name: "deepseek".into(),
+            model: "deepseek-chat".into(),
+            ok: false,
+            detail: "401 Unauthorized".into(),
+        });
+        // Wizard stays armed, rewound to EnterKey, nothing saved.
+        let w = app.provider_wizard.as_ref().expect("wizard still armed");
+        assert_eq!(w.step, WizardStep::EnterKey);
+        assert!(!app.config.providers.contains_key("deepseek"));
+        assert!(app.history.iter().any(|m| m.body.contains("401")));
+    }
+
+    #[test]
+    fn picker_custom_api_entry_launches_wizard() {
+        let mut app = fresh_app(None); // Picker mode
+        assert_eq!(app.mode, AppMode::Picker);
+        // Find the custom-API entry and select it.
+        let wiz_idx = app
+            .picker_items
+            .iter()
+            .position(|i| i.launches_wizard)
+            .expect("a wizard entry exists");
+        app.picker_selected = wiz_idx;
+        let _ = app.apply_key(KeyCode::Enter);
+        assert_eq!(app.mode, AppMode::Chat, "wizard runs in Chat mode");
+        assert!(app.provider_wizard.is_some(), "wizard armed");
+    }
+
+    #[test]
+    fn deploy_command_reads_delivery_notes() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let slug = "demo";
+        std::fs::create_dir_all(tmp.path().join("output")).unwrap();
+        std::fs::write(
+            tmp.path().join("output").join(format!("{slug}-delivery-notes.md")),
+            "# Delivery\n\n## Deploy command\n\nnpx vercel --prod\n\n## Frontend URL\n\n(not yet deployed)\n",
+        ).unwrap();
+        let app = App::new(
+            slug.to_string(),
+            UserConfig {
+                backend: Some("offline".into()),
+                ..Default::default()
+            },
+            tmp.path().join("config.toml"),
+            tmp.path().to_path_buf(),
+        );
+        assert_eq!(
+            app.deploy_command_from_notes().as_deref(),
+            Some("npx vercel --prod")
+        );
+        // "(not yet deployed)" is filtered out (not http).
+        assert!(app.deploy_url_from_notes().is_none());
+    }
+
+    #[test]
+    fn deploy_url_reads_live_url() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let slug = "demo";
+        std::fs::create_dir_all(tmp.path().join("output")).unwrap();
+        std::fs::write(
+            tmp.path()
+                .join("output")
+                .join(format!("{slug}-delivery-notes.md")),
+            "## Frontend URL\n\nhttps://my-app.vercel.app\n",
+        )
+        .unwrap();
+        let app = App::new(
+            slug.to_string(),
+            UserConfig {
+                backend: Some("offline".into()),
+                ..Default::default()
+            },
+            tmp.path().join("config.toml"),
+            tmp.path().to_path_buf(),
+        );
+        assert_eq!(
+            app.deploy_url_from_notes().as_deref(),
+            Some("https://my-app.vercel.app")
+        );
+    }
+
+    #[test]
+    fn slash_deploy_without_notes_gives_hint() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let mut app = App::new(
+            "demo".to_string(),
+            UserConfig {
+                backend: Some("offline".into()),
+                ..Default::default()
+            },
+            tmp.path().join("config.toml"),
+            tmp.path().to_path_buf(),
+        );
+        let action = app.slash_deploy();
+        assert!(matches!(action, Action::None));
+        assert!(app
+            .history
+            .iter()
+            .any(|m| m.body.contains("还没有部署指令")));
+    }
+
+    #[test]
+    fn slash_deploy_with_command_emits_run_deploy() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let slug = "demo";
+        std::fs::create_dir_all(tmp.path().join("output")).unwrap();
+        std::fs::write(
+            tmp.path()
+                .join("output")
+                .join(format!("{slug}-delivery-notes.md")),
+            "## Deploy command\n\nnpx vercel --prod\n",
+        )
+        .unwrap();
+        let mut app = App::new(
+            slug.to_string(),
+            UserConfig {
+                backend: Some("offline".into()),
+                ..Default::default()
+            },
+            tmp.path().join("config.toml"),
+            tmp.path().to_path_buf(),
+        );
+        let action = app.slash_deploy();
+        match action {
+            Action::RunDeploy { command } => assert_eq!(command, "npx vercel --prod"),
+            other => panic!("expected RunDeploy, got {other:?}"),
+        }
+    }
 
     #[test]
     fn slash_version_opens_overlay_with_binary_info() {
@@ -3277,6 +5462,78 @@ mod tests {
             .expect("gate card must land in chat");
         assert!(card.body.contains("output/shop-frontend-notes.md"));
         assert!(card.body.contains("output/shop-execution-plan.md"));
+    }
+
+    #[test]
+    fn gate_card_includes_approval_checklist() {
+        let mut a = fresh_app(Some("offline"));
+        a.apply_engine(EngineEvent::PipelineStarted {
+            slug: "demo".into(),
+            requirement: "x".into(),
+        });
+        a.apply_engine(EngineEvent::GateOpened {
+            gate: Gate::DocsConfirm,
+        });
+        let card = a
+            .history
+            .iter()
+            .find(|m| m.role == ChatRole::Gate)
+            .expect("gate card must land in chat");
+        // The checklist tells the user WHAT to verify before approving.
+        assert!(card.body.contains("审批清单"));
+        assert!(card.body.contains("验收标准") || card.body.contains("验收"));
+    }
+
+    #[test]
+    fn fmt_elapsed_formats_seconds_and_minutes() {
+        assert_eq!(fmt_elapsed(5), "5s");
+        assert_eq!(fmt_elapsed(59), "59s");
+        assert_eq!(fmt_elapsed(60), "1:00");
+        assert_eq!(fmt_elapsed(125), "2:05");
+        assert_eq!(fmt_elapsed(3661), "61:01");
+    }
+
+    #[test]
+    fn pipeline_started_sets_run_timer() {
+        let mut a = fresh_app(Some("offline"));
+        assert!(a.run_started_at.is_none());
+        a.apply_engine(EngineEvent::PipelineStarted {
+            slug: "demo".into(),
+            requirement: "x".into(),
+        });
+        assert!(a.run_started_at.is_some(), "run timer must start");
+    }
+
+    #[test]
+    fn gate_open_stops_run_timer() {
+        let mut a = fresh_app(Some("offline"));
+        a.apply_engine(EngineEvent::PipelineStarted {
+            slug: "demo".into(),
+            requirement: "x".into(),
+        });
+        a.apply_engine(EngineEvent::GateOpened {
+            gate: Gate::DocsConfirm,
+        });
+        // Timer stops while waiting on the user — status bar shouldn't keep
+        // ticking during an approval pause.
+        assert!(a.run_started_at.is_none());
+        assert!(a.phase_started_at.is_none());
+    }
+
+    #[test]
+    fn verify_failed_appends_actionable_hint() {
+        let mut a = fresh_app(Some("offline"));
+        a.apply_engine(EngineEvent::VerifyFailed {
+            phase: Phase::Frontend,
+            exit_code: 1,
+            stderr: "error: cannot find module 'react'".into(),
+        });
+        let msg = a
+            .history
+            .iter()
+            .find(|m| m.body.contains("verify"))
+            .expect("verify failure message");
+        assert!(msg.body.contains("依赖未安装"), "got: {}", msg.body);
     }
 
     #[test]
@@ -3486,18 +5743,28 @@ mod tests {
 
     #[test]
     fn submit_dedups_consecutive_identical_recalls() {
-        let mut a = fresh_app(Some("offline"));
+        let tmp = tempfile::TempDir::new().unwrap();
+        let cfg = UserConfig {
+            backend: Some("offline".to_string()),
+            model: None,
+            ..Default::default()
+        };
+        let mut a = App::new(
+            "demo",
+            cfg,
+            tmp.path().join("config.toml"),
+            tmp.path().join("workspace"),
+        );
         for c in "same".chars() {
             let _ = a.apply_key(KeyCode::Char(c));
         }
         let _ = a.apply_key(KeyCode::Enter);
-        a.finished = true; // simulate end-of-run so the next submit starts fresh
+        a.finished = true;
         a.run_started = false;
         for c in "same".chars() {
             let _ = a.apply_key(KeyCode::Char(c));
         }
         let _ = a.apply_key(KeyCode::Enter);
-        // Only one "same" remains in history (dedup).
         assert_eq!(
             a.input_history
                 .iter()

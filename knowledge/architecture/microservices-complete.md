@@ -1,3 +1,13 @@
+---
+id: microservices-complete
+title: 微服务架构完整指南
+domain: architecture
+category: microservices-complete.md
+difficulty: intermediate
+tags: [architecture, complete, microservices, 可观测性, 数据管理, 服务发现, 服务拆分策略, 核心原则]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 微服务架构完整指南
 
 ## 概述

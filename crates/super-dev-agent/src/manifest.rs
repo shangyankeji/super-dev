@@ -256,18 +256,70 @@ fn parse_manifest(text: &str) -> SpecManifest {
     manifest
 }
 
+#[allow(clippy::too_many_lines)]
 fn strip_comment(line: &str) -> &str {
-    if let Some(idx) = line.find('#') {
-        // YAML allows `key: val # comment`. Trim from the hash.
-        // But also a line that STARTS with `#` is a comment; we keep
-        // the empty result so the empty-line check below skips it.
-        return &line[..idx];
+    // Strip a YAML trailing comment (`# ...`) but only when the `#` is NOT
+    // inside a quoted string. Previously `declared_by: "C# project"` lost
+    // everything from `#` onward. Walk the line tracking single/double
+    // quotes; the first un-quoted `#` (with whitespace before it, per YAML
+    // spec where `#` must be preceded by whitespace to start a comment)
+    // begins the comment.
+    let mut in_single = false;
+    let mut in_double = false;
+    let bytes: Vec<char> = line.chars().collect();
+    let mut i = 0;
+    while i < bytes.len() {
+        let c = bytes[i];
+        match c {
+            '\\' if (in_single || in_double) && i + 1 < bytes.len() => {
+                // Escaped char inside a quote — skip the next char.
+                i += 2;
+                continue;
+            }
+            '\'' if !in_double => in_single = !in_single,
+            '"' if !in_single => in_double = !in_double,
+            '#' if !in_single && !in_double => {
+                // YAML requires whitespace before `#` for it to be a comment
+                // (so `a#b` in an unquoted scalar is literal). Check the
+                // preceding non-quoted char.
+                let prev_ws = i > 0 && bytes[i - 1].is_whitespace();
+                if i == 0 || prev_ws {
+                    return line[..char_byte_offset(line, i)].trim_end();
+                }
+            }
+            _ => {}
+        }
+        i += 1;
     }
     line
 }
 
+/// Byte offset of the `char_idx`-th char in `s` (for slicing the original
+/// &str after a char-index walk).
+fn char_byte_offset(s: &str, char_idx: usize) -> usize {
+    s.char_indices()
+        .nth(char_idx)
+        .map(|(b, _)| b)
+        .unwrap_or(s.len())
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn strip_comment_keeps_hash_in_quotes() {
+        // A `#` inside a quoted value is NOT a comment start.
+        let line = r#"title: "C# project""#;
+        assert_eq!(super::strip_comment(line), line);
+        // Unquoted `a#b` (no whitespace before #) is literal per YAML.
+        let line2 = "declared_by: a#b";
+        assert_eq!(super::strip_comment(line2), line2);
+        // A real trailing comment (whitespace before #) is stripped.
+        let line3 = "key: value # a comment";
+        assert_eq!(super::strip_comment(line3), "key: value");
+        // A full-line comment.
+        assert_eq!(super::strip_comment("# just a comment"), "");
+    }
+
     use super::*;
     use tempfile::TempDir;
 

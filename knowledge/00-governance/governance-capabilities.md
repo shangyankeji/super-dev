@@ -1,3 +1,13 @@
+---
+id: governance-capabilities
+title: Super Dev 治理能力全景图
+domain: 00-governance
+category: governance-capabilities.md
+difficulty: intermediate
+tags: [00-governance, capabilities, engine, governance, knowledge, rule, tracker, validation]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Super Dev 治理能力全景图
 
 > 版本: 2.1.6+ | 最后更新: 2026-03-28

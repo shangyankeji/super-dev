@@ -1,3 +1,13 @@
+---
+id: case-real-time-pipeline
+title: 实时数据管道案例：Kafka + Flink 构建实时数据处理系统
+domain: data-engineering
+category: 05-cases
+difficulty: intermediate
+tags: [agent, case, checklist, data-engineering, pipeline, real, time, 业务背景]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 实时数据管道案例：Kafka + Flink 构建实时数据处理系统
 
 ## 概述

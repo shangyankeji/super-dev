@@ -1,3 +1,13 @@
+---
+id: api-contract-and-versioning-guide
+title: api-contract-and-versioning-guide
+domain: development
+category: api-contract-and-versioning-guide.md
+difficulty: intermediate
+tags: [and, api, contract, development, guide, versioning, 契约与版本治理指南]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 开发：Excellent（11964948@qq.com）
 
 ## API 契约与版本治理指南

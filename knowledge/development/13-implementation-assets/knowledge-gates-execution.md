@@ -1,3 +1,13 @@
+---
+id: knowledge-gates-execution
+title: knowledge-gates-execution
+domain: development
+category: 13-implementation-assets
+difficulty: intermediate
+tags: [development, execution, gates, knowledge, 知识门禁执行手册]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 开发：Excellent（11964948@qq.com）
 
 ## 知识门禁执行手册

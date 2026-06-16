@@ -1,3 +1,13 @@
+---
+id: architecture-antipatterns
+title: 架构反模式指南
+domain: development
+category: 04-antipatterns
+difficulty: intermediate
+tags: [agent, antipatterns, architecture, ball, bounded, checklist, context, dependency]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 架构反模式指南
 
 > 适用范围：微服务 / 单体 / 模块化单体 / 事件驱动架构

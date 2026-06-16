@@ -1,3 +1,13 @@
+---
+id: document-template
+title: document-template
+domain: development
+category: 00-governance
+difficulty: intermediate
+tags: [development, document, template, 失败模式, 执行步骤, 检查清单, 目标, 适用范围]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 开发：Excellent（11964948@qq.com）
 
 ```yaml

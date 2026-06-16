@@ -1,3 +1,13 @@
+---
+id: soft-warm
+title: Soft Warm
+domain: design-systems
+category: soft-warm.md
+difficulty: intermediate
+tags: [borders, color, component, design-systems, palette, patterns, radius, soft]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Soft Warm
 
 > Rounded, approachable, warm tones. Inspired by Notion, Headspace, Duolingo.

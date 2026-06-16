@@ -1,3 +1,13 @@
+---
+id: css-architecture-complete
+title: CSS架构指南
+domain: development
+category: 01-standards
+difficulty: intermediate
+tags: [agent, architecture, checklist, complete, css, development, 实战代码示例, 常见陷阱]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # CSS架构指南
 
 ## 概述

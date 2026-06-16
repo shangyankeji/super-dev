@@ -1,3 +1,13 @@
+---
+id: frontend-launch-checklist
+title: 前端上线检查清单 (Frontend Launch Checklist)
+domain: frontend
+category: 03-checklists
+difficulty: intermediate
+tags: [accessibility, checklist, engine, frontend, launch, optimization, performance, search]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 前端上线检查清单 (Frontend Launch Checklist)
 
 ## 概述

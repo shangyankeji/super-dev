@@ -1,3 +1,13 @@
+---
+id: code-smell-antipatterns
+title: 代码坏味道反模式指南
+domain: development
+category: 04-antipatterns
+difficulty: intermediate
+tags: [antipatterns, code, copy-paste, development, method, naming, nesting, numbers]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 代码坏味道反模式指南
 
 > 适用范围：Python / JavaScript / TypeScript / Go / Java / Rust

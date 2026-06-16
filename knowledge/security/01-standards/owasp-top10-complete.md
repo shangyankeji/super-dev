@@ -1,3 +1,13 @@
+---
+id: owasp-top10-complete
+title: OWASP Top 10 (2021) Complete Security Standards
+domain: security
+category: 01-standards
+difficulty: intermediate
+tags: [access, broken, complete, contents, control, cryptographic, failures, injection]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # OWASP Top 10 (2021) Complete Security Standards
 
 > **Version**: v1.0

@@ -1,3 +1,13 @@
+---
+id: database-antipatterns
+title: 数据库反模式指南
+domain: development
+category: 04-antipatterns
+difficulty: intermediate
+tags: [antipatterns, database, delete, development, index, pagination, problem, query]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 数据库反模式指南
 
 > 适用范围：PostgreSQL / MySQL / MongoDB / Redis

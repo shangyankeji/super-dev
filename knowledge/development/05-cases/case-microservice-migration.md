@@ -1,3 +1,13 @@
+---
+id: case-microservice-migration
+title: 案例研究：从单体到微服务的迁移实战
+domain: development
+category: 05-cases
+difficulty: intermediate
+tags: [agent, case, checklist, development, microservice, migration, 元数据]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 案例研究：从单体到微服务的迁移实战
 
 ## 元数据

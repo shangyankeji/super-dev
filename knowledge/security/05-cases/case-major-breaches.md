@@ -1,3 +1,13 @@
+---
+id: case-major-breaches
+title: 案例集：重大安全事件
+domain: security
+category: 05-cases
+difficulty: intermediate
+tags: [agent, breaches, case, checklist, major, security, 四大事件横向对比]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 案例集：重大安全事件
 
 > 覆盖四起影响深远的安全事件（Equifax、SolarWinds、Log4Shell、Heartbleed），每个案例包含时间线、影响、根因、修复和教训。

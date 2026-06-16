@@ -9,7 +9,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.75%2B-orange)](https://www.rust-lang.org/)
 [![Spec](https://img.shields.io/badge/spec-SUPER__DEV__HOST__SPEC__V1-blue)](spec/SUPER_DEV_HOST_SPEC_V1.md)
-[![Version](https://img.shields.io/badge/version-4.0.0-success)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-4.6.0-success)](CHANGELOG.md)
 
 [简体中文](README.md) | English
 
@@ -37,15 +37,37 @@ One binary, zero runtime dependencies, single-file distribution.
 
 > Earlier 1.x experimented with shipping built-in HTTP clients for Anthropic / OpenAI / Antigravity. 4.0 **removed them** — Super Dev is the "project manager", not an LLM client.
 
-## Only three deeply-integrated host families
+## 23 supported AI coding CLIs
 
-Only host families with an official Agent SDK are in scope (Cursor / Windsurf / Cline / Roo / Continue / Trae / Qoder / CodeBuddy / Kiro / Droid and others are out-of-scope):
+Super Dev drives every mainstream AI coding tool that ships a non-interactive CLI — whichever you have installed works:
 
-| Family | Official SDK | Desktop | CLI |
+| Backend ID | Binary | Non-interactive form | TUI |
 |---|---|---|---|
-| **Anthropic** | Claude Agent SDK | Claude Desktop | Claude Code |
-| **OpenAI** | OpenAI Agents SDK | Codex Desktop | Codex CLI |
-| **Google** | Antigravity SDK | Antigravity Desktop | Antigravity CLI |
+| `claude-code` | `claude` | `claude --print --output-format text "<p>"` | `/claude` |
+| `codex` | `codex` | `codex exec --sandbox workspace-write "<p>"` | `/codex` |
+| `gemini` | `gemini` | `gemini -p "<p>"` | `/gemini` |
+| `droid` | `droid` | `droid exec --auto low -o text "<p>"` | `/droid` |
+| `opencode` | `opencode` | `opencode run "<p>"` | `/opencode` |
+| `qwen` | `qwen` | `qwen -p "<p>"` | `/qwen` |
+| `copilot` | `copilot` | `copilot -p --allow-all-tools "<p>"` | `/copilot` |
+| `trae` | `trae-cli` | `trae-cli run "<p>"` | `/trae` |
+| `codebuddy` | `codebuddy` | `codebuddy -p -y "<p>"` | `/codebuddy` |
+| `qoder` | `qodercli` | `qodercli -p "<p>"` | `/qoder` |
+| `kimi` | `kimi` | `kimi --print --output-format text "<p>"` | `/kimi` |
+| `cursor-agent` | `cursor-agent` | `cursor-agent -p --output-format text "<p>"` | `/cursor-agent` |
+| `continue` | `cn` | `cn -p "<p>"` | `/continue` |
+| `aider` | `aider` | `aider --yes --no-stream --message "<p>"` | `/aider` |
+| `plandex` | `plandex` | `plandex tell --skip-menu --stop "<p>"` | `/plandex` |
+| `cody` | `cody` | `cody chat --message "<p>"` | `/cody` |
+| `goose` | `goose` | `goose run -t "<p>"` | `/goose` |
+| `amp` | `amp` | `amp -x "<p>"` | `/amp` |
+| `junie` | `junie` | `junie "<p>"` | `/junie` |
+| `grok-build` | `grok-build` | `grok-build -p "<p>"` | `/grok-build` |
+| `amazon-q` | `q` | `q chat --no-interactive --trust-all-tools "<p>"` | `/amazon-q` |
+| `crush` | `crush` | `crush run "<p>"` | `/crush` |
+| `gptme` | `gptme` | `gptme -n "<p>"` | `/gptme` |
+
+`/antigravity` is registered as an alias for `/gemini` (Google released the Antigravity CLI on 5/19 to supersede Gemini CLI — the alias is forward-compatible). The authoritative list is `super_dev_host::BACKEND_IDS`; run `super-dev doctor` to see which are installed locally.
 
 ## Install
 
@@ -125,14 +147,15 @@ See [SUPER_DEV_HOST_SPEC_V1.md](spec/SUPER_DEV_HOST_SPEC_V1.md).
 super-dev/
 ├── Cargo.toml                 # workspace manifest
 ├── crates/
-│   ├── super-dev/             # main binary (CLI + tui subcommand)
+│   ├── super-dev/             # main binary (CLI + TUI entry)
 │   ├── super-dev-spec/        # spec as Rust data
 │   ├── super-dev-governance/  # rules / audit / context / compliance kernel
 │   ├── super-dev-agent/       # 9-phase runner + gates + state + event stream + manifest
-│   ├── super-dev-runtime/     # Anthropic / OpenAI / Antigravity HTTP adapters + OfflineRuntime
-│   ├── super-dev-host/        # HostDriver — drives a logged-in claude / codex CLI
+│   ├── super-dev-runtime/     # Runtime trait + OfflineRuntime (deterministic fallback)
+│   ├── super-dev-host/        # HostDriver — drives 23 logged-in host CLIs
+│   ├── super-dev-contract/    # OpenAPI 3.1 contract layer (derive / parse / validate)
+│   ├── super-dev-knowledge/   # BM25 + optional vector (hybrid) knowledge retrieval
 │   └── super-dev-tui/         # ratatui terminal app
-├── plugin/                    # per-host plugin bundles (used by install)
 ├── spec/
 │   └── SUPER_DEV_HOST_SPEC_V1.md   # normative specification
 ├── knowledge/                 # governance knowledge base

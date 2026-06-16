@@ -1,3 +1,13 @@
+---
+id: data-antipatterns
+title: 数据工程反模式指南
+domain: development
+category: 04-antipatterns
+difficulty: intermediate
+tags: [antipatterns, audit, backups, data, development, fields, governance, inconsistency]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 数据工程反模式指南
 
 > 适用范围：数据管道 / ETL / 数据仓库 / 数据湖

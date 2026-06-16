@@ -1,3 +1,13 @@
+---
+id: case-performance-optimization
+title: 案例研究：P99 延迟从 2s 降到 200ms 的性能优化实战
+domain: development
+category: 05-cases
+difficulty: intermediate
+tags: [agent, case, checklist, development, optimization, performance, 元数据]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 案例研究：P99 延迟从 2s 降到 200ms 的性能优化实战
 
 ## 元数据

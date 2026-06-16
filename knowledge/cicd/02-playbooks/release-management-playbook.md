@@ -1,3 +1,13 @@
+---
+id: release-management-playbook
+title: 发布管理作战手册 (Release Management Playbook)
+domain: cicd
+category: 02-playbooks
+difficulty: intermediate
+tags: [branching, cicd, management, playbook, release, strategy, versioning, 前置条件]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 发布管理作战手册 (Release Management Playbook)
 
 ## 概述

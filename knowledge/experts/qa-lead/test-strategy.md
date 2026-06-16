@@ -1,3 +1,13 @@
+---
+id: test-strategy
+title: QA Lead — Test Strategy
+domain: experts
+category: qa-lead
+difficulty: intermediate
+tags: [acceptance, cases, criteria, experts, from, integration, pyramid, standards]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # QA Lead — Test Strategy
 
 ## Test Pyramid

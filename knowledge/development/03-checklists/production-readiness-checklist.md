@@ -1,3 +1,13 @@
+---
+id: production-readiness-checklist
+title: 生产就绪检查清单 (Production Readiness Checklist)
+domain: development
+category: 03-checklists
+difficulty: intermediate
+tags: [checklist, development, production, readiness, 可靠性与容灾, 合规与审计, 基础设施与部署, 安全]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 生产就绪检查清单 (Production Readiness Checklist)
 
 > 适用场景：服务首次上线、重大架构变更上线、跨区域部署前的全面审查。

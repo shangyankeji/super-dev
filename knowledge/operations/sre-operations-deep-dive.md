@@ -1,3 +1,13 @@
+---
+id: sre-operations-deep-dive
+title: sre-operations-deep-dive
+domain: operations
+category: sre-operations-deep-dive.md
+difficulty: intermediate
+tags: [deep, dive, operations, sre, 运维环节深度知识库]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 开发：Excellent（11964948@qq.com）
 
 ## 运维环节深度知识库

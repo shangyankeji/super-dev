@@ -1,3 +1,13 @@
+---
+id: quantum-complete
+title: 量子计算完整指南
+domain: quantum
+category: 01-standards
+difficulty: intermediate
+tags: [complete, nisq, quantum, 时代应用, 核心概念, 概述, 量子密码学, 量子机器学习]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 量子计算完整指南
 
 ## 概述

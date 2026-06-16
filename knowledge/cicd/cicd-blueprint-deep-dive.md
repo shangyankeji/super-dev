@@ -1,3 +1,13 @@
+---
+id: cicd-blueprint-deep-dive
+title: cicd-blueprint-deep-dive
+domain: cicd
+category: cicd-blueprint-deep-dive.md
+difficulty: intermediate
+tags: [blueprint, cicd, deep, dive, 环节深度知识库]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 开发：Excellent（11964948@qq.com）
 
 ## CI/CD 环节深度知识库

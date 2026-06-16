@@ -1,15 +1,17 @@
 //! `super-dev-runtime` — the `Runtime` trait that every "brain" of the
 //! pipeline implements.
 //!
-//! Super Dev is the **project manager**, not an LLM client. It does not
-//! own a model endpoint. The actual coding work happens in the user's
-//! already-logged-in host CLI (`claude` / `codex`), driven from
-//! [`super-dev-host`]. This crate just defines the trait those drivers
-//! implement, plus an [`OfflineRuntime`] that returns empty bodies so
-//! the pipeline falls back to deterministic templates when no host CLI
-//! is selected.
+//! Super Dev is the **project manager**. The actual coding work happens in one
+//! of three "brain" implementations behind this trait:
 //!
-//! [`super-dev-host`]: super-dev-host
+//! - a logged-in host CLI (`claude` / `codex`) driven as a subprocess, from
+//!   [`super-dev-host`];
+//! - a **direct HTTP API** (OpenAI-compatible or Anthropic native), from this
+//!   crate's [`http`] module — the "custom model / BYO key" path; or
+//! - [`OfflineRuntime`], which returns empty bodies so the pipeline falls back
+//!   to deterministic templates when no brain is selected.
+//!
+//! [`super-dev-host`]: super_dev_host
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs, clippy::all, clippy::pedantic)]
@@ -19,6 +21,8 @@
     clippy::doc_markdown,
     clippy::must_use_candidate
 )]
+
+pub mod http;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -94,18 +98,23 @@ pub enum RuntimeError {
     /// Required configuration missing.
     #[error("config: {0}")]
     Config(String),
-    /// A host-CLI subprocess driver failed (spawn, timeout, non-zero exit).
-    /// Emitted by `super-dev-host` drivers wrapping `claude` / `codex`.
+    /// A host-CLI subprocess driver failed (spawn, non-zero exit).
     #[error("host process: {0}")]
     HostProcess(String),
+    /// The host CLI timed out and was killed. Distinct from HostProcess so
+    /// callers can retry on timeout without string-matching error messages.
+    #[error("timeout after {0}s: {1}")]
+    Timeout(u64, String),
 }
 
 /// The contract every backend implements.
 ///
-/// In practice the only implementations are:
+/// In practice the implementations are:
 /// - [`OfflineRuntime`] in this crate — returns empty bodies.
+/// - [`http::OpenAiHttpRuntime`] / [`http::AnthropicHttpRuntime`] in this
+///   crate — direct HTTP to a custom OpenAI-compatible or Anthropic endpoint.
 /// - `ClaudeCodeDriver` / `CodexDriver` in `super-dev-host` — drive a
-///   logged-in host CLI as a subprocess.
+///   logged-in host CLI (Claude Code / Codex) as a subprocess.
 #[async_trait]
 pub trait Runtime: Send + Sync {
     /// Stable runtime kind (drives audit identifiers).

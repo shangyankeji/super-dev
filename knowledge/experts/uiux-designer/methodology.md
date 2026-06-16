@@ -1,3 +1,13 @@
+---
+id: methodology
+title: UI/UX Designer — Methodology
+domain: experts
+category: uiux-designer
+difficulty: intermediate
+tags: [component, construction, design, experts, interaction, methodology, principles, responsive]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # UI/UX Designer — Methodology
 
 ## Design System Construction

@@ -1,3 +1,13 @@
+---
+id: performance-optimization-complete
+title: 性能优化完整指南
+domain: development
+category: 01-standards
+difficulty: intermediate
+tags: [complete, development, optimization, performance, 代码优化, 前端优化, 异步处理, 性能分析]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 性能优化完整指南
 
 ## 概述

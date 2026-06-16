@@ -1,3 +1,13 @@
+---
+id: caching-strategies-complete
+title: 缓存策略完整指南
+domain: backend
+category: 01-standards
+difficulty: intermediate
+tags: [backend, caching, complete, http, redis, strategies, 应用层缓存, 概述]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 缓存策略完整指南
 
 ## 概述

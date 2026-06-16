@@ -1,3 +1,13 @@
+---
+id: performance-optimization-playbook
+title: 性能优化作战手册 (Performance Optimization Playbook)
+domain: development
+category: 02-playbooks
+difficulty: intermediate
+tags: [agent, checklist, development, optimization, performance, playbook, 前置条件, 回滚方案]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 性能优化作战手册 (Performance Optimization Playbook)
 
 ## 概述

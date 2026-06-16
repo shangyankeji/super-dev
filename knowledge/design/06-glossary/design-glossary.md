@@ -1,3 +1,13 @@
+---
+id: design-glossary
+title: 设计术语表 (Design Glossary)
+domain: design
+category: 06-glossary
+difficulty: intermediate
+tags: [accessibility, agent, checklist, design, glossary, typography, 响应式与自适应设计, 工具与流程]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 设计术语表 (Design Glossary)
 
 > 收录 40+ 核心设计术语，覆盖设计系统、响应式设计、无障碍、排版、工具链等领域。

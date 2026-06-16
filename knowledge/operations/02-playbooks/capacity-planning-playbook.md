@@ -1,3 +1,13 @@
+---
+id: capacity-planning-playbook
+title: 容量规划作战手册 (Capacity Planning Playbook)
+domain: operations
+category: 02-playbooks
+difficulty: intermediate
+tags: [capacity, operations, planning, playbook, 业务增长评估模板, 业务概况, 前置条件, 报告信息]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 容量规划作战手册 (Capacity Planning Playbook)
 
 ## 概述

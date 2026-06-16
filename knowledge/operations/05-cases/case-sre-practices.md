@@ -1,3 +1,13 @@
+---
+id: case-sre-practices
+title: 案例研究：SRE 实践落地 - 从理念到工程化的完整路径
+domain: operations
+category: 05-cases
+difficulty: intermediate
+tags: [budget, case, engineering, operations, practices, sre, 为例, 优化]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 案例研究：SRE 实践落地 - 从理念到工程化的完整路径
 
 ## 元数据

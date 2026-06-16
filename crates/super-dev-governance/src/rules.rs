@@ -49,7 +49,16 @@ impl Decision {
 }
 
 /// File extensions guarded by the emoji rule (SD-CODE-001).
-const EMOJI_GUARDED_EXTS: &[&str] = &["tsx", "ts", "jsx", "js", "vue", "svelte", "astro"];
+const EMOJI_GUARDED_EXTS: &[&str] = &[
+    "tsx", "ts", "jsx", "js", "mjs", "cjs", "vue", "svelte", "astro", "html", "htm", "css", "scss",
+    "sass", "less", "py", "java", "kt", "go", "rs", "rb", "php", "cs", "swift", "md", "mdx",
+];
+
+/// UI source file types guarded by the color (SD-CODE-002) and AI-slop rules.
+/// Narrower than EMOJI_GUARDED_EXTS: those quality checks only make sense for
+/// frontend/UI source, not docs or backend code. Emoji (SD-CODE-001) is a
+/// global prohibition and applies to the broader list above.
+const UI_CODE_EXTS: &[&str] = &["tsx", "ts", "jsx", "js", "vue", "svelte", "astro"];
 
 /// File extensions guarded by the color rule (SD-CODE-002).
 const COLOR_GUARDED_EXTS: &[&str] = &[
@@ -77,10 +86,34 @@ const COLOR_ALLOWED: &[&str] = &["#fff", "#ffffff", "#000", "#000000"];
 fn emoji_regex() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
-        // Conservative pictograph ranges — leaves CJK punctuation and
-        // CJK ideographs alone, only catches graphical emoji.
-        Regex::new(r"[\x{2600}-\x{27BF}\x{1F300}-\x{1FAFF}\x{1F900}-\x{1F9FF}\x{1FA70}-\x{1FAFF}]")
-            .expect("emoji regex is well-formed at compile time")
+        // Comprehensive graphical-emoji ranges. Leaves CJK ideographs and
+        // CJK punctuation alone (those are legitimate text, not emoji icons).
+        // Covers: misc symbols + dingbats, technical symbols, enclosed
+        // alphanumerics (① ⓵), pictographs, transport/map, supplemental
+        // symbols, flags, skin-tone modifiers, and the keycap/variation
+        // selectors that turn plain chars into emoji.
+        Regex::new(concat!(
+            r"[",
+            r"\x{2300}-\x{23FF}",   // misc technical (⚠ etc.)
+            r"\x{2460}-\x{24FF}",   // enclosed alphanumerics (① ⓵)
+            r"\x{25A0}-\x{27BF}",   // geometric shapes + misc symbols + dingbats
+            r"\x{2B00}-\x{2BFF}",   // misc symbols and arrows
+            r"\x{1F000}-\x{1F0FF}", // mahjong + dominoes + playing cards
+            r"\x{1F100}-\x{1F1FF}", // enclosed alphanumeric supplement + flags
+            r"\x{1F200}-\x{1F2FF}", // enclosed ideographic supplement
+            r"\x{1F300}-\x{1F5FF}", // misc symbols and pictographs
+            r"\x{1F600}-\x{1F64F}", // emoticons
+            r"\x{1F680}-\x{1F6FF}", // transport and map
+            r"\x{1F700}-\x{1F77F}", // alchemical symbols
+            r"\x{1F780}-\x{1F7FF}", // geometric shapes extended
+            r"\x{1F800}-\x{1F8FF}", // supplemental arrows-C
+            r"\x{1F900}-\x{1F9FF}", // supplemental symbols and pictographs
+            r"\x{1FA00}-\x{1FA6F}", // chess symbols
+            r"\x{1FA70}-\x{1FAFF}", // symbols and pictographs extended-A
+            r"\x{1F3FB}-\x{1F3FF}", // skin-tone modifiers
+            r"]",
+        ))
+        .expect("emoji regex is well-formed at compile time")
     })
 }
 
@@ -115,7 +148,16 @@ pub fn check_emoji(file_path: &str, content: &str) -> Decision {
     if !EMOJI_GUARDED_EXTS.contains(&ext.as_str()) {
         return Decision::pass();
     }
-    if !emoji_regex().is_match(content) {
+    // 4.6: tokenise the source and scan every region EXCEPT comments.
+    // Emoji-as-icon violations can legitimately appear in JSX text nodes
+    // (`<button>🚀</button>`), string literals (`const ICON = "🚀"`), or
+    // code — all of which are kept by `without_comments`. Only comments
+    // (`// 🚀 todo`) are documentation noise and must be skipped. Scoping
+    // to `jsx_text()` alone would MISS string-literal emoji, so
+    // `without_comments` is the correct (broader) view here.
+    let tz = crate::tokenizer::Tokenized::new(content);
+    let scan_text = tz.without_comments(content);
+    if !emoji_regex().is_match(&scan_text) {
         return Decision::pass();
     }
     let reason = format!(
@@ -143,8 +185,12 @@ pub fn check_color_tokens(file_path: &str, content: &str) -> Decision {
         return Decision::pass();
     }
 
+    // 4.6: scan the tokenised source, skipping comments. A color in a
+    // comment (`/* placeholder #fff */`) is documentation, not a violation.
+    let tz = crate::tokenizer::Tokenized::new(content);
+    let scan_text = tz.without_comments(content);
     let mut violations: Vec<String> = Vec::new();
-    for m in hex_color_regex().find_iter(content) {
+    for m in hex_color_regex().find_iter(&scan_text) {
         let token = m.as_str().to_ascii_lowercase();
         if COLOR_ALLOWED.contains(&token.as_str()) {
             continue;
@@ -156,10 +202,10 @@ pub fn check_color_tokens(file_path: &str, content: &str) -> Decision {
             break;
         }
     }
-    if rgb_regex().is_match(content) && !violations.contains(&"rgb()/rgba()".to_string()) {
+    if rgb_regex().is_match(&scan_text) && !violations.contains(&"rgb()/rgba()".to_string()) {
         violations.push("rgb()/rgba()".to_string());
     }
-    if hsl_regex().is_match(content) && !violations.contains(&"hsl()/hsla()".to_string()) {
+    if hsl_regex().is_match(&scan_text) && !violations.contains(&"hsl()/hsla()".to_string()) {
         violations.push("hsl()/hsla()".to_string());
     }
 
@@ -190,13 +236,20 @@ pub fn check_color_tokens(file_path: &str, content: &str) -> Decision {
 #[must_use]
 pub fn check_ai_slop(file_path: &str, content: &str) -> Decision {
     let ext = extension_of(file_path);
-    if !EMOJI_GUARDED_EXTS.contains(&ext.as_str()) {
+    if !UI_CODE_EXTS.contains(&ext.as_str()) {
         return Decision::pass();
     }
 
-    let mut issues: Vec<&str> = Vec::new();
+    // Tokenize once and scan code+strings+JSX-text (skip comments), the
+    // same view `check_emoji` / `check_color_tokens` use. Previously this
+    // rule lowercased the RAW source, so a comment like
+    // `// TODO: replace the lorem ipsum` would falsely block — the very
+    // class of false positive the other two rules were upgraded to avoid.
+    let tz = crate::tokenizer::Tokenized::new(content);
+    let body = tz.without_comments(content);
+    let lower = body.to_ascii_lowercase();
 
-    let lower = content.to_ascii_lowercase();
+    let mut issues: Vec<&str> = Vec::new();
     if lower.contains("lorem ipsum") || lower.contains("dolor sit amet") {
         issues.push("Lorem ipsum placeholder text");
     }
@@ -221,6 +274,30 @@ pub fn check_ai_slop(file_path: &str, content: &str) -> Decision {
         }
     }
 
+    // Placeholder / fake-data patterns — half-finished markers that must
+    // never ship in commercial code.
+    if lower.contains("your code here")
+        || lower.contains("your message here")
+        || lower.contains("your text here")
+        || lower.contains("replace this")
+        || lower.contains("your-api-key-here")
+    {
+        issues.push("Unfilled placeholder text");
+    }
+    if lower.contains("example.com") && !lower.contains("// docs.example.com") {
+        issues.push("example.com placeholder URL (use a real domain)");
+    }
+    if lower.contains("test@test.com")
+        || lower.contains("user@example")
+        || lower.contains("john@example")
+    {
+        issues.push("Fake placeholder email (use realistic sample data)");
+    }
+    // Debug residue left in shipped code.
+    if lower.contains("console.log(") {
+        issues.push("console.log() debug residue (remove before shipping)");
+    }
+
     if issues.is_empty() {
         return Decision::pass();
     }
@@ -231,7 +308,80 @@ pub fn check_ai_slop(file_path: &str, content: &str) -> Decision {
          Use real content and design tokens from output/*-uiux.md.",
         issues.join("; ")
     );
-    Decision::block("SD-CODE-005", reason)
+    // Attribute to SD-CODE-002 (hardcoded color literals / design tokens):
+    // the design part of this check (purple→pink gradient) IS a color-token
+    // violation, and the content part (Lorem ipsum / "Welcome to") shares the
+    // same "looks auto-generated" design-quality concern. We deliberately do
+    // NOT use SD-CODE-005 — that id is reserved by the spec (§10) for the
+    // future V2 accessibility-token clause and is non-normative in V1.
+    Decision::block("SD-CODE-002", reason)
+}
+
+/// Directory names that mark any write *inside* them as sensitive. Matched
+/// as a path segment (so `.git/` matches `a/.git/b` AND `.git/b` but not
+/// `digit.ts`). Borrowed from Claude Code's bypass-immune safetyCheck.
+const SENSITIVE_DIRS: &[&str] = &[".git", ".ssh", ".aws", ".claude", ".vscode"];
+
+/// Specific sensitive path *suffixes* (file/dir names) matched against the
+/// normalized path. Each is matched as a trailing path component so it works
+/// for both absolute (`/x/.env`) and relative (`.env`) targets.
+const SENSITIVE_PATH_SUFFIXES: &[&str] = &[
+    ".env",
+    ".env.local",
+    ".env.production",
+    ".env.development",
+    ".superdevrc",
+    "credentials",
+    "credentials.json",
+    "service-account.json",
+    ".npmrc",
+    ".netrc",
+    ".pypirc",
+    "id_rsa",
+    "id_ed25519",
+    "id_ecdsa",
+];
+
+/// Check whether a write targets a security-sensitive path. Implements
+/// **SD-SEC-001**: a bypass-immune guard that blocks the host from writing
+/// into version-control internals (`.git/`), secret stores (`.env`,
+/// `~/.ssh/`, `~/.aws/`), or the host's own configuration (`.claude/settings`,
+/// `.vscode/settings`). Unlike the code-style rules this is a SAFETY check,
+/// not a quality check — it fires first and is exempt from any future
+/// "skip governance" toggle, mirroring Claude Code's bypass-immune
+/// safetyCheck (`utils/permissions/permissions.ts` step 1f/1g).
+#[must_use]
+pub fn check_sensitive_path(file_path: &str, _content: &str) -> Decision {
+    let normalized = file_path.replace('\\', "/");
+    let lower = normalized.to_ascii_lowercase();
+    // 1. Segment match for sensitive directories: any path component equal to
+    //    a SENSITIVE_DIRS entry (or settings.json *inside* .claude/.vscode)
+    //    is blocked. Splitting on '/' avoids the `digit.ts` false positive a
+    //    naive `.contains(".git")` would produce.
+    for seg in lower.split('/') {
+        if SENSITIVE_DIRS.contains(&seg) {
+            return Decision::block(
+                "SD-SEC-001",
+                format!(
+                    "Super Dev: write to sensitive path `{file_path}` blocked (SD-SEC-001).                      A parent segment (`{seg}`) holds version-control internals, secrets,                      or toolchain config — overwriting it can corrupt the repo or leak                      credentials. If this is intentional, exclude this path from the                      governance hook or run the host outside Super Dev's supervision."
+                ),
+            );
+        }
+    }
+    // 2. Trailing-path-suffix match: `.env`, `id_rsa`, `settings.json`, etc.
+    //    matched against the END of the normalized path so both `.env` and
+    //    `apps/api/.env` are caught.
+    for suffix in SENSITIVE_PATH_SUFFIXES {
+        if lower == *suffix || lower.ends_with(&format!("/{suffix}")) {
+            return Decision::block(
+                "SD-SEC-001",
+                format!(
+                    "Super Dev: write to sensitive file `{file_path}` blocked (SD-SEC-001).                      `{suffix}` typically holds secrets, credentials, or toolchain config.                      If this is intentional and not a real secret, rename the file or                      exclude it from the governance hook."
+                ),
+            );
+        }
+    }
+    Decision::pass()
 }
 
 #[cfg(test)]
@@ -266,8 +416,10 @@ mod tests {
     }
 
     #[test]
-    fn emoji_passes_in_markdown() {
-        assert!(!check_emoji("README.md", "# Project 🚀").block);
+    fn emoji_now_also_blocks_in_markdown() {
+        // 4.6+: emoji prohibition extends to docs — the user explicitly hates
+        // emoji used as icons/markers anywhere, including markdown.
+        assert!(check_emoji("README.md", "# Project 🚀").block);
     }
 
     #[test]
@@ -358,6 +510,47 @@ mod tests {
         assert!(check_color_tokens("src/styles.css", ".btn { color: #ff0000 }").block);
     }
 
+    #[test]
+    fn emoji_in_comment_not_flagged_ast() {
+        // 4.6 upgrade: an emoji in a comment is documentation, not a violation.
+        let d = check_emoji(
+            "src/Btn.tsx",
+            "// 🚀 placeholder
+const x = 1;",
+        );
+        assert!(!d.block, "emoji in comment must not block");
+    }
+
+    #[test]
+    fn emoji_in_jsx_still_flagged_ast() {
+        let d = check_emoji("src/Btn.tsx", "<button>🔍 Search</button>");
+        assert!(d.block);
+    }
+
+    #[test]
+    fn color_in_comment_not_flagged_ast() {
+        // 4.6 upgrade: a hex color in a comment must not block.
+        let d = check_color_tokens("src/Card.tsx", "/* use #9333ea for primary */ const x = 1;");
+        assert!(!d.block, "color in comment must not block");
+    }
+
+    #[test]
+    fn color_in_string_still_flagged_ast() {
+        // A color in a string literal IS still a violation.
+        let d = check_color_tokens("src/Card.tsx", "const c = '#9333ea';");
+        assert!(d.block);
+    }
+
+    #[test]
+    fn emoji_in_string_literal_still_flagged() {
+        // An emoji in a string literal is a violation (it's a hardcoded
+        // icon) — `without_comments` keeps string literals, so this is
+        // correctly flagged. Pins the rule's scoping contract: comment →
+        // skip, everything else (JSX text + string + code) → scan.
+        let d = check_emoji("src/Btn.tsx", "const ICON = \"🚀\";");
+        assert!(d.block, "emoji in a string literal must block");
+    }
+
     // --- AI slop --------------------------------------------------------
 
     #[test]
@@ -392,5 +585,172 @@ mod tests {
     #[test]
     fn slop_ignores_non_ui_files() {
         assert!(!check_ai_slop("README.md", "Lorem ipsum in docs is fine").block);
+    }
+
+    // --- sensitive path (SD-SEC-001) -----------------------------------
+
+    #[test]
+    fn slop_blocks_your_code_here_placeholder() {
+        let d = check_ai_slop("src/Form.tsx", "<input placeholder='your code here' />");
+        assert!(d.block);
+        assert!(d.reason.contains("placeholder"));
+    }
+
+    #[test]
+    fn slop_blocks_example_com_url() {
+        let d = check_ai_slop("src/Api.tsx", "fetch('https://example.com/api')");
+        assert!(d.block);
+        assert!(d.reason.contains("example.com"));
+    }
+
+    #[test]
+    fn slop_blocks_fake_email() {
+        let d = check_ai_slop("src/Login.tsx", "const demo = 'test@test.com'");
+        assert!(d.block);
+        assert!(d.reason.contains("email"));
+    }
+
+    #[test]
+    fn slop_blocks_console_log_residue() {
+        let d = check_ai_slop("src/utils.ts", "console.log('debugging here');");
+        assert!(d.block);
+        assert!(d.reason.contains("console.log"));
+    }
+
+    #[test]
+    fn sensitive_blocks_dotgit_config() {
+        let d = check_sensitive_path("repo/.git/config", "x");
+        assert!(d.block);
+        assert_eq!(d.clause, "SD-SEC-001");
+    }
+
+    #[test]
+    fn sensitive_blocks_dotgit_objects_nested() {
+        // Nested path inside .git must still be caught.
+        let d = check_sensitive_path("/home/u/proj/.git/objects/ab/cdef", "x");
+        assert!(d.block);
+    }
+
+    #[test]
+    fn sensitive_blocks_env_basename_any_dir() {
+        // `.env` as a basename is sensitive regardless of directory.
+        let d = check_sensitive_path("apps/api/.env", "SECRET=123");
+        assert!(d.block);
+        assert_eq!(d.clause, "SD-SEC-001");
+    }
+
+    #[test]
+    fn sensitive_blocks_env_local_and_production() {
+        assert!(check_sensitive_path(".env.local", "x").block);
+        assert!(check_sensitive_path(".env.production", "x").block);
+    }
+
+    #[test]
+    fn sensitive_blocks_ssh_private_keys() {
+        assert!(check_sensitive_path("/root/.ssh/id_rsa", "x").block);
+        assert!(check_sensitive_path("/u/.ssh/id_ed25519", "x").block);
+    }
+
+    #[test]
+    fn sensitive_blocks_claude_settings_and_vscode() {
+        assert!(check_sensitive_path(".claude/settings.json", "x").block);
+        assert!(check_sensitive_path(".vscode/settings.json", "x").block);
+    }
+
+    #[test]
+    fn sensitive_blocks_credentials_files() {
+        assert!(check_sensitive_path("~/.aws/credentials", "x").block);
+        assert!(check_sensitive_path("config/credentials.json", "x").block);
+        assert!(check_sensitive_path("service-account.json", "x").block);
+    }
+
+    #[test]
+    fn sensitive_normalizes_windows_backslash_paths() {
+        // Windows-style backslash path to .git must be caught after normalization.
+        let d = check_sensitive_path("C:\\repo\\.git\\config", "x");
+        assert!(d.block);
+    }
+
+    #[test]
+    fn sensitive_is_case_insensitive() {
+        // `.ENV` / `.Git/` should still match (defense against casing tricks).
+        assert!(check_sensitive_path("proj/.GIT/HEAD", "x").block);
+        assert!(check_sensitive_path(".ENV", "x").block);
+    }
+
+    #[test]
+    fn sensitive_passes_normal_source_files() {
+        assert!(!check_sensitive_path("src/Button.tsx", "x").block);
+        assert!(!check_sensitive_path("output/prd.md", "x").block);
+        assert!(!check_sensitive_path("web/package.json", "x").block);
+    }
+
+    #[test]
+    fn sensitive_does_not_false_positive_on_env_in_name() {
+        // A file merely containing "env" in its name is NOT sensitive.
+        assert!(!check_sensitive_path("src/environment.ts", "x").block);
+        assert!(!check_sensitive_path("docs/envelope.md", "x").block);
+    }
+
+    // --- expanded emoji coverage (SD-CODE-001, 4.6+) ---
+
+    #[test]
+    fn emoji_blocks_flags() {
+        // Regional indicator symbols (flags) — previously missed.
+        let d = check_emoji("src/Lang.tsx", "<span>🇨🇳</span>");
+        assert!(d.block);
+    }
+
+    #[test]
+    fn emoji_blocks_skin_tone_modifier() {
+        // Skin-tone modifiers + base — previously the modifier range was missed.
+        assert!(check_emoji("src/Hand.tsx", "👍🏽").block);
+    }
+
+    #[test]
+    fn emoji_blocks_check_mark_and_warning() {
+        // Misc symbols that are NOT in the old 2600-27BF+1F300 range.
+        assert!(check_emoji("src/Status.tsx", "<Icon>✅</Icon>").block);
+        assert!(check_emoji("src/Alert.tsx", "⚠️ danger").block);
+        assert!(check_emoji("src/Star.tsx", "⭐ featured").block);
+    }
+
+    #[test]
+    fn emoji_blocks_keycap_numbers() {
+        // Enclosed/keycap-style emoji.
+        assert!(check_emoji("src/Step.tsx", "① first").block);
+        assert!(check_emoji("src/Num.tsx", "🔟").block);
+    }
+
+    #[test]
+    fn emoji_blocks_in_html() {
+        // .html now guarded (was previously missed).
+        assert!(check_emoji("index.html", "<button>🔍 Search</button>").block);
+    }
+
+    #[test]
+    fn emoji_blocks_in_python() {
+        // .py now guarded.
+        assert!(check_emoji("app/main.py", "# TODO 🚀 ship it").block);
+    }
+
+    #[test]
+    fn emoji_blocks_in_css_content() {
+        // .css now guarded (emoji in content: property).
+        assert!(check_emoji("styles.css", ".icon::before { content: \"🎉\"; }").block);
+    }
+
+    #[test]
+    fn emoji_passes_cjk_text_unchanged() {
+        // CJK ideographs must NOT be treated as emoji (false-positive guard).
+        assert!(!check_emoji("src/Label.tsx", "<span>登录</span>").block);
+        assert!(!check_emoji("README.md", "# 项目说明").block);
+    }
+
+    #[test]
+    fn emoji_passes_normal_code_symbols() {
+        // Arrows/operators that are NOT emoji must pass.
+        assert!(!check_emoji("src/logic.ts", "const x = a >= b ? 1 : 0;").block);
+        assert!(!check_emoji("src/arrow.ts", "const f = (x) => x;").block);
     }
 }

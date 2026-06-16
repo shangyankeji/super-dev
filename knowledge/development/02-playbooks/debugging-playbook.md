@@ -1,3 +1,13 @@
+---
+id: debugging-playbook
+title: 系统化调试手册 (Debugging Playbook)
+domain: development
+category: 02-playbooks
+difficulty: intermediate
+tags: [agent, checklist, debugging, development, playbook, 前置条件, 回滚方案, 报告]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 系统化调试手册 (Debugging Playbook)
 
 ## 概述

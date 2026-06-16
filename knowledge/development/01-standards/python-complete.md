@@ -1,3 +1,13 @@
+---
+id: python-complete
+title: Python完整知识体系
+domain: development
+category: 01-standards
+difficulty: intermediate
+tags: [complete, development, hints, python, type, 基础语法, 异步编程, 核心特性]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Python完整知识体系
 
 ## 概述

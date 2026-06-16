@@ -1,3 +1,13 @@
+---
+id: refactoring-and-techdebt-playbook
+title: refactoring-and-techdebt-playbook
+domain: development
+category: refactoring-and-techdebt-playbook.md
+difficulty: intermediate
+tags: [and, development, playbook, refactoring, techdebt, 重构与技术债治理手册]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 开发：Excellent（11964948@qq.com）
 
 ## 重构与技术债治理手册

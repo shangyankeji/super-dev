@@ -1,3 +1,13 @@
+---
+id: resilience-and-disaster-patterns
+title: resilience-and-disaster-patterns
+domain: architecture
+category: resilience-and-disaster-patterns.md
+difficulty: intermediate
+tags: [and, architecture, disaster, patterns, resilience, 韧性与容灾模式手册]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 开发：Excellent（11964948@qq.com）
 
 ## 韧性与容灾模式手册

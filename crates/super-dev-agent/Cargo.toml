@@ -12,6 +12,8 @@ description = "Super Dev Agent — the spec-aware orchestrator that drives the 9
 super-dev-spec = { workspace = true }
 super-dev-governance = { workspace = true }
 super-dev-runtime = { workspace = true }
+super-dev-knowledge = { workspace = true }
+super-dev-contract = { workspace = true }
 
 async-trait = { workspace = true }
 serde = { workspace = true }
@@ -23,6 +25,14 @@ tracing = { workspace = true }
 chrono = { workspace = true }
 toml = { workspace = true }
 zip = { workspace = true }
+
+[features]
+default = []
+# Enable real HTTP embeddings in the knowledge crate. The binary enables this
+# in its own [features] so the shipped binary supports hybrid retrieval; the
+# library stays BM25-only by default for downstream embedders who want zero
+# network deps.
+vector = ["super-dev-knowledge/vector"]
 
 [dev-dependencies]
 tempfile = "3"

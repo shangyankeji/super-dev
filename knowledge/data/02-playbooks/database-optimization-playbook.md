@@ -1,3 +1,13 @@
+---
+id: database-optimization-playbook
+title: 数据库优化 Playbook
+domain: data
+category: 02-playbooks
+difficulty: intermediate
+tags: [agent, checklist, data, database, optimization, playbook, 优化决策流程图, 优化效果基准参考]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 数据库优化 Playbook
 
 ## 概述

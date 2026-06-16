@@ -1,3 +1,12 @@
+---
+id: high-quality-engineering-playbook
+title: high-quality-engineering-playbook
+domain: high-quality-engineering-playbook.md
+difficulty: intermediate
+tags: [engineering, high, high-quality-engineering-playbook.md, playbook, quality, 全栈版]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 开发：Excellent（11964948@qq.com）
 
 ## 高质量工程知识库（Web 全栈版）

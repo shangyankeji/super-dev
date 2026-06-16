@@ -20,11 +20,83 @@ use std::sync::OnceLock;
 
 const FRONTEND_EXTS: &[&str] = &["tsx", "ts", "jsx", "js", "vue", "svelte", "astro"];
 
+/// Maximum size an audit JSONL may reach before it is rotated. Default
+/// 5 MiB — large enough to hold a full delivery's worth of tool/API calls
+/// (typically a few hundred KB), small enough that a long-running session
+/// can't bloat `.super-dev/audit/` without bound. Override with the
+/// `SUPER_DEV_AUDIT_MAX_BYTES` env var (0 = never rotate).
+const DEFAULT_MAX_JSONL_BYTES: u64 = 5 * 1024 * 1024;
+
+/// How many rotated archives to keep per audit file. Older archives
+/// (`*.jsonl.<n>` beyond this count) are deleted on rotation so the
+/// directory stays bounded.
+const MAX_ARCHIVES: usize = 3;
+
+/// Resolve the rotation threshold from the env override, falling back to
+/// the default. `0` disables rotation entirely.
+fn max_jsonl_bytes() -> u64 {
+    std::env::var("SUPER_DEV_AUDIT_MAX_BYTES")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(DEFAULT_MAX_JSONL_BYTES)
+}
+
+/// If `path` exists and exceeds the size threshold, rotate it:
+/// `tool-calls.jsonl` → `tool-calls.jsonl.1` (shifting older `.n` up),
+/// keeping at most `MAX_ARCHIVES` copies. Best-effort — rotation errors
+/// are swallowed (audit must never block the host).
+fn rotate_if_needed(path: &Path) {
+    let cap = max_jsonl_bytes();
+    if cap == 0 {
+        return;
+    }
+    let Ok(meta) = fs::metadata(path) else {
+        return;
+    };
+    if meta.len() < cap {
+        return;
+    }
+    // Shift archives: .{MAX-1} is dropped, .{n} → .{n+1}, then current → .1.
+    // Walk from the oldest kept slot downward so we don't overwrite an
+    // archive we still need to shift.
+    for n in (1..MAX_ARCHIVES).rev() {
+        let src = archive_path(path, n);
+        if src.exists() {
+            let dst = archive_path(path, n + 1);
+            let _ = fs::rename(&src, &dst);
+        }
+    }
+    // Current file becomes .1.
+    let archive1 = archive_path(path, 1);
+    let _ = fs::rename(path, &archive1);
+    // Drop any archive beyond the keep count.
+    if MAX_ARCHIVES > 0 {
+        let drop_n = MAX_ARCHIVES + 1;
+        let beyond = archive_path(path, drop_n);
+        let _ = fs::remove_file(&beyond);
+    }
+}
+
+/// `tool-calls.jsonl` + `.{n}` → `tool-calls.jsonl.{n}`.
+fn archive_path(path: &Path, n: usize) -> PathBuf {
+    let mut name = path
+        .file_name()
+        .map_or_else(String::new, |s| s.to_string_lossy().into_owned());
+    name.push('.');
+    name.push_str(&n.to_string());
+    path.with_file_name(name)
+}
+
 /// One audited frontend API call.
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ApiCallRecord {
     /// Unix seconds.
     pub ts: i64,
+    /// Unix milliseconds — sub-second resolution so two calls in the same
+    /// second can still be ordered. `#[serde(default)]` keeps old JSONL rows
+    /// (pre-4.6, which only had `ts`) deserialisable.
+    #[serde(default)]
+    pub ts_ms: i64,
     /// Workspace-relative path of the file being written.
     pub file: String,
     /// Host tool name, e.g. `Write` or `Edit`.
@@ -41,6 +113,10 @@ pub struct ApiCallRecord {
 pub struct ToolCallRecord {
     /// Unix seconds.
     pub ts: i64,
+    /// Unix milliseconds — sub-second resolution for deterministic ordering
+    /// of calls that share a second. `#[serde(default)]` for old rows.
+    #[serde(default)]
+    pub ts_ms: i64,
     /// Host tool name (e.g. `Write`, `Edit`, `Bash`).
     pub tool: String,
     /// Workspace-relative target file (empty when not applicable).
@@ -62,14 +138,26 @@ pub struct ToolCallRecord {
 fn api_url_regex() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
-        // Common fetch-shaped callers + an absolute path leading with `/`.
-        // Path is captured non-greedily up to the next quote / ?,#,space.
+        // Callers that target an API path. Covers modern patterns:
+        // - fetch / axios.METHOD / axios() direct / ky.METHOD / http.METHOD
+        // - React Query: useQuery / useMutation / useSWR / useSWRInfinite
+        // - Wrapped clients: api.METHOD, httpClient.METHOD, client.METHOD,
+        //   request(...), fetcher(...), service.METHOD — common names people
+        //   give a typed/SDK wrapper around fetch.
+        // The URL must start with `/` and runs to the next quote / ? / # /
+        // space / `${` (so template-literal fetch(`/api/${id}`) captures the
+        // static prefix `/api/`).
         Regex::new(
             r#"(?x)
-                (?:fetch|axios\.\w+|ky\.\w+|useSWR|useQuery|http\.\w+)
+                (?:
+                    fetch | axios | ky | http
+                  | useSWR | useSWRInfinite | useQuery | useMutation
+                  | api | httpClient | client | request | fetcher | service
+                )
+                (?:\.\w+)?
                 \s*\(\s*
                 ['"`]
-                (?P<url>/[^'"`?\#\s]+)
+                (?P<url>/[^'"`?\#\s$]+)
             "#,
         )
         .expect("api url regex is well-formed")
@@ -110,10 +198,26 @@ fn audit_dir(project_root: &Path) -> PathBuf {
     project_root.join(".super-dev").join("audit")
 }
 
+/// Normalize a tool-call decision to the documented vocabulary
+/// (`allow` | `block` | `warn` | `audit`). Unknown / empty → `allow`
+/// (fail-open: an unrecognized decision must never block the host).
+/// Matching is case-insensitive so `BLOCK` / `Block` collapse correctly.
+fn normalize_decision(decision: &str) -> String {
+    let lower = decision.trim().to_ascii_lowercase();
+    match lower.as_str() {
+        "block" | "warn" | "audit" => lower,
+        _ => "allow".to_string(),
+    }
+}
+
 fn append_jsonl(path: &Path, line: &str) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
+    // Rotate before appending so the file stays under the size cap across
+    // long sessions. Best-effort: a rotation failure must not block the
+    // append (audit is fail-open).
+    rotate_if_needed(path);
     let mut f = OpenOptions::new().create(true).append(true).open(path)?;
     f.write_all(line.as_bytes())?;
     f.write_all(b"\n")?;
@@ -140,6 +244,7 @@ pub fn record_api_calls(
     }
     let record = ApiCallRecord {
         ts: now.unwrap_or_else(|| Utc::now().timestamp()),
+        ts_ms: Utc::now().timestamp_millis(),
         file: file_path.to_string(),
         tool: tool_name.to_string(),
         urls,
@@ -170,15 +275,17 @@ pub fn record_tool_call(
     if tool_name.is_empty() {
         return None;
     }
+    // Normalize the decision to the documented vocabulary
+    // (allow | block | warn | audit). An unknown value used to be stored
+    // verbatim, which then polluted the decisions BTreeMap in the
+    // compliance mapping with arbitrary keys.
+    let decision_norm = normalize_decision(decision);
     let record = ToolCallRecord {
         ts: now.unwrap_or_else(|| Utc::now().timestamp()),
+        ts_ms: Utc::now().timestamp_millis(),
         tool: tool_name.to_string(),
         file: file_path.to_string(),
-        decision: if decision.is_empty() {
-            "allow".to_string()
-        } else {
-            decision.to_string()
-        },
+        decision: decision_norm,
         clause: clause.to_string(),
         reason: reason.to_string(),
         session_id: session_id.to_string(),
@@ -258,6 +365,10 @@ mod tests {
 
     #[test]
     fn record_api_calls_appends() {
+        let _guard = ROTATE_TEST_GUARD
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        std::env::remove_var("SUPER_DEV_AUDIT_MAX_BYTES");
         let tmp = TempDir::new().unwrap();
         let _ = record_api_calls(
             tmp.path(),
@@ -278,6 +389,8 @@ mod tests {
         let log = tmp.path().join(".super-dev/audit/frontend-api-calls.jsonl");
         let lines = std::fs::read_to_string(&log).unwrap();
         assert_eq!(lines.lines().count(), 2);
+        // Rotation tests mutate SUPER_DEV_AUDIT_MAX_BYTES; run governance
+        // tests with --test-threads=1 to avoid env-var races.
     }
 
     #[test]
@@ -313,5 +426,97 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let r = record_tool_call(tmp.path(), "Edit", "x", "", "", "", "", Some(1)).unwrap();
         assert_eq!(r.decision, "allow");
+    }
+
+    #[test]
+    fn record_tool_call_normalizes_unknown_decision() {
+        // An unrecognized decision must collapse to "allow" (fail-open)
+        // rather than polluting the compliance decisions map.
+        let tmp = TempDir::new().unwrap();
+        let r = record_tool_call(tmp.path(), "Edit", "x", "BANANA", "", "", "", Some(1)).unwrap();
+        assert_eq!(r.decision, "allow");
+    }
+
+    #[test]
+    fn record_tool_call_preserves_known_decisions_case_insensitive() {
+        let tmp = TempDir::new().unwrap();
+        let r = record_tool_call(tmp.path(), "Edit", "x", "BLOCK", "", "", "", Some(1)).unwrap();
+        assert_eq!(r.decision, "block");
+        let r2 = record_tool_call(tmp.path(), "Edit", "x", "  Warn ", "", "", "", Some(1)).unwrap();
+        assert_eq!(r2.decision, "warn");
+        let r3 = record_tool_call(tmp.path(), "Edit", "x", "Audit", "", "", "", Some(1)).unwrap();
+        assert_eq!(r3.decision, "audit");
+    }
+
+    // NOTE: these mutate the process-global SUPER_DEV_AUDIT_MAX_BYTES env
+    // var, so they must run in ONE test (serially) — parallel #[test]s on
+    // the same env var race and flake.
+    /// Test-only guard serializing the env-mutating rotate test against
+    /// `record_api_calls_appends` (which reads the rotation cap). Held for
+    /// the whole test body.
+    static ROTATE_TEST_GUARD: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn rotate_serial_under_cap_and_disabled() {
+        use super::*;
+        let _guard = ROTATE_TEST_GUARD
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+
+        // --- (1) rotate when over cap ---
+        std::env::set_var("SUPER_DEV_AUDIT_MAX_BYTES", "8");
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path().join(".super-dev/audit");
+        fs::create_dir_all(&dir).unwrap();
+        let live = dir.join("tool-calls.jsonl");
+        fs::write(&live, "already-big-content-here").unwrap();
+        append_jsonl(&live, r#"{"ts":1}"#).unwrap();
+        let body = fs::read_to_string(&live).unwrap();
+        assert!(
+            body.contains(r#"{"ts":1}"#),
+            "new line must be in live file"
+        );
+        assert!(
+            !body.contains("already-big-content"),
+            "old content rotated out"
+        );
+        let archive1 = archive_path(&live, 1);
+        assert!(fs::read_to_string(&archive1)
+            .unwrap()
+            .contains("already-big-content"));
+
+        // --- (2) keeps at most MAX_ARCHIVES ---
+        std::env::set_var("SUPER_DEV_AUDIT_MAX_BYTES", "4");
+        for i in 0..(MAX_ARCHIVES + 3) {
+            append_jsonl(&live, &format!("line-{i}-content")).unwrap();
+        }
+        let archived_files: Vec<_> = fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter(|e| {
+                e.file_name()
+                    .to_string_lossy()
+                    .starts_with("tool-calls.jsonl.")
+            })
+            .collect();
+        assert!(
+            archived_files.len() <= MAX_ARCHIVES,
+            "should keep at most {MAX_ARCHIVES} archives, got {}",
+            archived_files.len()
+        );
+
+        // --- (3) disabled when cap=0 ---
+        std::env::set_var("SUPER_DEV_AUDIT_MAX_BYTES", "0");
+        let tmp2 = TempDir::new().unwrap();
+        let live2 = tmp2.path().join("tool-calls.jsonl");
+        fs::write(&live2, "big-content-that-would-normally-rotate").unwrap();
+        append_jsonl(&live2, "new").unwrap();
+        let body2 = fs::read_to_string(&live2).unwrap();
+        assert!(body2.contains("big-content"), "cap=0 must not rotate");
+        assert!(body2.contains("new"));
+
+        // Restore the sentinel so other tests see the real default.
+        // Rotation tests mutate SUPER_DEV_AUDIT_MAX_BYTES; run governance
+        // tests with --test-threads=1 to avoid env-var races.
     }
 }

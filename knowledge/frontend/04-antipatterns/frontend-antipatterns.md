@@ -1,3 +1,13 @@
+---
+id: frontend-antipatterns
+title: 前端反模式手册
+domain: frontend
+category: 04-antipatterns
+difficulty: intermediate
+tags: [antipatterns, boundaries, component, error, frontend, prop, useeffect, 内联样式滥用]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 前端反模式手册
 
 > 覆盖 React/Vue 应用中最常见的 10 类反模式。

@@ -1,3 +1,13 @@
+---
+id: python-web-frameworks-comparison
+title: Python Web框架对比
+domain: development
+category: 01-standards
+difficulty: intermediate
+tags: [agent, checklist, comparison, development, frameworks, python, web, 场景选型指南]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Python Web框架对比
 
 ## 概述

@@ -1,3 +1,13 @@
+---
+id: python-testing-strategies
+title: Python测试策略完整指南
+domain: development
+category: 01-standards
+difficulty: intermediate
+tags: [agent, checklist, development, python, strategies, testing, 实战代码示例, 常见陷阱]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Python测试策略完整指南
 
 ## 概述

@@ -109,8 +109,43 @@ pub enum EngineEvent {
         /// One line of host stdout (already ANSI-stripped).
         line: String,
     },
+    /// A custom-API provider probe completed (from the first-launch wizard /
+    /// `/provider setup`). `ok` is whether the ping request succeeded; the TUI
+    /// commits the provider on success and rewinds the wizard on failure.
+    ProviderVerified {
+        /// Provider name (key into `config.providers`).
+        name: String,
+        /// Model id that was probed.
+        model: String,
+        /// Whether the probe request succeeded.
+        ok: bool,
+        /// Human-readable detail (token count on success, error on failure).
+        detail: String,
+    },
     /// A human-readable progress note (free-form).
     Note(String),
+    /// A sub-task within a phase has started. Emitted when a phase fans out
+    /// into parallel work (e.g. backend implementation running concurrently
+    /// with a source-scan quality check). `task_id` groups start/completed pairs.
+    SubTaskStarted {
+        /// The parent phase.
+        phase: Phase,
+        /// Stable sub-task identifier (e.g. `backend.implement`).
+        task_id: String,
+        /// Human-readable label shown in the UI.
+        label: String,
+    },
+    /// A sub-task finished. `ok` is false when the sub-task failed but the
+    /// phase continues (the phase-level failure surfaces via the normal
+    /// PhaseCompleted / quality-gate path).
+    SubTaskCompleted {
+        /// The parent phase.
+        phase: Phase,
+        /// Matches the `task_id` from the corresponding SubTaskStarted.
+        task_id: String,
+        /// Whether the sub-task succeeded.
+        ok: bool,
+    },
 }
 
 /// Anything that consumes [`EngineEvent`]s. Implementations must be
@@ -166,10 +201,14 @@ impl RecordingSink {
     /// Snapshot every event captured so far.
     #[must_use]
     pub fn events(&self) -> Vec<EngineEvent> {
-        self.events
-            .lock()
-            .expect("recording sink mutex poisoned")
-            .clone()
+        // The EventSink contract (see trait docs) is "never panic". A
+        // poisoned mutex means some other thread panicked while holding
+        // the lock — we still want to recover the buffer rather than
+        // propagate the panic, so ignore the poison guard.
+        match self.events.lock() {
+            Ok(g) => g.clone(),
+            Err(p) => p.into_inner().clone(),
+        }
     }
 
     /// Count events matching a predicate.
@@ -181,10 +220,13 @@ impl RecordingSink {
 
 impl EventSink for RecordingSink {
     fn emit(&self, event: EngineEvent) {
-        self.events
+        // Recover from a poisoned mutex instead of panicking — the sink
+        // must never break the pipeline (see trait "never panic" contract).
+        let mut g = self
+            .events
             .lock()
-            .expect("recording sink mutex poisoned")
-            .push(event);
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        g.push(event);
     }
 }
 

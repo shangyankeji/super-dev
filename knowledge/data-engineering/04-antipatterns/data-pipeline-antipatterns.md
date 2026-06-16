@@ -1,3 +1,13 @@
+---
+id: data-pipeline-antipatterns
+title: 数据管道反模式完全指南
+domain: data-engineering
+category: 04-antipatterns
+difficulty: intermediate
+tags: [antipatterns, backfill, capability, data, data-engineering, failure, observability, pipeline]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 数据管道反模式完全指南
 
 > 适用范围：ETL / ELT / 流处理 / 批处理管道

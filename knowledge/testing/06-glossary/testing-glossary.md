@@ -1,3 +1,13 @@
+---
+id: testing-glossary
+title: 测试术语表 (Testing Glossary)
+domain: testing
+category: 06-glossary
+difficulty: intermediate
+tags: [agent, checklist, glossary, testing, 测试度量, 测试方法论, 测试替身与隔离, 测试环境与基础设施]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 测试术语表 (Testing Glossary)
 
 > 适用场景：测试策略制定、测试方案评审、QA 团队 Onboarding、开发团队测试培训。

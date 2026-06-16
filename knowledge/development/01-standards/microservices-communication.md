@@ -1,3 +1,13 @@
+---
+id: microservices-communication
+title: 微服务通信模式
+domain: development
+category: 01-standards
+difficulty: intermediate
+tags: [agent, checklist, communication, development, microservices, 场景选型指南, 实战代码示例, 常见陷阱]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 微服务通信模式
 
 ## 概述

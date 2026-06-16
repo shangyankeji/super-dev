@@ -1,3 +1,13 @@
+---
+id: postgresql-complete
+title: PostgreSQL 数据工程完整指南
+domain: data
+category: 01-standards
+difficulty: intermediate
+tags: [complete, data, postgresql, 备份与恢复, 安全, 数据建模, 查询优化, 核心概念]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # PostgreSQL 数据工程完整指南
 
 > 文档版本: v1.0 | 最后更新: 2026-03-28 | 适用范围: PostgreSQL 14-17

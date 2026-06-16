@@ -1,3 +1,13 @@
+---
+id: database-glossary
+title: 数据库术语表 (Database Glossary)
+domain: data
+category: 06-glossary
+difficulty: intermediate
+tags: [agent, checklist, data, database, glossary, 事务与一致性模型, 分布式架构, 数据类型与特性]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 数据库术语表 (Database Glossary)
 
 > 收录 50+ 核心数据库术语，覆盖事务模型、存储引擎、索引结构、分布式架构、查询优化、运维管理等领域。

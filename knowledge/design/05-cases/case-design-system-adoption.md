@@ -1,3 +1,13 @@
+---
+id: case-design-system-adoption
+title: 案例：设计系统从零到全团队采用
+domain: design
+category: 05-cases
+difficulty: intermediate
+tags: [adoption, agent, case, checklist, design, system, 关键成功因素, 概述]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 案例：设计系统从零到全团队采用
 
 ## 概述

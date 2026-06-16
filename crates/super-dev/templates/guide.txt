@@ -4,10 +4,10 @@ Super Dev — 60-second walkthrough
 WHAT IS SUPER DEV?
 ------------------
   Super Dev is the **project manager** for AI coding. It does NOT call
-  any LLM — it drives the AI coding CLI you already logged into (11
-  backends: Claude Code, Codex, Gemini, Droid, OpenCode, Qwen Code,
-  Copilot, Trae, CodeBuddy, Qoder, Kimi Code).
-  Result: zero API key, deterministic process, full audit trail.
+  any LLM — it drives the host CLI you already logged into (Claude Code
+  or Codex), or a custom OpenAI-compatible / Anthropic API endpoint you
+  configure. Result: zero API key for host-CLI mode, deterministic process,
+  full audit trail.
 
 THE PIPELINE (9 phases, 2 gates)
 --------------------------------
@@ -19,19 +19,24 @@ THE PIPELINE (9 phases, 2 gates)
 YOUR ROLE
 ---------
   1. Type `super-dev` to enter the chat TUI.
-  2. First time: pick a worker (claude-code / codex / offline).
+  2. First time: pick a worker (claude-code / codex), connect a custom API
+       via /provider setup, or use offline templates.
   3. Type a one-line requirement (or press Shift+Enter for multi-line).
   4. Watch the pipeline narrate. Worker output streams into the chat.
   5. At the first gate (docs_confirm): read the PRD / architecture / UIUX.
        • Happy?    `/continue` or just `c`
        • Not yet?  `/revise <text>` keeps you at the gate
-  6. Same at preview_confirm. Then delivery → proof-pack zip in `release/`.
+  6. At preview_confirm: /preview to see the frontend in a browser.
+  7. Then backend → quality → delivery → /deploy to ship → proof-pack zip.
 
 THE COMMAND SURFACE
 -------------------
   Inside the TUI (recommended):
     super-dev                          launch the chat
-    /claude /codex /gemini /droid …    switch worker (10 host CLIs supported)
+    /claude  /codex                    switch worker (host CLIs you logged into)
+    /provider setup                    connect a custom API (DeepSeek/OpenRouter/Ollama/…)
+    /preview                           start dev server + open browser
+    /deploy                            run the recorded deploy command to go live
     /continue                          approve gate
     /revise <text>                     gate-local revision
     /spec /verify /doctor              open scrollable overlays
@@ -39,20 +44,16 @@ THE COMMAND SURFACE
     /history /help /clear /quit
     type freely                        a fresh requirement, or a revision at a gate
 
-  Workers (every host below = your already-logged-in CLI, no API key):
-    claude-code  Anthropic Claude Code        droid        Factory.ai Droid
-    codex        OpenAI Codex                 opencode     OpenCode (OSS)
-    gemini       Google Gemini CLI            cursor-agent Cursor Agent
-    qwen         Alibaba Qwen Code            continue     Continue (cn)
-    copilot      GitHub Copilot CLI           aider        Aider
-    trae         ByteDance Trae Agent         plandex      Plandex
-    cody         Sourcegraph Cody
+  Workers (host CLIs you already installed + logged in; no API key):
+    claude-code  Anthropic Claude Code
+    codex        OpenAI Codex
     offline      deterministic templates (no AI; for CI / demos)
+    (+ /provider setup for custom API endpoints)
 
   Scripted form (when you don't want a TUI):
     super-dev init                     write super-dev.yaml (run once per workspace)
     super-dev run <req>                non-interactive run, pauses at docs_confirm
-    super-dev run <req> --backend X    drive real worker (any of the 10 above)
+    super-dev run <req> --backend X    drive real worker (claude-code or codex)
     super-dev continue                 approve active gate (auto-reuses --backend)
     super-dev continue --backend X     override worker for this block
     super-dev revise <text>            stay at gate, record a revision
@@ -65,7 +66,7 @@ THE COMMAND SURFACE
 
 WHAT GETS WRITTEN
 -----------------
-  ~/.super-dev/config.toml   your worker / model preference
+  ~/.super-dev/config.toml   your worker / model / provider preference
   super-dev.yaml             this workspace's spec manifest (SD-META-001)
 
   output/                    AI-generated artifacts
@@ -73,8 +74,9 @@ WHAT GETS WRITTEN
     <slug>-architecture.md
     <slug>-uiux.md
     <slug>-execution-plan.md
-    <slug>-frontend-notes.md
+    <slug>-frontend-notes.md   (includes Preview URL + Run command)
     <slug>-backend-notes.md
+    <slug>-delivery-notes.md   (includes Deploy command + live URL)
     <slug>-quality-gate.json
     <slug>-compliance-mapping.json
 
@@ -89,18 +91,21 @@ WHAT GETS WRITTEN
 
 GOVERNANCE RULES (always enforced)
 ----------------------------------
-  SD-CODE-001  no emoji as functional icons
+  SD-CODE-001  no emoji as functional icons (use Lucide/Heroicons/Tabler)
   SD-CODE-002  no hardcoded colors — design tokens only
   SD-CODE-003  frontend↔backend API path alignment
   SD-CODE-004  tech-stack pre-research
+  SD-SEC-001   sensitive-path write protection (.git/.env/.ssh/credentials)
   SD-FLOW-*    phase chain + 2 gates + revision semantics + session continuity
   SD-ART-*     6 mandatory artifacts (PRD / architecture / UIUX / spec / tasks / ADR)
   SD-EVID-*    5-piece evidence chain (audit + quality + compliance + proof-pack)
   SD-META-*    spec manifest + version negotiation
 
   Verify loop runs `cargo check` / `npm install` / `python3` after every
-  code-producing phase. Failures land in .super-dev/audit/verify.jsonl
-  so a non-technical user can ship stable code without writing any.
+  code-producing phase. On failure, the build error is fed back to the
+  worker for one automatic fix attempt. Failures land in
+  .super-dev/audit/verify.jsonl so a non-technical user can ship stable
+  code without writing any.
 
 INPUT BOX FEATURES
 ------------------

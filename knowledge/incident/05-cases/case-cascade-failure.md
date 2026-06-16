@@ -1,3 +1,13 @@
+---
+id: case-cascade-failure
+title: 级联故障案例：一个服务超时引发全站雪崩
+domain: incident
+category: 05-cases
+difficulty: intermediate
+tags: [agent, cascade, case, checklist, failure, incident, whys, 关键教训]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 级联故障案例：一个服务超时引发全站雪崩
 
 ## 概述

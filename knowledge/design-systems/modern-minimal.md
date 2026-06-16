@@ -1,3 +1,13 @@
+---
+id: modern-minimal
+title: Modern Minimal
+domain: design-systems
+category: modern-minimal.md
+difficulty: intermediate
+tags: [borders, color, component, design-systems, minimal, modern, palette, patterns]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Modern Minimal
 
 > Precise, geometric, whitespace-first. Inspired by Linear, Vercel, Raycast.

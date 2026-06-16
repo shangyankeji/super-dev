@@ -1,3 +1,13 @@
+---
+id: rag-architecture-complete
+title: RAG 架构完整指南
+domain: ai
+category: 01-standards
+difficulty: intermediate
+tags: [ai, architecture, complete, embedding, rag, reranking, 向量数据库, 文档分块策略]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # RAG 架构完整指南
 
 ## 概述

@@ -1,3 +1,13 @@
+---
+id: prompt-and-tool-guardrails
+title: prompt-and-tool-guardrails
+domain: ai
+category: prompt-and-tool-guardrails.md
+difficulty: intermediate
+tags: [ai, and, guardrails, prompt, tool, 与工具调用护栏规范]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 开发：Excellent（11964948@qq.com）
 
 ## Prompt 与工具调用护栏规范

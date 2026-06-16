@@ -1,3 +1,13 @@
+---
+id: education-complete
+title: 在线教育系统完整指南
+domain: industries
+category: education
+difficulty: intermediate
+tags: [complete, education, industries, 参考资料, 学习路径, 最佳实践, 核心模块, 概述]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 在线教育系统完整指南
 
 ## 概述

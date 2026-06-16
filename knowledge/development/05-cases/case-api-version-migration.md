@@ -1,3 +1,13 @@
+---
+id: case-api-version-migration
+title: 案例研究：API 版本迁移治理实战
+domain: development
+category: 05-cases
+difficulty: intermediate
+tags: [agent, api, case, checklist, development, migration, version, 元数据]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 案例研究：API 版本迁移治理实战
 
 ## 元数据

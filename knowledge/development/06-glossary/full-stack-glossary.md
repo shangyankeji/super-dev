@@ -1,3 +1,13 @@
+---
+id: full-stack-glossary
+title: 全栈开发术语表
+domain: development
+category: 06-glossary
+difficulty: intermediate
+tags: [development, devops, full, glossary, stack, 前端术语, 后端术语, 安全术语]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 全栈开发术语表
 
 ## 概述

@@ -1,3 +1,13 @@
+---
+id: service-governance
+title: 服务治理完全指南
+domain: architecture
+category: service-governance.md
+difficulty: intermediate
+tags: [architecture, governance, service, 服务注册与发现, 核心能力, 概述, 熔断与降级, 负载均衡]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 服务治理完全指南
 
 ## 概述

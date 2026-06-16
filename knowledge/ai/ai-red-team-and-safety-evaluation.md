@@ -1,3 +1,13 @@
+---
+id: ai-red-team-and-safety-evaluation
+title: ai-red-team-and-safety-evaluation
+domain: ai
+category: ai-red-team-and-safety-evaluation.md
+difficulty: intermediate
+tags: [ai, ai红队测试与安全评估, and, evaluation, red, safety, team]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 开发：Excellent（11964948@qq.com）
 
 ## AI红队测试与安全评估

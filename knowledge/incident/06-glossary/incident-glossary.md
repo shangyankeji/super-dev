@@ -1,3 +1,13 @@
+---
+id: incident-glossary
+title: 事故管理术语表 (Incident Management Glossary)
+domain: incident
+category: 06-glossary
+difficulty: intermediate
+tags: [agent, checklist, glossary, incident, 事故响应, 变更管理, 可观测性, 可靠性指标]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 事故管理术语表 (Incident Management Glossary)
 
 > 适用场景：SRE 团队建设、On-Call 培训、事故管理流程制定、可靠性工程实践。

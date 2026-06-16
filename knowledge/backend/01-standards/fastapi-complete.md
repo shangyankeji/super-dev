@@ -1,3 +1,13 @@
+---
+id: fastapi-complete
+title: FastAPI 完整指南
+domain: backend
+category: 01-standards
+difficulty: intermediate
+tags: [backend, complete, fastapi, 中间件, 依赖注入系统, 后台任务, 安全与认证, 快速开始]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # FastAPI 完整指南
 
 ## 概述

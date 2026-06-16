@@ -1,3 +1,13 @@
+---
+id: aiops-anomaly-detection
+title: aiops-anomaly-detection
+domain: operations
+category: aiops-anomaly-detection.md
+difficulty: intermediate
+tags: [aiops, anomaly, detection, operations, 告警降噪, 实施架构, 常见失败模式, 异常检测算法]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 开发：Excellent（11964948@qq.com）
 # 功能：AIOps 异常检测实践指南
 # 作用：利用机器学习和 AI 技术自动化检测和诊断系统异常

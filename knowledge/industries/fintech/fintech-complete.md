@@ -1,3 +1,13 @@
+---
+id: fintech-complete
+title: 金融科技完整知识体系
+domain: industries
+category: fintech
+difficulty: intermediate
+tags: [complete, fintech, industries, 参考资料, 合规要求, 学习路径, 安全最佳实践, 核心领域]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 金融科技完整知识体系
 
 ## 概述

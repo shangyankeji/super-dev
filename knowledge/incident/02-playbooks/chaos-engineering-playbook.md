@@ -5,6 +5,9 @@ last_updated: 2026-03-28
 owner: sre-team
 tags: [chaos-engineering, Chaos-Monkey, LitmusChaos, Gremlin, fault-injection, resilience, gameday]
 status: production
+domain: incident
+difficulty: intermediate
+quality_score: 70
 ---
 
 # 开发：Excellent（11964948@qq.com）

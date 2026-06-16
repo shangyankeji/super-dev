@@ -1,3 +1,13 @@
+---
+id: saas-landing
+title: Seed Template: SaaS Landing Page
+domain: seed-templates
+category: saas-landing.md
+difficulty: intermediate
+tags: [bottom, gates, into, landing, page, paste, quality, root]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Seed Template: SaaS Landing Page
 
 > Use this structure when the product is a SaaS landing / marketing page.

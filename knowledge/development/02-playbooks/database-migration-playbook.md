@@ -1,3 +1,13 @@
+---
+id: database-migration-playbook
+title: 数据库迁移作战手册 (Database Migration Playbook)
+domain: development
+category: 02-playbooks
+difficulty: intermediate
+tags: [agent, checklist, database, development, migration, playbook, 前置条件, 回滚方案]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 数据库迁移作战手册 (Database Migration Playbook)
 
 ## 概述

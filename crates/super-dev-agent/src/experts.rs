@@ -48,8 +48,13 @@ A simple todo app needs a short PRD; an e-commerce platform needs a \
 detailed one. Don't pad with filler, don't omit real requirements. \
 Match the depth to the problem.\n\n\
 Non-negotiable rules:\n\
-- Use a declared icon library (Lucide / Heroicons / Tabler). NEVER \
-emoji as functional icons.\n\
+- ABSOLUTE PROHIBITION on emoji as UI icons. Never use emoji (🚀 🔍 ✓ etc.) \
+for any functional icon, button, status indicator, or list marker — anywhere \
+in code, JSX text, string literals, or comments. Every icon MUST come from a \
+free, open-source icon library: Lucide (lucide.dev), Heroicons (heroicons.com), \
+or Tabler Icons (tabler-icons.io). Install it, import by name, and use the \
+component. This is non-negotiable and is enforced by the governance hook \
+(SD-CODE-001) — emoji in source files will be BLOCKED.\n\
 - Use design tokens (CSS vars / theme keys). NEVER hardcoded colors.\n\
 - Frontend fetch URLs MUST match architecture API paths.\n\
 - Output structured markdown sections as requested.\n";
@@ -293,19 +298,29 @@ pub fn frontend_prompt(
          Not just a notes file.\n\n\
          Steps:\n\
          1. Set up project if not exists (use framework from architecture doc)\n\
-         2. Copy UIUX design tokens into your CSS/theme file\n\
-         3. Build shared components (Button, Input, Card) with all states\n\
-         4. Build page components following the page hierarchy\n\
-         5. Wire API client following the architecture API surface below\n\
-         6. Add error handling (loading, error, empty states for every view)\n\
-         7. Test responsive (mobile 360px + desktop 1024px)\n\
-         8. Run build — fix all errors\n\n\
+         2. Install and declare the icon library picked in the UIUX doc (Lucide / \
+         Heroicons / Tabler — a FREE open-source library). Import icons BY NAME as \
+         components. NEVER use emoji for any icon, status, or decoration.\n\
+         3. Copy UIUX design tokens into your CSS/theme file\n\
+         4. Build shared components (Button, Input, Card) with all states\n\
+         5. Build page components following the page hierarchy\n\
+         6. Wire API client following the architecture API surface below\n\
+         7. Add error handling (loading, error, empty states for every view)\n\
+         8. Test responsive (mobile 360px + desktop 1024px)\n\
+         9. Run build — fix all errors\n\
+         10. Start the dev server (e.g. `npm run dev` / `pnpm dev`). Wait until it\
+         prints a local URL with no errors, then STOP the server.\n\n\
          After creating files, write `output/{slug}-frontend-notes.md` with:\n\
          - Files created and their purpose\n\
          - Which API endpoints are wired\n\
          - Which UIUX tokens are used\n\
          - Known gaps\n\
-         - How to run the frontend"
+         - How to run the frontend\n\
+         - Under a `## Preview URL` heading: the local URL the dev server\
+           printed (e.g. `http://localhost:5173`). This is read by Super Dev\
+           to open the preview for the user.\n\
+         - Under a `## Run command` heading: the exact command to start the\
+           dev server again (e.g. `cd web && npm run dev`)."
     );
     let user = format!(
         "## Requirement\n\n{requirement}\n\n\
@@ -354,6 +369,48 @@ pub fn backend_prompt(
          ## Architecture (implement this)\n\n{arch_excerpt}\n\n\
          ## PRD Acceptance Criteria (test against these)\n\n{prd_excerpt}\n\n\
          Implement the backend now."
+    );
+    Prompt { system, user }
+}
+
+/// Delivery expert — drives the worker to produce deployment instructions and
+/// confirm a production build works, so the project can actually ship. Does
+/// NOT itself deploy (that is the user's call via `/deploy`); it produces a
+/// ready-to-run deployment recipe the user can execute.
+#[must_use]
+pub fn delivery_prompt(slug: &str, requirement: &str, arch_excerpt: &str) -> Prompt {
+    let system = format!(
+        "{SPEC_PREAMBLE}\n\
+         Role: senior DevOps / release engineer.\n\
+         Task: produce a deployment recipe so this project can go live. Do NOT \n\
+         actually deploy or mutate any remote system — only verify the local \n\
+         production build and write the exact instructions.\n\n\
+         Steps:\n\
+         1. Run the production build for BOTH frontend and backend (e.g. \n\
+            `npm run build`, `cargo build --release`). Fix any errors.\n\
+         2. Identify the simplest FREE deployment target for this stack:\n\
+            - Frontend SPA/static → Vercel / Netlify / Cloudflare Pages (all free tier)\n\
+            - Backend API → Render / Railway / Fly.io free tier, or serverless\n\
+            - Full-stack monorepo → Vercel (frontend) + Render (backend)\n\
+         3. List every required environment variable (DB URL, API keys, auth secrets)\n\
+            as `KEY=<description>` — never real values.\n\
+         4. Write the exact deploy commands (e.g. `npx vercel --prod`, CLI login steps).\n\
+         5. Confirm the build output dir exists and is non-empty.\n\n\
+         After verifying, write `output/{slug}-delivery-notes.md` with:\n\
+         - Build status (frontend + backend, both green?)\n\
+         - Under a `## Deploy target` heading: the recommended platform + why\n\
+         - Under a `## Deploy command` heading: the EXACT command to deploy \n\
+           (e.g. `npx vercel --prod`) — Super Dev reads this for `/deploy`\n\
+         - Under a `## Frontend URL` heading: the live URL AFTER a successful \n\
+           deploy, or `(not yet deployed)` if undeployed\n\
+         - Under a `## Environment variables` heading: every required var as \n\
+           `KEY=<description>` (never real secrets)\n\
+         - Under a `## Run command` heading: how to run the production build locally"
+    );
+    let user = format!(
+        "## Requirement\n\n{requirement}\n\n\
+         ## Architecture (deploy per this)\n\n{arch_excerpt}\n\n\
+         Produce the deployment recipe now."
     );
     Prompt { system, user }
 }
@@ -439,5 +496,24 @@ mod tests {
     #[test]
     fn excerpt_passes_short_text_through() {
         assert_eq!(excerpt("hi", 100), "hi");
+    }
+
+    #[test]
+    fn delivery_prompt_instructs_deploy_and_free_platforms() {
+        let p = delivery_prompt(
+            "demo",
+            "做一个登录系统",
+            "## API
+POST /login",
+        );
+        // Must name free platforms.
+        assert!(p.system.contains("Vercel") || p.system.contains("Netlify"));
+        // Must demand the deploy/URL/run sections the TUI reads.
+        assert!(p.system.contains("## Deploy command"));
+        assert!(p.system.contains("## Frontend URL"));
+        assert!(p.system.contains("## Run command"));
+        // Must forbid real secrets.
+        assert!(p.system.contains("never real") || p.system.contains("never real secrets"));
+        assert!(p.user.contains("deployment recipe"));
     }
 }

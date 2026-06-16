@@ -5,6 +5,9 @@ version: 1.0.0
 last_updated: 2026-03-20
 maintainer: Excellent（11964948@qq.com）
 knowledge_score: 9.3/10
+domain: mobile
+difficulty: intermediate
+quality_score: 70
 ---
 
 # 开发：Excellent（11964948@qq.com）

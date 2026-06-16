@@ -1,3 +1,13 @@
+---
+id: ai-antipatterns
+title: AI 反模式大全
+domain: ai
+category: 04-antipatterns
+difficulty: intermediate
+tags: [ai, antipatterns, hallucination, prompt, 参考资料, 反模式, 幻觉, 强制规则]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # AI 反模式大全
 
 ## 概述

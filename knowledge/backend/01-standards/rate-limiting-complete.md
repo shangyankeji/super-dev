@@ -1,3 +1,13 @@
+---
+id: rate-limiting-complete
+title: 限流完整指南
+domain: backend
+category: 01-standards
+difficulty: intermediate
+tags: [backend, complete, http, limiting, rate, 分布式限流, 响应头, 多维度限流]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 限流完整指南
 
 ## 概述

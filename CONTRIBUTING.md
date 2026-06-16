@@ -36,12 +36,8 @@ crates/
 ├── super-dev-spec/        # SUPER_DEV_HOST_SPEC_V1 as Rust data
 ├── super-dev-governance/  # rules / audit / context / compliance kernel
 ├── super-dev-agent/       # 9-phase runner + gates + state + experts + coach
-└── super-dev-runtime/     # Anthropic / OpenAI / Antigravity HTTP adapters
-
-plugin/
-├── claude-code/           # Claude Code plugin bundle (skill + commands + plugin.json)
-├── codex/                 # Codex plugin bundle (AGENTS.md + .codex/config.toml + skills)
-└── antigravity/           # Antigravity plugin bundle (AGENTS.md + skills)
+├── super-dev-host/        # subprocess drivers for 23 host CLIs (claude/codex/simple)
+└── super-dev-runtime/     # Runtime trait + OfflineRuntime (deterministic fallback)
 
 spec/
 └── SUPER_DEV_HOST_SPEC_V1.md   # normative specification
@@ -85,19 +81,28 @@ for the new rule alongside the implementation.
 
 ## Adding a new host | 新增宿主
 
-1. Create `plugin/<host>/` with the host's native files (`AGENTS.md` or
-   equivalent, optional hook config, `skills/super-dev/SKILL.md`).
-2. Append a `(path, include_str!)` entry block to
-   `crates/super-dev/src/install.rs#<HOST>_PLUGIN` and add an
-   `InstallTarget::<Variant>`.
-3. Wire the new variant into `resolve_install_root` (workspace vs user
-   scope path) and the `InstallHost` clap value-enum in
-   `crates/super-dev/src/main.rs`.
-4. Add install + idempotency + detection tests in
-   `crates/super-dev/src/install.rs#tests`.
+A "host" is a non-interactive AI coding CLI driven as a subprocess —
+**no plugin bundles, no install.rs, no Agent SDK required**. The driver
+lives entirely in `crates/super-dev-host/`.
 
-Only hosts with an **official Agent SDK** are in scope for the
-reference implementation — see SUPER_DEV_HOST_SPEC_V1 §7.
+1. Add a factory to `crates/super-dev-host/src/simple.rs`
+   (`SimpleHostDriver::<name>()`) with the program name, base args, the
+   non-interactive prompt channel, and a `version_args` for probing.
+   Honour the `SUPER_DEV_<NAME>_BIN` env override like the other factories.
+2. Register the id in **two places** (a test keeps them in sync):
+   - `driver_for()` and `BACKEND_IDS` in
+     `crates/super-dev-host/src/lib.rs`, and
+   - a new `BackendArg` variant + `id()`/`from_id()`/`BACKEND_ARG_IDS`
+     entry in `crates/super-dev/src/main.rs`.
+3. Add the executable name to the doctor probe table in
+   `crates/super-dev/src/doctor.rs#check_ai_backends`.
+4. The TUI needs **no change** — slash verbs, palette, and did-you-mean
+   are derived dynamically from `BACKEND_IDS`.
+
+Only hosts with a documented **non-interactive CLI** form are in scope
+(`binary [flags] "<prompt>"` → stdout). The `backend_arg_ids_match_host`
+and `every_backend_arg_has_a_driver` tests in `main.rs` will fail if the
+selector and driver registry drift apart.
 
 ## Commit conventions | 提交规范
 

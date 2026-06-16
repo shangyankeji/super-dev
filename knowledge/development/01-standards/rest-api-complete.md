@@ -1,3 +1,13 @@
+---
+id: rest-api-complete
+title: RESTful API设计完整指南
+domain: development
+category: 01-standards
+difficulty: intermediate
+tags: [api, complete, development, rest, 学习路径, 最佳实践, 核心原则, 概述]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # RESTful API设计完整指南
 
 ## 概述

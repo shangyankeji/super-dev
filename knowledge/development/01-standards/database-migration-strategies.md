@@ -1,3 +1,13 @@
+---
+id: database-migration-strategies
+title: 数据库迁移策略
+domain: development
+category: 01-standards
+difficulty: intermediate
+tags: [agent, checklist, database, development, migration, strategies, 实战代码示例, 常见陷阱]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 数据库迁移策略
 
 ## 概述

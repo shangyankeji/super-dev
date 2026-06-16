@@ -1,3 +1,13 @@
+---
+id: feature-launch-playbook
+title: 功能上线 Playbook
+domain: product
+category: 02-playbooks
+difficulty: intermediate
+tags: [agent, checklist, feature, launch, playbook, product, 上线日期, 功能名称]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 功能上线 Playbook
 
 ## 概述

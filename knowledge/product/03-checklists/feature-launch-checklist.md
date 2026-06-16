@@ -1,3 +1,13 @@
+---
+id: feature-launch-checklist
+title: Feature Launch Checklist
+domain: product
+category: 03-checklists
+difficulty: intermediate
+tags: [agent, alerting, checklist, complete, confirmation, feature, launch, passed]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Feature Launch Checklist
 
 ## 概述

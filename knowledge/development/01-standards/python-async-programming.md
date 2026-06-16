@@ -1,3 +1,13 @@
+---
+id: python-async-programming
+title: Python 异步编程完整指南
+domain: development
+category: 01-standards
+difficulty: intermediate
+tags: [async, development, programming, python, 实战案例, 常见陷阱与反模式, 异步编程模式, 性能优化技巧]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Python 异步编程完整指南
 
 ## 概述

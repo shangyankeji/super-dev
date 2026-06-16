@@ -1,3 +1,13 @@
+---
+id: risk-based-test-matrix
+title: risk-based-test-matrix
+domain: testing
+category: risk-based-test-matrix.md
+difficulty: intermediate
+tags: [based, matrix, risk, test, testing, 风险驱动测试矩阵]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 开发：Excellent（11964948@qq.com）
 
 ## 风险驱动测试矩阵

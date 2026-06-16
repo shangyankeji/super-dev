@@ -1,3 +1,13 @@
+---
+id: slo-sli-playbook
+title: slo-sli-playbook
+domain: operations
+category: slo-sli-playbook.md
+difficulty: intermediate
+tags: [budget, operations, playbook, sli, slo, 实施流程, 核心概念, 目标]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 开发：Excellent（11964948@qq.com）
 # 功能：SLO/SLI 实战手册
 # 作用：提供服务水平目标（SLO）和服务水平指标（SLI）的完整实施指南

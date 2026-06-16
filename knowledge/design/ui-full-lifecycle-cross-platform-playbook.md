@@ -1,3 +1,13 @@
+---
+id: ui-full-lifecycle-cross-platform-playbook
+title: UI 全生命周期跨平台设计手册（商业级）
+domain: design
+category: ui-full-lifecycle-cross-platform-playbook.md
+difficulty: intermediate
+tags: [cross, design, full, lifecycle, platform, playbook, token, 官方优先来源]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # UI 全生命周期跨平台设计手册（商业级）
 
 > 来源：Material Design 3、Apple HIG、Microsoft Fluent 2、Refactoring UI、TDesign、shadcn/ui、Tailwind CSS v4、微信小程序设计指南、48+ 开源设计系统、Awwwards 趋势研究

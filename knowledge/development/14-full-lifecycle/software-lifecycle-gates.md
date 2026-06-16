@@ -1,3 +1,13 @@
+---
+id: software-lifecycle-gates
+title: Software Lifecycle Gates - Comprehensive Quality Gate Reference
+domain: development
+category: 14-full-lifecycle
+difficulty: intermediate
+tags: [architecture, decision, design, development, discovery, end-to-end, gate, gates]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Software Lifecycle Gates - Comprehensive Quality Gate Reference
 
 > Consolidated reference covering the end-to-end software development lifecycle: requirement discovery, product-design handoff, architecture decision, implementation execution, testing verification, security compliance, release management, operations observability, incident postmortem, and stage exit criteria.

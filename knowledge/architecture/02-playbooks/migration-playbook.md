@@ -5,6 +5,9 @@ last_updated: 2026-03-28
 owner: architecture-team
 tags: [migration, blue-green, canary, strangler-fig, database-migration, zero-downtime]
 status: production
+domain: architecture
+difficulty: intermediate
+quality_score: 70
 ---
 
 # 开发：Excellent（11964948@qq.com）

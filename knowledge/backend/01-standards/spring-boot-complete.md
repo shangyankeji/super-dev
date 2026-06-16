@@ -1,3 +1,13 @@
+---
+id: spring-boot-complete
+title: Spring Boot 完整指南
+domain: backend
+category: 01-standards
+difficulty: intermediate
+tags: [backend, boot, complete, data, rest, security, spring, 与依赖注入]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Spring Boot 完整指南
 
 ## 概述

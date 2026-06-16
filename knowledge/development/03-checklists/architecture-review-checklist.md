@@ -1,3 +1,13 @@
+---
+id: architecture-review-checklist
+title: 架构评审检查清单 (Architecture Review Checklist)
+domain: development
+category: 03-checklists
+difficulty: intermediate
+tags: [architecture, checklist, development, review, 参考, 可维护性与演进性, 可观测性, 成本与可行性]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 架构评审检查清单 (Architecture Review Checklist)
 
 > 适用场景：新系统设计评审、重大重构方案评审、技术选型决策、架构变更审批。

@@ -1,3 +1,13 @@
+---
+id: github-actions-complete
+title: GitHub Actions 完整指南
+domain: cicd
+category: 01-standards
+difficulty: intermediate
+tags: [actions, agent, changes, checklist, cicd, complete, github, 安全最佳实践]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # GitHub Actions 完整指南
 
 ## 概述

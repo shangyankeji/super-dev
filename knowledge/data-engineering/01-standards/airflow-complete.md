@@ -1,3 +1,13 @@
+---
+id: airflow-complete
+title: Apache Airflow完整指南
+domain: data-engineering
+category: 01-standards
+difficulty: intermediate
+tags: [airflow, complete, connections和hooks, dag最佳实践, data-engineering, sensor等待任务, 变量和配置, 执行器配置]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Apache Airflow完整指南
 
 ## 概述

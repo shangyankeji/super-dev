@@ -1,3 +1,13 @@
+---
+id: test-strategy-checklist
+title: 测试策略检查清单
+domain: testing
+category: 03-checklists
+difficulty: intermediate
+tags: [agent, checklist, management, strategy, test, testing, 概述, 测试策略评估矩阵]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 测试策略检查清单
 
 ## 概述

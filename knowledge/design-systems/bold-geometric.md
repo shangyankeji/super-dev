@@ -1,3 +1,13 @@
+---
+id: bold-geometric
+title: Bold Geometric
+domain: design-systems
+category: bold-geometric.md
+difficulty: intermediate
+tags: [bold, color, component, design-systems, geometric, layout, palette, patterns]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Bold Geometric
 
 > High contrast, oversized type, asymmetric layouts. Inspired by Figma marketing, Stripe keynotes, Apple product pages.

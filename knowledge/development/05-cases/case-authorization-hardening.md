@@ -1,3 +1,13 @@
+---
+id: case-authorization-hardening
+title: 案例研究：权限体系加固——从越权漏洞到零信任授权
+domain: development
+category: 05-cases
+difficulty: intermediate
+tags: [agent, authorization, case, checklist, development, hardening, 元数据]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 案例研究：权限体系加固——从越权漏洞到零信任授权
 
 ## 元数据

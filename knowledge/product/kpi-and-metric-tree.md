@@ -1,3 +1,13 @@
+---
+id: kpi-and-metric-tree
+title: kpi-and-metric-tree
+domain: product
+category: kpi-and-metric-tree.md
+difficulty: intermediate
+tags: [and, kpi, metric, product, tree, 与指标树方法库]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 开发：Excellent（11964948@qq.com）
 
 ## KPI 与指标树方法库

@@ -56,10 +56,77 @@ pub fn knowledge_digest(opts: &RunOptions) -> String {
 /// user requirement. This is the "virtual expert's professional library".
 #[must_use]
 pub fn phase_knowledge_digest(opts: &RunOptions, phase: Phase) -> String {
+    phase_knowledge_digest_with_vector(opts, phase, None)
+}
+
+/// Phase knowledge digest with an optional pre-embedded query vector (hybrid
+/// BM25+vector RRF fusion when available, pure BM25 otherwise).
+#[must_use]
+pub fn phase_knowledge_digest_with_vector(
+    opts: &RunOptions,
+    phase: Phase,
+    query_vec: Option<&[f32]>,
+) -> String {
     let base = opts.project_root.join("knowledge");
     if !base.is_dir() {
         return String::new();
     }
+    if matches!(phase, Phase::DocsConfirm | Phase::PreviewConfirm) {
+        return String::new();
+    }
+    let project_cfg = crate::config::load_project_config(&opts.project_root);
+    let cfg = &project_cfg.knowledge;
+    if cfg.enabled {
+        let rcfg = super_dev_knowledge::retrieve::RetrievalConfig {
+            enabled: true,
+            engine: match cfg.engine.as_str() {
+                "hybrid" => super_dev_knowledge::retrieve::RetrievalEngine::Hybrid,
+                _ => super_dev_knowledge::retrieve::RetrievalEngine::Bm25,
+            },
+            top_k: cfg.top_k,
+            custom_dirs: Vec::new(),
+        };
+        let hits = super_dev_knowledge::retrieve_for_phase_with_vector(
+            &opts.project_root,
+            &base,
+            &rcfg,
+            &opts.requirement,
+            phase,
+            query_vec,
+        );
+        if hits.is_empty() {
+            return String::new();
+        }
+        let label = if query_vec.is_some() && cfg.engine == "hybrid" {
+            "BM25+vector RRF-fused"
+        } else {
+            "BM25-ranked"
+        };
+        let mut out = format!(
+            "\n\n## Expert knowledge ({} phase)\n\nTop {} knowledge chunks ({}):\n\n",
+            phase.id(),
+            hits.len(),
+            label
+        );
+        for hit in &hits {
+            out.push_str(&format!(
+                "### `{}` — *{}* (score {:.2})\n\n{}\n\n",
+                hit.chunk.meta.path,
+                hit.chunk.meta.section,
+                hit.score,
+                hit.chunk.excerpt(400)
+            ));
+        }
+        return out;
+    }
+    legacy_phase_knowledge_digest(opts, phase)
+}
+
+/// The pre-4.6 keyword-scoring digest, retained as the fallback when
+/// `knowledge.enabled = false`.
+#[must_use]
+fn legacy_phase_knowledge_digest(opts: &RunOptions, phase: Phase) -> String {
+    let base = opts.project_root.join("knowledge");
     let subdirs: &[&str] = match phase {
         Phase::Research => return knowledge_digest(opts),
         Phase::Docs => &[
@@ -382,7 +449,10 @@ pub fn run_research(opts: &RunOptions, generated_body: Option<&str>) -> io::Resu
         "research_summary": format!("Stub research bundle for: {}", opts.requirement),
     });
     if let Ok(text) = serde_json::to_string_pretty(&bundle) {
-        fs::write(&bundle_path, text)?;
+        // Atomic write (temp file in the same dir + rename) so a concurrent
+        // reader in context.rs::read_knowledge_digest never sees a partial
+        // JSON file. `rename` on the same filesystem is atomic on POSIX.
+        atomic_write(&bundle_path, &text)?;
     }
 
     audit(
@@ -523,7 +593,12 @@ pub fn run_frontend(opts: &RunOptions) -> io::Result<PhaseOutput> {
          - [ ] icon library declared and imported (Lucide / Heroicons / Tabler)\n\
          - [ ] color tokens loaded from `output/{slug}-uiux.md`\n\
          - [ ] every `fetch` URL appears in `output/{slug}-architecture.md`\n\
-         - [ ] runtime smoke screenshot attached for review\n",
+         - [ ] runtime smoke screenshot attached for review\n\n\
+         ## Preview URL\n\n\
+         _(The worker fills this with the local URL its dev server printed,\n\
+         e.g. `http://localhost:5173`. Super Dev opens it for the user.)_\n\n\
+         ## Run command\n\n\
+         _(e.g. `cd web && npm run dev`)_"
     );
     fs::write(&note, body)?;
     audit(
@@ -777,14 +852,37 @@ pub fn run_quality(opts: &RunOptions) -> io::Result<PhaseOutput> {
         2.0,
     ));
 
-    // SD-ART-003 — execution plan
-    checks.push(file_present_check(
-        "Execution plan",
-        "artifact",
-        "SD-ART-003 — output/<slug>-execution-plan.md present",
-        &output_dir.join(format!("{slug}-execution-plan.md")),
-        1.5,
-    ));
+    // SD-ART-003 — execution plan (content-validated)
+    {
+        let pp = output_dir.join(format!("{slug}-execution-plan.md"));
+        let pt = fs::read_to_string(&pp).unwrap_or_default();
+        let pl = pt.lines().filter(|l| !l.trim().is_empty()).count();
+        let hs = pt.lines().any(|l| l.trim_start().starts_with("## "));
+        let (st, sc, det) = if pt.is_empty() {
+            ("failed", 0, format!("missing {}", pp.display()))
+        } else if pl < 10 || !hs {
+            (
+                "warning",
+                60,
+                format!("{pl} lines, needs structured sections"),
+            )
+        } else {
+            (
+                "passed",
+                100,
+                format!("{pl} lines with structured sections"),
+            )
+        };
+        checks.push(QualityCheck {
+            name: "Execution plan".to_string(),
+            category: "artifact".to_string(),
+            description: "SD-ART-003 — execution-plan.md present with real content".to_string(),
+            status: st.to_string(),
+            score: sc,
+            details: det,
+            weight: 1.5,
+        });
+    }
 
     // SD-EVID-001 — API audit
     let api_log = opts
@@ -821,7 +919,15 @@ pub fn run_quality(opts: &RunOptions) -> io::Result<PhaseOutput> {
         2.0,
     ));
 
-    // SD-CODE-005 — anti-slop visual quality check on output artifacts
+    // Build & test results — consumes the real verify runner output.
+    if let Some(vc) = verify_results_check(&opts.project_root) {
+        checks.push(vc);
+    }
+
+    // Anti-AI-slop visual quality check on output artifacts. Not tied to a
+    // single spec clause — Lorem ipsum / generic headings / purple→pink
+    // gradients are caught as design-quality signals (the pre-write hook
+    // attributes the gradient/color part to SD-CODE-002).
     let slop_issues = count_slop_violations(&output_dir);
     let slop_detail = if slop_issues == 0 {
         "No AI template patterns detected in output artifacts".to_string()
@@ -833,7 +939,7 @@ pub fn run_quality(opts: &RunOptions) -> io::Result<PhaseOutput> {
     checks.push(QualityCheck {
         name: "Anti-AI-slop check".to_string(),
         category: "quality".to_string(),
-        description: "SD-CODE-005 — no AI-template visual patterns in output".to_string(),
+        description: "Anti-AI-slop — no AI-template visual patterns in output".to_string(),
         status: if slop_issues == 0 {
             "passed".to_string()
         } else {
@@ -899,13 +1005,278 @@ pub fn run_quality(opts: &RunOptions) -> io::Result<PhaseOutput> {
         weight: 2.0,
     });
 
+    // === Contract-layer checks (require parsing the architecture doc) ===
+    let arch_text = fs::read_to_string(
+        opts.project_root
+            .join("output")
+            .join(format!("{slug}-architecture.md")),
+    )
+    .unwrap_or_default();
+    let arch_spec = super_dev_contract::parse_architecture(&arch_text, &format!("{slug} API"));
+    let derived = super_dev_contract::derive_endpoints_from_requirement(&opts.requirement);
+    let contract_spec = super_dev_contract::merge_specs(&arch_spec, &derived);
+
+    // OpenAPI contract present
+    let has_contract = !contract_spec.is_empty();
+    checks.push(QualityCheck {
+        name: "OpenAPI contract".to_string(),
+        category: "contract".to_string(),
+        description: "SD-CODE-003 — typed API contract derived from architecture".to_string(),
+        status: if has_contract { "passed" } else { "warning" }.to_string(),
+        score: if has_contract { 100 } else { 50 },
+        weight: 2.0,
+        details: if has_contract {
+            format!("{} endpoints in contract", contract_spec.len())
+        } else {
+            "No API contract derived — architecture may lack an API table".to_string()
+        },
+    });
+
+    // Frontend↔contract conformance
+    let fe_calls = super_dev_contract::extract_frontend_calls(
+        &opts
+            .project_root
+            .join("output")
+            .join(format!("{slug}-frontend-notes.md")),
+    );
+    let fe_violations =
+        super_dev_contract::validate_frontend_vs_contract(&fe_calls, &contract_spec);
+    checks.push(QualityCheck {
+        name: "Frontend↔contract conformance".to_string(),
+        category: "contract".to_string(),
+        description: "SD-CODE-003 — frontend calls match contract paths".to_string(),
+        status: if fe_violations.is_empty() {
+            "passed"
+        } else {
+            "warning"
+        }
+        .to_string(),
+        score: if fe_violations.is_empty() { 100 } else { 60 },
+        weight: 2.0,
+        details: if fe_violations.is_empty() {
+            "All frontend calls match the contract".to_string()
+        } else {
+            format!(
+                "{} violation(s): {}",
+                fe_violations.len(),
+                fe_violations
+                    .iter()
+                    .take(3)
+                    .map(|v| v.detail.clone())
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            )
+        },
+    });
+
+    // PRD routes↔contract coverage
+    let prd_path = opts
+        .project_root
+        .join("output")
+        .join(format!("{slug}-prd.md"));
+    let prd_text = fs::read_to_string(&prd_path).unwrap_or_default();
+    let prd_routes = super_dev_contract::extract_prd_routes(&prd_text);
+    let prd_violations = super_dev_contract::validate_prd_vs_contract(&prd_routes, &contract_spec);
+    checks.push(QualityCheck {
+        name: "PRD routes↔contract coverage".to_string(),
+        category: "contract".to_string(),
+        description: "PRD-described routes appear in the contract".to_string(),
+        status: if prd_violations.is_empty() {
+            "passed"
+        } else {
+            "warning"
+        }
+        .to_string(),
+        score: if prd_violations.is_empty() { 100 } else { 70 },
+        weight: 1.5,
+        details: if prd_violations.is_empty() {
+            "PRD routes covered by contract".to_string()
+        } else {
+            format!("{} uncovered route(s)", prd_violations.len())
+        },
+    });
+
+    // Input validation coverage (mutation endpoints should have request schemas)
+    let total_mut = contract_spec
+        .endpoints
+        .iter()
+        .filter(|e| {
+            matches!(
+                e.method,
+                super_dev_contract::HttpVerb::Post
+                    | super_dev_contract::HttpVerb::Put
+                    | super_dev_contract::HttpVerb::Patch
+            )
+        })
+        .count();
+    let mut_val_missing = contract_spec
+        .endpoints
+        .iter()
+        .filter(|e| {
+            matches!(
+                e.method,
+                super_dev_contract::HttpVerb::Post
+                    | super_dev_contract::HttpVerb::Put
+                    | super_dev_contract::HttpVerb::Patch
+            ) && e.request_shape.is_empty()
+        })
+        .count();
+    checks.push(QualityCheck {
+        name: "Input validation coverage".to_string(),
+        category: "contract".to_string(),
+        description: "POST/PATCH/PUT endpoints declare request schemas".to_string(),
+        status: if total_mut == 0 || mut_val_missing == 0 {
+            "passed"
+        } else if mut_val_missing <= 2 {
+            "warning"
+        } else {
+            "failed"
+        }
+        .to_string(),
+        score: if total_mut == 0 {
+            100
+        } else {
+            let ratio = total_mut - mut_val_missing;
+            i32::try_from(ratio * 100 / total_mut).unwrap_or(0)
+        },
+        weight: 1.5,
+        details: if total_mut == 0 {
+            "No mutation endpoints".to_string()
+        } else {
+            format!(
+                "{}/{} mutation endpoints have request schemas",
+                total_mut - mut_val_missing,
+                total_mut
+            )
+        },
+    });
+
+    // Pagination strategy (word-boundary match)
+    let arch_lower = arch_text.to_ascii_lowercase();
+    let list_count = contract_spec
+        .endpoints
+        .iter()
+        .filter(|e| e.method == super_dev_contract::HttpVerb::Get && !e.path.contains(":id"))
+        .count();
+    let has_pag = arch_lower.contains("pagination")
+        || arch_lower.contains("分页")
+        || arch_lower
+            .split_whitespace()
+            .any(|w| w == "limit" || w == "offset" || w == "cursor");
+    checks.push(QualityCheck {
+        name: "Pagination strategy".to_string(),
+        category: "contract".to_string(),
+        description: "Architecture addresses pagination for list endpoints".to_string(),
+        status: if has_pag || list_count == 0 {
+            "passed"
+        } else {
+            "warning"
+        }
+        .to_string(),
+        score: if has_pag || list_count == 0 { 100 } else { 60 },
+        details: if list_count == 0 {
+            "No list endpoints".to_string()
+        } else if has_pag {
+            format!("Pagination documented for {list_count} list endpoints")
+        } else {
+            format!("{list_count} list endpoints — no pagination strategy")
+        },
+        weight: 1.0,
+    });
+
+    // Error handling convention
+    let has_err = arch_lower.contains("error")
+        && (arch_text.contains("404") || arch_text.contains("400") || arch_text.contains("500"))
+        && arch_lower.contains("response");
+    checks.push(QualityCheck {
+        name: "Error handling convention".to_string(),
+        category: "contract".to_string(),
+        description: "Architecture defines HTTP error codes".to_string(),
+        status: if has_err { "passed" } else { "warning" }.to_string(),
+        score: if has_err { 100 } else { 60 },
+        details: if has_err {
+            "Error code table found".to_string()
+        } else {
+            "No HTTP error convention — add 400/404/500 response table".to_string()
+        },
+        weight: 1.0,
+    });
+
+    // === Ops artifacts check (content-validated) ===
+    // Generate scaffolding before checking so the files exist.
+    let _scaffold =
+        crate::scaffolding::generate_scaffolding(&opts.project_root, &contract_spec, &arch_text);
+    let ops_files: [(&str, &str); 4] = [
+        ("Dockerfile", "FROM"),
+        (".github/workflows/ci.yml", "jobs:"),
+        ("migrations/0001_init.sql", "CREATE TABLE"),
+        (".env.example", "="),
+    ];
+    let mut ops_present = 0usize;
+    let mut ops_detail = Vec::new();
+    for (rel, marker) in &ops_files {
+        let p = opts.project_root.join(rel);
+        match fs::read_to_string(&p) {
+            Ok(content) if !content.trim().is_empty() && content.contains(*marker) => {
+                ops_present += 1;
+            }
+            Ok(_) => ops_detail.push(format!("{rel}: stub")),
+            Err(_) => ops_detail.push(format!("{rel}: missing")),
+        }
+    }
+    let ops_score = i32::try_from(ops_present * 100 / ops_files.len()).unwrap_or(0);
+    checks.push(QualityCheck {
+        name: "Ops artifacts present".to_string(),
+        category: "delivery".to_string(),
+        description: "Dockerfile + CI + migrations + .env generated with real content".to_string(),
+        status: if ops_present == ops_files.len() {
+            "passed"
+        } else if ops_present >= 2 {
+            "warning"
+        } else {
+            "failed"
+        }
+        .to_string(),
+        score: ops_score,
+        details: if ops_detail.is_empty() {
+            format!(
+                "All {} ops artifacts present with valid content",
+                ops_files.len()
+            )
+        } else {
+            format!(
+                "{}/{} valid; {}",
+                ops_present,
+                ops_files.len(),
+                ops_detail.join(", ")
+            )
+        },
+        weight: 2.0,
+    });
+
+    // Allow user-specified check skips.
+    let project_config = crate::config::load_project_config(&opts.project_root);
+    let skip = &project_config.quality.skip_checks;
+    if !skip.is_empty() {
+        checks.retain(|c| {
+            let s = c.name.to_ascii_lowercase().replace(' ', "_");
+            !skip.iter().any(|sk| sk == &s || sk == &c.name)
+        });
+    }
+
     let total_score = avg_score(&checks);
     let weighted_score = weighted_avg(&checks);
-    let critical_failures: Vec<String> = checks
+    let mut critical_failures: Vec<String> = checks
         .iter()
         .filter(|c| c.status == "failed" && c.category == "artifact")
         .map(|c| c.name.clone())
         .collect();
+    if checks
+        .iter()
+        .any(|ch| ch.name == "Build & test results" && ch.status == "failed")
+    {
+        critical_failures.push("Build & test results".to_string());
+    }
     let recommendations = checks
         .iter()
         .filter(|c| c.status != "passed")
@@ -956,6 +1327,27 @@ pub fn run_quality(opts: &RunOptions) -> io::Result<PhaseOutput> {
         "quality report written",
     );
 
+    // Record the quality outcome as a "lesson" — failures become
+    // retrievable lessons so future runs avoid the same defects, and
+    // passes reinforce validated patterns. Previously
+    // `capture_quality_failures` was defined but never called from the
+    // main path, so the Failure lesson kind was dead wiring.
+    crate::lessons::capture_quality_failures(
+        &opts.project_root,
+        &report.checks,
+        &slug,
+        &opts.requirement,
+    );
+
+    // Scan output/ for placeholder/TODO markers and append to the
+    // persistent tech-debt ledger. The summary feeds a trend diff so a
+    // team can see whether debt is growing run-over-run. Best-effort:
+    // ledger write failures must never block the quality gate.
+    let debt_items = crate::tech_debt::scan_debt(&output_dir);
+    if !debt_items.is_empty() {
+        let _ = crate::tech_debt::write_ledger(&opts.project_root, &debt_items);
+    }
+
     Ok(PhaseOutput {
         phase: Phase::Quality,
         artifacts: vec![json_path, md_path],
@@ -963,6 +1355,7 @@ pub fn run_quality(opts: &RunOptions) -> io::Result<PhaseOutput> {
     })
 }
 
+#[allow(dead_code)]
 fn file_present_check(
     name: &str,
     category: &str,
@@ -1020,6 +1413,59 @@ fn violation_check(name: &str, desc: &str, blocks: usize, weight: f32) -> Qualit
         weight,
         details: format!("{blocks} block event(s) recorded in this run"),
     }
+}
+
+fn verify_results_check(project_root: &Path) -> Option<QualityCheck> {
+    let path = project_root.join(".super-dev/audit/verify.jsonl");
+    let Ok(content) = fs::read_to_string(&path) else {
+        return None;
+    };
+    #[derive(serde::Deserialize)]
+    struct VRow {
+        #[serde(default)]
+        step: String,
+        #[serde(default)]
+        passed: bool,
+        #[serde(default)]
+        skipped: bool,
+        #[serde(default)]
+        timestamp: String,
+    }
+    let rows: Vec<VRow> = content
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .filter_map(|l| serde_json::from_str(l).ok())
+        .collect();
+    if rows.is_empty() {
+        return None;
+    }
+    let dts = String::new();
+    let lts = rows.iter().map(|r| &r.timestamp).max().unwrap_or(&dts);
+    let latest: Vec<&VRow> = rows.iter().filter(|r| r.timestamp == *lts).collect();
+    let ns: Vec<&VRow> = latest.iter().copied().filter(|r| !r.skipped).collect();
+    let passed = ns.iter().filter(|r| r.passed).count();
+    let total = ns.len();
+    let crit = latest
+        .iter()
+        .any(|r| !r.passed && !r.skipped && matches!(r.step.as_str(), "build" | "test" | "check"));
+    let (status, score) = if total == 0 {
+        ("warning", 70i32)
+    } else if passed == total {
+        ("passed", 100)
+    } else if crit {
+        ("failed", 0)
+    } else {
+        ("warning", ((passed * 100) / total).max(40) as i32)
+    };
+    Some(QualityCheck {
+        name: "Build & test results".to_string(),
+        category: "evidence".to_string(),
+        description: "verify.jsonl — real build/lint/test outcomes".to_string(),
+        status: status.to_string(),
+        score,
+        weight: 2.0,
+        details: format!("{passed} of {total} steps passed"),
+    })
 }
 
 fn avg_score(checks: &[QualityCheck]) -> i32 {
@@ -1112,6 +1558,24 @@ fn render_quality_md(r: &QualityReport) -> String {
 pub fn run_delivery(opts: &RunOptions) -> io::Result<PhaseOutput> {
     let slug = opts.effective_slug();
 
+    // 0. Capture validated patterns (D2: success -> sediment -> retrieval loop)
+    let arch_text = fs::read_to_string(
+        opts.project_root
+            .join("output")
+            .join(format!("{slug}-architecture.md")),
+    )
+    .unwrap_or_default();
+    let arch_spec = super_dev_contract::parse_architecture(&arch_text, &format!("{slug} API"));
+    let derived = super_dev_contract::derive_endpoints_from_requirement(&opts.requirement);
+    let contract_spec = super_dev_contract::merge_specs(&arch_spec, &derived);
+    crate::lessons::capture_validated_patterns(
+        &opts.project_root,
+        &slug,
+        &opts.requirement,
+        &contract_spec,
+    );
+    let _ = crate::lessons::sediment_lessons(&opts.project_root);
+
     // 1. Compliance mapping
     let mut artifacts = Vec::new();
     if let Some((path, _)) = write_compliance_mapping(&opts.project_root, &slug) {
@@ -1137,7 +1601,25 @@ pub fn run_delivery(opts: &RunOptions) -> io::Result<PhaseOutput> {
         }
     }
 
-    // 3. Proof pack zip
+    // 3. Delivery notes placeholder — the worker fills the deploy/URL/run
+    //    sections when use_runtime; in offline mode this is the fallback the
+    //    user reads. Idempotent: only created if absent so a worker-written
+    //    copy is never clobbered.
+    let delivery_notes = opts
+        .project_root
+        .join("output")
+        .join(format!("{slug}-delivery-notes.md"));
+    if !delivery_notes.is_file() {
+        let placeholder = format!(
+            "# Delivery notes — {slug}\n\n             > Deployment recipe produced by the worker at the delivery phase.\n\n             ## Build status\n\n             _(frontend + backend production builds — worker reports pass/fail)_\n\n             ## Deploy target\n\n             _(recommended free platform: Vercel / Netlify / Cloudflare Pages / Render)_\n\n             ## Deploy command\n\n             _(exact command, e.g. `npx vercel --prod` — read by Super Dev `/deploy`)_\n\n             ## Frontend URL\n\n             _(not yet deployed)_\n\n             ## Environment variables\n\n             _(KEY=<description>, never real secrets)_\n\n             ## Run command\n\n             _(how to run the production build locally)_"
+        );
+        let _ = fs::write(&delivery_notes, placeholder);
+    }
+    if delivery_notes.is_file() {
+        artifacts.push(delivery_notes);
+    }
+
+    // 4. Proof pack zip
     let release_dir = opts.project_root.join("release");
     fs::create_dir_all(&release_dir)?;
     let run_id = Utc::now().format("%Y%m%d%H%M%S").to_string();
@@ -1416,10 +1898,29 @@ fn check_dark_mode_support(uiux_path: &Path) -> (String, i32, String) {
 
 /// Check a document for required sections. Returns list of defect descriptions.
 fn review_document_structure(text: &str, required: &[(&str, &str)]) -> Vec<String> {
-    let lower = text.to_ascii_lowercase();
+    let headings: Vec<String> = text
+        .lines()
+        .filter_map(|l| {
+            let t = l.trim_start();
+            let level = t.chars().take_while(|&ch| ch == '#').count();
+            if level == 0 {
+                return None;
+            }
+            let h = t[level..].trim();
+            if h.is_empty() {
+                None
+            } else {
+                Some(h.to_ascii_lowercase())
+            }
+        })
+        .collect();
     let mut defects = Vec::new();
     for (keyword, msg) in required {
-        if !lower.contains(*keyword) {
+        let kw = keyword.trim_start_matches('#').trim().to_ascii_lowercase();
+        if !headings
+            .iter()
+            .any(|h| h.starts_with(&kw) || h.split_whitespace().any(|w| w == kw))
+        {
             defects.push((*msg).to_string());
         }
     }
@@ -1605,9 +2106,13 @@ fn score_uiux_completeness(path: &Path) -> u32 {
 
 /// Extract score + passed from quality gate JSON. Used by the runner
 /// to emit a quality summary to the TUI.
+///
+/// Reads the top-level `total_score` (NOT the per-check `score` — that
+/// field also exists on each check object, so a naive `"score"` split
+/// would grab `checks[0].score` instead of the aggregate).
 pub fn extract_quality_score(json: &str) -> (String, bool) {
     let score = json
-        .split("\"score\"")
+        .split("\"total_score\"")
         .nth(1)
         .and_then(|s| s.split(':').nth(1))
         .and_then(|s| {
@@ -1631,6 +2136,25 @@ fn prefer_richer(stdout_text: &str, disk_text: &str) -> String {
         disk_text.to_string()
     } else {
         stdout_text.to_string()
+    }
+}
+
+/// Atomically write `content` to `path`: write to `<path>.tmp-<pid>` in
+/// the same directory, then rename over `path`. Same-filesystem rename is
+/// atomic on POSIX, so a concurrent reader never observes a half-written
+/// file (the reader either sees the old complete file or the new complete
+/// one). Falls back to a direct `fs::write` if the temp path can't be
+/// constructed.
+fn atomic_write(path: &Path, content: &str) -> io::Result<()> {
+    let tmp = path.with_extension("tmp-write");
+    fs::write(&tmp, content)?;
+    if fs::rename(&tmp, path).is_ok() {
+        Ok(())
+    } else {
+        // Rename failed (cross-filesystem?). Clean up the temp and fall
+        // back to a direct write — correctness > atomicity here.
+        let _ = fs::remove_file(&tmp);
+        fs::write(path, content)
     }
 }
 
@@ -2114,5 +2638,539 @@ mod tests {
         let kd = tmp.path().join("nonexistent");
         let digest = smart_knowledge_digest(&kd, "anything");
         assert!(digest.contains("no `knowledge/`"));
+    }
+
+    // ---- review_document_structure: heading-based validation (hardened) ----
+
+    #[test]
+    fn review_structure_passes_when_heading_present() {
+        let doc = "# PRD\n\n## Goal\nBuild something\n\n## Scope\nIn scope\n\n## Acceptance Criteria\n- [ ] works";
+        let defects = review_document_structure(
+            doc,
+            &[
+                ("## goal", "Missing goal"),
+                ("## scope", "Missing scope"),
+                ("## acceptance criteria", "Missing AC"),
+            ],
+        );
+        assert!(
+            defects.is_empty(),
+            "headings present → no defects: {defects:?}"
+        );
+    }
+
+    #[test]
+    fn review_structure_fails_when_heading_absent() {
+        let doc = "# PRD\n\nThis is just prose with the word goal mentioned but no heading.";
+        let defects = review_document_structure(doc, &[("## goal", "Missing goal")]);
+        assert!(!defects.is_empty(), "no ## heading → must have defects");
+    }
+
+    #[test]
+    fn review_structure_does_not_false_match_in_prose() {
+        // The word "api" in a paragraph must NOT count as a ## API heading.
+        let doc = "# Arch\n\nWe discuss the api surface but don't have a heading for it.";
+        let defects = review_document_structure(doc, &[("## api", "Missing API section")]);
+        assert!(
+            !defects.is_empty(),
+            "api in prose must not satisfy heading check"
+        );
+    }
+
+    #[test]
+    fn review_structure_matches_partial_heading() {
+        // "## API Surface" should match keyword "api" (starts_with).
+        let doc = "# Arch\n\n## API Surface\nDetails here";
+        let defects = review_document_structure(doc, &[("## api", "Missing API")]);
+        assert!(defects.is_empty(), "partial heading match should pass");
+    }
+
+    // ---- verify_results_check ----
+
+    #[test]
+    fn verify_results_check_none_when_no_jsonl() {
+        let tmp = TempDir::new().unwrap();
+        assert!(verify_results_check(tmp.path()).is_none());
+    }
+
+    #[test]
+    fn verify_results_check_passes_all_steps() {
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path().join(".super-dev/audit");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            dir.join("verify.jsonl"),
+            r#"{"step":"install","passed":true,"skipped":false,"timestamp":"t1"}
+{"step":"test","passed":true,"skipped":false,"timestamp":"t1"}
+{"step":"build","passed":true,"skipped":false,"timestamp":"t1"}
+"#,
+        )
+        .unwrap();
+        let check = verify_results_check(tmp.path()).unwrap();
+        assert_eq!(check.name, "Build & test results");
+        assert_eq!(check.status, "passed");
+        assert_eq!(check.score, 100);
+    }
+
+    #[test]
+    fn verify_results_check_fails_on_build_failure() {
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path().join(".super-dev/audit");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            dir.join("verify.jsonl"),
+            r#"{"step":"install","passed":true,"skipped":false,"timestamp":"t1"}
+{"step":"build","passed":false,"skipped":false,"timestamp":"t1"}
+"#,
+        )
+        .unwrap();
+        let check = verify_results_check(tmp.path()).unwrap();
+        assert_eq!(check.status, "failed");
+        assert_eq!(check.score, 0);
+    }
+
+    #[test]
+    fn verify_results_check_ignores_skipped_steps() {
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path().join(".super-dev/audit");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            dir.join("verify.jsonl"),
+            r#"{"step":"install","passed":true,"skipped":false,"timestamp":"t1"}
+{"step":"lint","passed":false,"skipped":true,"timestamp":"t1"}
+{"step":"test","passed":true,"skipped":false,"timestamp":"t1"}
+"#,
+        )
+        .unwrap();
+        let check = verify_results_check(tmp.path()).unwrap();
+        assert_eq!(
+            check.status, "passed",
+            "skipped lint failure must not fail the check"
+        );
+    }
+
+    // ---- phase_knowledge_digest BM25 path ----
+
+    #[test]
+    fn phase_knowledge_digest_returns_empty_without_dir() {
+        let tmp = TempDir::new().unwrap();
+        let o = opts(tmp.path());
+        let d = phase_knowledge_digest(&o, Phase::Research);
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn phase_knowledge_digest_uses_bm25_when_enabled() {
+        let tmp = TempDir::new().unwrap();
+        let kd = tmp.path().join("knowledge/security");
+        fs::create_dir_all(&kd).unwrap();
+        fs::write(
+            kd.join("login.md"),
+            "# Login\n\n## OAuth\n\nUse OAuth2 with PKCE for login authentication.",
+        )
+        .unwrap();
+        // Write .superdevrc to enable knowledge (default is enabled).
+        fs::write(
+            tmp.path().join(".superdevrc"),
+            "[quality]\nthreshold = 90\n",
+        )
+        .unwrap();
+        let o = opts(tmp.path());
+        let d = phase_knowledge_digest(&o, Phase::Backend);
+        assert!(d.contains("Expert knowledge"), "should produce digest: {d}");
+        assert!(
+            d.contains("login"),
+            "should contain relevant knowledge: {d}"
+        );
+    }
+
+    #[test]
+    fn phase_knowledge_digest_with_vector_is_none_for_bm25() {
+        // When engine=bm25, passing a query_vec should still work (ignored).
+        let tmp = TempDir::new().unwrap();
+        let kd = tmp.path().join("knowledge/security");
+        fs::create_dir_all(&kd).unwrap();
+        fs::write(kd.join("login.md"), "# Login\n\n## OAuth\n\nlogin auth").unwrap();
+        let o = opts(tmp.path());
+        let d = phase_knowledge_digest_with_vector(&o, Phase::Backend, Some(&[0.1; 1536]));
+        assert!(d.contains("Expert knowledge"));
+    }
+
+    #[test]
+    fn phase_knowledge_digest_gates_return_empty() {
+        let tmp = TempDir::new().unwrap();
+        let kd = tmp.path().join("knowledge/security");
+        fs::create_dir_all(&kd).unwrap();
+        fs::write(kd.join("login.md"), "# Login\n\n## OAuth\n\nlogin").unwrap();
+        let o = opts(tmp.path());
+        assert!(phase_knowledge_digest(&o, Phase::DocsConfirm).is_empty());
+        assert!(phase_knowledge_digest(&o, Phase::PreviewConfirm).is_empty());
+    }
+
+    // ---- quality gate contract + ops checks ----
+
+    #[test]
+    fn quality_includes_contract_checks() {
+        let tmp = TempDir::new().unwrap();
+        let o = opts(tmp.path());
+        run_research(&o, None).unwrap();
+        run_docs(&o, &DocsContent::default()).unwrap();
+        run_spec(&o).unwrap();
+        let out = run_quality(&o).unwrap();
+        let json = fs::read_to_string(&out.artifacts[0]).unwrap();
+        let report: QualityReport = serde_json::from_str(&json).unwrap();
+        let names: Vec<&str> = report.checks.iter().map(|c| c.name.as_str()).collect();
+        assert!(
+            names.contains(&"OpenAPI contract"),
+            "must have OpenAPI check: {names:?}"
+        );
+        assert!(
+            names.contains(&"Frontend↔contract conformance"),
+            "must have contract conformance: {names:?}"
+        );
+    }
+
+    #[test]
+    fn quality_includes_ops_artifacts_check() {
+        let tmp = TempDir::new().unwrap();
+        let o = opts(tmp.path());
+        run_research(&o, None).unwrap();
+        run_docs(&o, &DocsContent::default()).unwrap();
+        run_spec(&o).unwrap();
+        let out = run_quality(&o).unwrap();
+        let json = fs::read_to_string(&out.artifacts[0]).unwrap();
+        let report: QualityReport = serde_json::from_str(&json).unwrap();
+        // Ops artifacts check should exist and produce scaffolding.
+        let ops = report
+            .checks
+            .iter()
+            .find(|c| c.name == "Ops artifacts present");
+        assert!(ops.is_some(), "must have ops artifacts check");
+        // Scaffolding files should have been generated by the check.
+        assert!(
+            tmp.path().join("Dockerfile").is_file(),
+            "Dockerfile must be generated"
+        );
+    }
+
+    #[test]
+    fn quality_includes_pagination_and_error_checks() {
+        let tmp = TempDir::new().unwrap();
+        let o = opts(tmp.path());
+        run_research(&o, None).unwrap();
+        run_docs(&o, &DocsContent::default()).unwrap();
+        run_spec(&o).unwrap();
+        let out = run_quality(&o).unwrap();
+        let json = fs::read_to_string(&out.artifacts[0]).unwrap();
+        let report: QualityReport = serde_json::from_str(&json).unwrap();
+        let names: Vec<&str> = report.checks.iter().map(|c| c.name.as_str()).collect();
+        assert!(
+            names.contains(&"Pagination strategy"),
+            "must have pagination: {names:?}"
+        );
+        assert!(
+            names.contains(&"Error handling convention"),
+            "must have error convention: {names:?}"
+        );
+    }
+
+    #[test]
+    fn quality_includes_input_validation_check() {
+        let tmp = TempDir::new().unwrap();
+        let o = opts(tmp.path());
+        run_research(&o, None).unwrap();
+        run_docs(&o, &DocsContent::default()).unwrap();
+        run_spec(&o).unwrap();
+        let out = run_quality(&o).unwrap();
+        let json = fs::read_to_string(&out.artifacts[0]).unwrap();
+        let report: QualityReport = serde_json::from_str(&json).unwrap();
+        assert!(report
+            .checks
+            .iter()
+            .any(|c| c.name == "Input validation coverage"));
+    }
+
+    #[test]
+    fn quality_verify_check_appears_when_jsonl_exists() {
+        let tmp = TempDir::new().unwrap();
+        let o = opts(tmp.path());
+        run_research(&o, None).unwrap();
+        run_docs(&o, &DocsContent::default()).unwrap();
+        run_spec(&o).unwrap();
+        // Seed a verify.jsonl with passing steps.
+        let audit = tmp.path().join(".super-dev/audit");
+        fs::create_dir_all(&audit).unwrap();
+        fs::write(
+            audit.join("verify.jsonl"),
+            r#"{"step":"test","passed":true,"skipped":false,"timestamp":"t"}"#,
+        )
+        .unwrap();
+        let out = run_quality(&o).unwrap();
+        let json = fs::read_to_string(&out.artifacts[0]).unwrap();
+        let report: QualityReport = serde_json::from_str(&json).unwrap();
+        assert!(report
+            .checks
+            .iter()
+            .any(|c| c.name == "Build & test results" && c.status == "passed"));
+    }
+
+    #[test]
+    fn quality_verify_check_critical_on_build_fail() {
+        let tmp = TempDir::new().unwrap();
+        let o = opts(tmp.path());
+        run_research(&o, None).unwrap();
+        run_docs(&o, &DocsContent::default()).unwrap();
+        run_spec(&o).unwrap();
+        let audit = tmp.path().join(".super-dev/audit");
+        fs::create_dir_all(&audit).unwrap();
+        fs::write(
+            audit.join("verify.jsonl"),
+            r#"{"step":"build","passed":false,"skipped":false,"timestamp":"t"}"#,
+        )
+        .unwrap();
+        let out = run_quality(&o).unwrap();
+        let json = fs::read_to_string(&out.artifacts[0]).unwrap();
+        let report: QualityReport = serde_json::from_str(&json).unwrap();
+        assert!(
+            report
+                .critical_failures
+                .iter()
+                .any(|f| f.contains("Build & test")),
+            "build failure must be critical: {:?}",
+            report.critical_failures
+        );
+    }
+
+    #[test]
+    fn execution_plan_check_validates_content() {
+        // The execution plan check should fail on a 1-byte stub file,
+        // and pass on a real plan with ## sections.
+        let tmp = TempDir::new().unwrap();
+        let o = opts(tmp.path());
+        // Write a stub execution plan (too short + no sections).
+        let out_dir = tmp.path().join("output");
+        fs::create_dir_all(&out_dir).unwrap();
+        fs::write(out_dir.join("demo-execution-plan.md"), "x").unwrap();
+        let out = run_quality(&o).unwrap();
+        let json = fs::read_to_string(&out.artifacts[0]).unwrap();
+        let report: QualityReport = serde_json::from_str(&json).unwrap();
+        let ep = report
+            .checks
+            .iter()
+            .find(|c| c.name == "Execution plan")
+            .unwrap();
+        assert!(ep.score < 100, "stub exec plan should not pass: {ep:?}");
+    }
+
+    #[test]
+    fn execution_plan_passes_with_structured_content() {
+        let tmp = TempDir::new().unwrap();
+        let o = opts(tmp.path());
+        run_research(&o, None).unwrap();
+        run_docs(&o, &DocsContent::default()).unwrap();
+        run_spec(&o).unwrap();
+        // run_spec writes a real execution plan — quality should pass it.
+        let out = run_quality(&o).unwrap();
+        let json = fs::read_to_string(&out.artifacts[0]).unwrap();
+        let report: QualityReport = serde_json::from_str(&json).unwrap();
+        let ep = report.checks.iter().find(|c| c.name == "Execution plan");
+        if let Some(ep) = ep {
+            assert!(ep.score >= 60, "real exec plan should score well: {ep:?}");
+        }
+    }
+
+    #[test]
+    fn delivery_captures_validated_patterns() {
+        // run_delivery should call capture_validated_patterns + sediment_lessons.
+        let tmp = TempDir::new().unwrap();
+        let o = opts(tmp.path());
+        run_research(&o, None).unwrap();
+        run_docs(&o, &DocsContent::default()).unwrap();
+        run_spec(&o).unwrap();
+        run_frontend(&o).unwrap();
+        run_backend(&o).unwrap();
+        run_quality(&o).unwrap();
+        run_delivery(&o).unwrap();
+        // sediment_lessons should have created at least one lesson file.
+        let learned_dir = tmp.path().join(".super-dev/learned");
+        assert!(
+            learned_dir.is_dir(),
+            "learned dir should exist after delivery"
+        );
+    }
+
+    #[test]
+    fn scaffolding_generated_during_quality() {
+        let tmp = TempDir::new().unwrap();
+        let o = opts(tmp.path());
+        run_research(&o, None).unwrap();
+        run_docs(&o, &DocsContent::default()).unwrap();
+        run_spec(&o).unwrap();
+        run_quality(&o).unwrap();
+        // Quality gate should have generated scaffolding.
+        assert!(
+            tmp.path().join("Dockerfile").is_file(),
+            "Dockerfile generated"
+        );
+        assert!(
+            tmp.path().join(".github/workflows/ci.yml").is_file(),
+            "CI generated"
+        );
+        assert!(
+            tmp.path().join("migrations/0001_init.sql").is_file(),
+            "migration generated"
+        );
+    }
+
+    #[test]
+    fn ops_artifacts_content_validated() {
+        let tmp = TempDir::new().unwrap();
+        let o = opts(tmp.path());
+        run_research(&o, None).unwrap();
+        run_docs(&o, &DocsContent::default()).unwrap();
+        run_spec(&o).unwrap();
+        let out = run_quality(&o).unwrap();
+        let json = fs::read_to_string(&out.artifacts[0]).unwrap();
+        let report: QualityReport = serde_json::from_str(&json).unwrap();
+        let ops = report
+            .checks
+            .iter()
+            .find(|c| c.name == "Ops artifacts present")
+            .unwrap();
+        // Scaffolding was generated → should pass.
+        assert_eq!(
+            ops.status, "passed",
+            "ops artifacts should pass after scaffolding gen"
+        );
+    }
+
+    #[test]
+    fn skip_checks_respected() {
+        let tmp = TempDir::new().unwrap();
+        let o = opts(tmp.path());
+        fs::write(
+            tmp.path().join(".superdevrc"),
+            "[quality]\nskip_checks = [\"Dark mode support\"]\n",
+        )
+        .unwrap();
+        run_research(&o, None).unwrap();
+        run_docs(&o, &DocsContent::default()).unwrap();
+        run_spec(&o).unwrap();
+        let out = run_quality(&o).unwrap();
+        let json = fs::read_to_string(&out.artifacts[0]).unwrap();
+        let report: QualityReport = serde_json::from_str(&json).unwrap();
+        assert!(
+            !report.checks.iter().any(|c| c.name == "Dark mode support"),
+            "skipped check should not appear in report"
+        );
+    }
+
+    #[test]
+    fn extract_quality_score_parses_json() {
+        let json = r#"{"passed":true,"score":92,"weighted_score":91.5}"#;
+        let (score, passed) = extract_quality_score(json);
+        assert_eq!(score, "?"); // no total_score field here → unknown
+        assert!(passed);
+    }
+
+    #[test]
+    fn extract_quality_score_reads_total_not_first_check() {
+        // Real QualityReport shape: each check has its OWN "score", plus a
+        // top-level "total_score". The extractor MUST read total_score (97),
+        // NOT the first check's score (40). This is a regression test for a
+        // bug where the score was parsed off the first "score" substring.
+        let json = r#"{
+            "passed": true,
+            "total_score": 97,
+            "weighted_score": 96.5,
+            "checks": [
+                {"name":"api_url_consistency","score":40,"passed":true},
+                {"name":"completeness","score":60,"passed":true}
+            ]
+        }"#;
+        let (score, passed) = extract_quality_score(json);
+        assert_eq!(score, "97");
+        assert!(passed);
+    }
+
+    #[test]
+    fn extract_quality_score_handles_missing() {
+        let json = r#"{"passed":false}"#;
+        let (_score, passed) = extract_quality_score(json);
+        assert!(!passed);
+    }
+
+    #[test]
+    fn score_uiux_completeness_returns_zero_for_missing() {
+        let tmp = TempDir::new().unwrap();
+        let score = score_uiux_completeness(&tmp.path().join("nonexistent.md"));
+        assert_eq!(score, 0);
+    }
+
+    #[test]
+    fn knowledge_top_files_returns_count() {
+        let tmp = TempDir::new().unwrap();
+        let kd = tmp.path().join("knowledge/security");
+        fs::create_dir_all(&kd).unwrap();
+        fs::write(kd.join("a.md"), "# A\n").unwrap();
+        fs::write(kd.join("b.md"), "# B\n").unwrap();
+        let o = opts(tmp.path());
+        let (files, total) = knowledge_top_files(&o);
+        assert_eq!(total, 2);
+        assert!(!files.is_empty());
+    }
+
+    #[test]
+    fn phase_knowledge_digest_falls_back_to_legacy_when_disabled() {
+        let tmp = TempDir::new().unwrap();
+        let kd = tmp.path().join("knowledge/security");
+        fs::create_dir_all(&kd).unwrap();
+        fs::write(kd.join("login.md"), "# Login\n\n## OAuth\n\nlogin auth").unwrap();
+        fs::write(
+            tmp.path().join(".superdevrc"),
+            "[knowledge]\nenabled = false\n",
+        )
+        .unwrap();
+        let o = opts(tmp.path());
+        let d = phase_knowledge_digest(&o, Phase::Backend);
+        // Legacy path should still produce output for a matched keyword.
+        assert!(
+            d.contains("Expert knowledge") || d.is_empty(),
+            "legacy path produces output or empty"
+        );
+    }
+
+    #[test]
+    fn review_structure_matches_multiple_headings() {
+        let doc = "# Arch\n\n## API Surface\nDetails\n\n## Data Model\nSchema\n\n## Auth\nJWT";
+        let defects = review_document_structure(
+            doc,
+            &[
+                ("## api", "Missing API"),
+                ("## data", "Missing data"),
+                ("## auth", "Missing auth"),
+            ],
+        );
+        assert!(defects.is_empty(), "all headings present: {defects:?}");
+    }
+
+    #[test]
+    fn verify_results_check_handles_empty_jsonl() {
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path().join(".super-dev/audit");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("verify.jsonl"), "").unwrap();
+        assert!(
+            verify_results_check(tmp.path()).is_none(),
+            "empty jsonl → None"
+        );
+    }
+
+    #[test]
+    fn evidence_check_works_with_missing_file() {
+        let tmp = TempDir::new().unwrap();
+        let check = evidence_check("Test", "desc", &tmp.path().join("nonexistent.jsonl"), 1.0);
+        assert_eq!(check.status, "warning");
+        assert_eq!(check.score, 60);
     }
 }

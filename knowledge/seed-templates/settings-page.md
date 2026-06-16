@@ -1,3 +1,13 @@
+---
+id: settings-page
+title: Seed Template: Settings / Account Page
+domain: seed-templates
+category: settings-page.md
+difficulty: intermediate
+tags: [gates, page, quality, seed-templates, settings, structure]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Seed Template: Settings / Account Page
 
 > Use for user profile, preferences, billing, team management.

@@ -1,3 +1,13 @@
+---
+id: release-readiness-gate
+title: release-readiness-gate
+domain: cicd
+category: release-readiness-gate.md
+difficulty: intermediate
+tags: [cicd, gate, readiness, release, 发布就绪门禁清单]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 开发：Excellent（11964948@qq.com）
 
 ## 发布就绪门禁清单

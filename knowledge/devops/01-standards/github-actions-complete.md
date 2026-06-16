@@ -1,3 +1,13 @@
+---
+id: github-actions-complete
+title: GitHub Actions完整指南
+domain: devops
+category: 01-standards
+difficulty: intermediate
+tags: [actions, complete, devops, github, 学习路径, 常用actions, 最佳实践, 核心概念]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # GitHub Actions完整指南
 
 ## 概述

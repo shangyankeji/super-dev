@@ -1,3 +1,13 @@
+---
+id: reliability-antipatterns
+title: 稳定性反模式指南
+domain: development
+category: 04-antipatterns
+difficulty: intermediate
+tags: [antipatterns, breaker, circuit, development, failure, fatigue, incident, point]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 稳定性反模式指南
 
 > 适用范围：分布式系统 / 微服务 / 高可用架构

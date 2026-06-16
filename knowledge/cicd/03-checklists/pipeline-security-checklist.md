@@ -1,3 +1,13 @@
+---
+id: pipeline-security-checklist
+title: CI/CD 管道安全检查清单
+domain: cicd
+category: 03-checklists
+difficulty: intermediate
+tags: [agent, checklist, cicd, pipeline, security, 快速评估矩阵, 概述]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # CI/CD 管道安全检查清单
 
 ## 概述

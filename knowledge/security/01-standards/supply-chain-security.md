@@ -1,3 +1,13 @@
+---
+id: supply-chain-security
+title: 软件供应链安全
+domain: security
+category: 01-standards
+difficulty: intermediate
+tags: [agent, chain, checklist, security, supply, 实战代码示例, 常见陷阱, 最佳实践]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 软件供应链安全
 
 ## 概述

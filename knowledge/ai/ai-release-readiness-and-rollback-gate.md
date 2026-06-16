@@ -1,3 +1,13 @@
+---
+id: ai-release-readiness-and-rollback-gate
+title: ai-release-readiness-and-rollback-gate
+domain: ai
+category: ai-release-readiness-and-rollback-gate.md
+difficulty: intermediate
+tags: [ai, ai发布就绪与回滚门禁, and, gate, readiness, release, rollback]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 开发：Excellent（11964948@qq.com）
 
 ## AI发布就绪与回滚门禁

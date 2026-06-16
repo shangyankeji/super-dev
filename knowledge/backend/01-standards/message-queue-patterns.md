@@ -1,3 +1,13 @@
+---
+id: message-queue-patterns
+title: 消息队列模式完整指南
+domain: backend
+category: 01-standards
+difficulty: intermediate
+tags: [backend, kafka, message, patterns, queue, rabbitmq, redis, streams]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 消息队列模式完整指南
 
 ## 概述

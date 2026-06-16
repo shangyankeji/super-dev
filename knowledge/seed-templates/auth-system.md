@@ -1,3 +1,13 @@
+---
+id: auth-system
+title: Seed Template: Authentication System
+domain: seed-templates
+category: auth-system.md
+difficulty: intermediate
+tags: [auth, component, gates, page, patterns, quality, seed-templates, structure]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Seed Template: Authentication System
 
 > Use for login/signup/MFA/password-reset flows.

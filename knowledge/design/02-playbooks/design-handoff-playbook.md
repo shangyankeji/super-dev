@@ -1,3 +1,13 @@
+---
+id: design-handoff-playbook
+title: Design Handoff Playbook
+domain: design
+category: 02-playbooks
+difficulty: intermediate
+tags: [agent, checklist, design, handoff, playbook, token, 导出, 常见问题与解决方案]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Design Handoff Playbook
 
 ## 概述

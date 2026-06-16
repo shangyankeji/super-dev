@@ -14,6 +14,7 @@ super-dev-spec = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 regex = { workspace = true }
+sha2 = { workspace = true }
 chrono = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
@@ -21,3 +22,5 @@ tracing = { workspace = true }
 [dev-dependencies]
 pretty_assertions = { workspace = true }
 tempfile = "3"
+serde = { workspace = true }
+serde_json = { workspace = true }

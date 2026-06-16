@@ -1,3 +1,13 @@
+---
+id: docs-site
+title: Seed Template: Documentation Site
+domain: seed-templates
+category: docs-site.md
+difficulty: intermediate
+tags: [component, docs, gates, page, patterns, quality, seed-templates, site]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Seed Template: Documentation Site
 
 > Use for API docs, developer guides, knowledge bases.

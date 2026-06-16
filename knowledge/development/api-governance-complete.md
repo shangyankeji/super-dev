@@ -1,3 +1,13 @@
+---
+id: api-governance-complete
+title: api-governance-complete
+domain: development
+category: api-governance-complete.md
+difficulty: intermediate
+tags: [api, api治理完整知识库, complete, development, governance]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 开发：Excellent（11964948@qq.com）
 
 ## API治理完整知识库

@@ -5,6 +5,9 @@ last_updated: 2025-03-20
 owner: platform-team
 tags: [kubernetes, antipatterns, best-practices]
 status: production
+domain: cloud-native
+difficulty: intermediate
+quality_score: 70
 ---
 
 # 开发：Excellent（11964948@qq.com）

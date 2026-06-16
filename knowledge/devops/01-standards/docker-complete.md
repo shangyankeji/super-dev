@@ -1,3 +1,13 @@
+---
+id: docker-complete
+title: Docker 完整指南
+domain: devops
+category: 01-standards
+difficulty: intermediate
+tags: [complete, compose, devops, docker, dockerfile, 实战, 最佳实践, 核心概念]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Docker 完整指南
 
 > 文档版本: v1.0 | 最后更新: 2026-03-28 | 适用范围: Docker 24.x / 25.x + Compose V2

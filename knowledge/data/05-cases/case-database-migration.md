@@ -1,3 +1,13 @@
+---
+id: case-database-migration
+title: 数据库迁移案例：MySQL 到 PostgreSQL 的实战迁移
+domain: data
+category: 05-cases
+difficulty: intermediate
+tags: [10-11, agent, case, checklist, data, database, migration, 概述]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 数据库迁移案例：MySQL 到 PostgreSQL 的实战迁移
 
 ## 概述

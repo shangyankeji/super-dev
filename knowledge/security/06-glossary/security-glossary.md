@@ -1,3 +1,13 @@
+---
+id: security-glossary
+title: 安全术语表 (Security Glossary)
+domain: security
+category: 06-glossary
+difficulty: intermediate
+tags: [glossary, security, 加密与认证, 合规与标准, 安全架构与策略, 安全测试方法, 安全运营, 攻击技术与威胁]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 安全术语表 (Security Glossary)
 
 > 收录 50+ 核心安全术语，覆盖漏洞管理、攻防技术、安全运营、合规标准等领域。

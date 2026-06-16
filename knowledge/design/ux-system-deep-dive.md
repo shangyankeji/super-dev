@@ -1,3 +1,13 @@
+---
+id: ux-system-deep-dive
+title: ux-system-deep-dive
+domain: design
+category: ux-system-deep-dive.md
+difficulty: intermediate
+tags: [deep, design, dive, system, 设计环节深度知识库]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 开发：Excellent（11964948@qq.com）
 
 ## 设计环节深度知识库

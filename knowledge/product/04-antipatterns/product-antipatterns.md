@@ -1,3 +1,13 @@
+---
+id: product-antipatterns
+title: Product Antipatterns
+domain: product
+category: 04-antipatterns
+difficulty: intermediate
+tags: [antipatterns, blindness, creep, factory, opinion, paid, paralysis, product]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Product Antipatterns
 
 ## 概述

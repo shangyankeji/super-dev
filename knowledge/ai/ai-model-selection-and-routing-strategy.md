@@ -1,3 +1,13 @@
+---
+id: ai-model-selection-and-routing-strategy
+title: ai-model-selection-and-routing-strategy
+domain: ai
+category: ai-model-selection-and-routing-strategy.md
+difficulty: intermediate
+tags: [ai, ai模型选型与路由策略, and, model, routing, selection, strategy]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 开发：Excellent（11964948@qq.com）
 
 ## AI模型选型与路由策略

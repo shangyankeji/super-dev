@@ -1,3 +1,13 @@
+---
+id: postmortem-playbook
+title: 事故复盘 Playbook (Postmortem Playbook)
+domain: incident
+category: 02-playbooks
+difficulty: intermediate
+tags: [incident, playbook, postmortem, smart, 事故恢复确认, 制定行动项, 基本信息, 时间线构建]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 事故复盘 Playbook (Postmortem Playbook)
 
 > 适用场景：生产事故复盘、重大故障分析、持续改进闭环建设。

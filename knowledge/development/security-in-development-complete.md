@@ -1,3 +1,13 @@
+---
+id: security-in-development-complete
+title: security-in-development-complete
+domain: development
+category: security-in-development-complete.md
+difficulty: intermediate
+tags: [complete, development, security, 开发安全完整知识库]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 开发：Excellent（11964948@qq.com）
 
 ## 开发安全完整知识库

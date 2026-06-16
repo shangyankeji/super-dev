@@ -1,3 +1,13 @@
+---
+id: data-engineering-glossary
+title: Data Engineering Glossary
+domain: data-engineering
+category: 06-glossary
+difficulty: intermediate
+tags: [agent, checklist, data, data-engineering, engineering, glossary, 术语对比速查表, 概述]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Data Engineering Glossary
 
 ## 概述

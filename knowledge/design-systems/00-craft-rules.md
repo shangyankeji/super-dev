@@ -1,3 +1,13 @@
+---
+id: 00-craft-rules
+title: Craft Rules — Universal Visual Quality Standards
+domain: design-systems
+category: 00-craft-rules.md
+difficulty: intermediate
+tags: [auto-checked, cardinal, catch, craft, design-systems, governance, reviewer, rules]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Craft Rules — Universal Visual Quality Standards
 
 > These rules apply to ALL frontend output regardless of design direction.

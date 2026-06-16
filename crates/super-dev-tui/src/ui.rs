@@ -76,7 +76,7 @@ fn render_picker(frame: &mut Frame, app: &App) {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(4), // banner
-            Constraint::Length(2 + u16::try_from(app.picker_items.len()).unwrap_or(3)), // list
+            Constraint::Length(2 + u16::try_from(app.picker_items.len()).unwrap_or(3) + 3), // list (+3 group headers)
             Constraint::Min(2),    // help text
             Constraint::Length(3), // footer
         ])
@@ -106,37 +106,51 @@ fn render_picker(frame: &mut Frame, app: &App) {
         chunks[0],
     );
 
-    // Backend list
-    let items: Vec<ListItem> = app
-        .picker_items
-        .iter()
-        .enumerate()
-        .map(|(idx, item)| {
-            let arrow = if idx == app.picker_selected {
-                "›"
-            } else {
-                " "
-            };
-            let (mark, mark_style) = if item.ready {
-                ("ready", Style::default().fg(Color::Green))
-            } else {
-                ("unavailable", Style::default().fg(Color::Red))
-            };
-            let row_style = if idx == app.picker_selected {
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(Color::White)
-            };
-            ListItem::new(Line::from(vec![
-                Span::styled(format!(" {arrow} "), row_style),
-                Span::styled(format!("{:<13}", item.label), row_style),
-                Span::styled(format!("{mark:<14}"), mark_style),
-                Span::styled(item.detail.clone(), Style::default().fg(Color::Gray)),
-            ]))
-        })
-        .collect();
+    // Backend list — rendered with section headers when the group changes.
+    let group_title = |g: crate::app::PickerGroup| -> &'static str {
+        match g {
+            crate::app::PickerGroup::HostCli => "── 已登录的 CLI(无需 API key)────────────── ",
+            crate::app::PickerGroup::CustomApi => "── 接入第三方 API(自带 key)────────────── ",
+            crate::app::PickerGroup::Offline => "── 离线 ────────────────────────────── ",
+        }
+    };
+    let mut items: Vec<ListItem> = Vec::new();
+    let mut last_group: Option<crate::app::PickerGroup> = None;
+    for (idx, item) in app.picker_items.iter().enumerate() {
+        // Insert a section header when the group changes.
+        if last_group != Some(item.group) {
+            items.push(ListItem::new(Line::from(Span::styled(
+                group_title(item.group).to_string(),
+                Style::default().fg(Color::DarkGray),
+            ))));
+            last_group = Some(item.group);
+        }
+        let arrow = if idx == app.picker_selected {
+            "›"
+        } else {
+            " "
+        };
+        let (mark, mark_style) = if item.launches_wizard {
+            ("setup", Style::default().fg(Color::Yellow))
+        } else if item.ready {
+            ("ready", Style::default().fg(Color::Green))
+        } else {
+            ("unavailable", Style::default().fg(Color::Red))
+        };
+        let row_style = if idx == app.picker_selected {
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(Color::White)
+        };
+        items.push(ListItem::new(Line::from(vec![
+            Span::styled(format!(" {arrow} "), row_style),
+            Span::styled(format!("{:<13}", item.label), row_style),
+            Span::styled(format!("{mark:<14}"), mark_style),
+            Span::styled(item.detail.clone(), Style::default().fg(Color::Gray)),
+        ])));
+    }
     frame.render_widget(
         List::new(items).block(Block::default().borders(Borders::ALL).title(" Workers ")),
         chunks[1],
@@ -150,7 +164,7 @@ fn render_picker(frame: &mut Frame, app: &App) {
             Style::default().fg(Color::Gray),
         )),
         Line::from(Span::styled(
-            "  Switch later inside the chat with /claude /codex /offline.",
+            "  Switch later inside the chat: /claude /codex /offline, or /provider setup.",
             Style::default().fg(Color::Gray),
         )),
     ];

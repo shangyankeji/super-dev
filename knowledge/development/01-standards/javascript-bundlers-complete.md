@@ -1,3 +1,13 @@
+---
+id: javascript-bundlers-complete
+title: JavaScript打包工具完整指南
+domain: development
+category: 01-standards
+difficulty: intermediate
+tags: [agent, bundlers, checklist, complete, development, javascript, 实战代码示例, 常见陷阱]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # JavaScript打包工具完整指南
 
 ## 概述

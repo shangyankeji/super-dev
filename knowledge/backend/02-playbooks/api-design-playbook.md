@@ -1,3 +1,13 @@
+---
+id: api-design-playbook
+title: REST API 设计 Playbook
+domain: backend
+category: 02-playbooks
+difficulty: intermediate
+tags: [api, backend, design, http, playbook, 分页, 方法语义, 版本控制]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # REST API 设计 Playbook
 
 > 适用场景：面向客户端/第三方的 HTTP API 设计与实现。

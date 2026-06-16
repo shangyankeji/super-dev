@@ -1,3 +1,13 @@
+---
+id: mobile-glossary
+title: Mobile Development Glossary
+domain: mobile
+category: 06-glossary
+difficulty: intermediate
+tags: [agent, checklist, glossary, mobile, 术语对比速查表, 概述]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Mobile Development Glossary
 
 ## 概述

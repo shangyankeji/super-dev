@@ -1,3 +1,13 @@
+---
+id: docker-compose-playbook
+title: Docker Compose完整指南
+domain: devops
+category: 02-playbooks
+difficulty: intermediate
+tags: [compose, devops, docker, playbook, 学习路径, 最佳实践, 核心概念, 概述]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Docker Compose完整指南
 
 ## 概述

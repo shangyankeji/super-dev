@@ -1,3 +1,13 @@
+---
+id: vue3-complete
+title: Vue 3 完整知识体系
+domain: frontend
+category: 01-standards
+difficulty: intermediate
+tags: [complete, frontend, pinia, router, vue3, 响应式系统原理, 性能优化, 概述]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Vue 3 完整知识体系
 
 ## 概述

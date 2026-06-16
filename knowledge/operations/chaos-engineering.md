@@ -1,3 +1,13 @@
+---
+id: chaos-engineering
+title: chaos-engineering
+domain: operations
+category: chaos-engineering.md
+difficulty: intermediate
+tags: [chaos, engineering, operations, 分钟, 实施流程, 实验信息, 实验概况, 核心原则]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 开发：Excellent（11964948@qq.com）
 # 功能：混沌工程实践指南
 # 作用：通过主动注入故障验证系统韧性,提前发现和修复潜在问题

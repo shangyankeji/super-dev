@@ -2,6 +2,31 @@
 
 本文件记录 Super Dev 的所有重要变更。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [4.6.0] - 2026-06-16
+
+### 修复 — 正确性 bug
+
+- **verify spawn 失败判定反转**:`from_spawn_error` 对*非可跳过*步骤(如 Rust 项目缺 `cargo`)错误返回 `passed=true`,导致缺二进制时静默判通过。改为 `passed=skippable`(只有可跳过工具缺失才中性)。
+- **质量门分数取错字段**:`extract_quality_score` 按 `"score"` 切分取第一个,实际抓到的是首个 check 的分数而非 `total_score`。改为解析 `total_score`,并补回归测试。
+- **docker-compose YAML 结构错误**:`render_compose` 把 `redis:` 服务块拼到了顶层 `volumes:` 之后,变成 volumes 的子项而非 services 的兄弟项(无效 Compose)。重写为 `services:{app,db,redis}` + `volumes:{pgdata}`,并加结构断言测试。
+- **`SD-CODE-005` 归属错误**:`check_ai_slop` 把 AI-slop 检测归到 `SD-CODE-005`,但该 id 在 spec §10 是为 V2 无障碍条款预留的、V1 非规范性,导致 compliance 映射静默丢弃。改归到 `SD-CODE-002`(设计 token)。
+- **codex 超时归类不一致**:`CodexDriver` 把所有错误(含超时)都映射成 `HostProcess`,与 claude/simple 不一致,调用方无法识别超时。抽公共 `map_subprocess_error`,三处统一。
+- **chunker 死代码**:`split_on_h2` 的 `vec![...]` fallback 表达式被丢弃(尾部 `;`),全空 H2 文档会索引成 0 chunk 而非 1。改为 `return`。
+- **frontend 调用去重失效**:`extract.rs` 的 `calls.dedup()` 只去连续重复,跨文件重复调用电无效。改为 `(method,path)` HashSet 去重。
+
+### 改进 — 一致性 & 覆盖
+
+- **CLI `--backend` 覆盖全部 23 个 host**:`BackendArg` 从 11 扩到 23(补 cursor-agent/continue/aider/plandex/cody/goose/amp/junie/grok-build/amazon-q/crush/gptme),并加 `backend_arg_ids_match_host` 测试锁住与 `BACKEND_IDS` 同步——之前 12 个已注册的 driver 从 CLI 不可选。
+- **TUI slash 命令覆盖全部 23 个 host**:`try_slash_command` 的 fallback 改为动态识别任何注册 backend id(`/goose` `/amp` `/amazon-q` …),palette 与 did-you-mean 同步从 `BACKEND_IDS` 派生,杜绝漂移。
+- **doctor 探测覆盖全部 23 个**:`check_ai_backends` 从 9 个扩到 23 个(含 codebuddy/qoder/kimi 等 TUI 可选但 doctor 漏掉的)。
+- **统一 worker 超时旋钮**:`SUPER_DEV_WORKER_TIMEOUT` 之前只有 claude 读,codex/simple 都硬编码 `DEFAULT_TIMEOUT`。抽 `worker_timeout_from_env`,全部 21 个 simple 工厂 + claude + codex 统一读取。
+- **hook 工作目录**:缺 `--project-root` 时 `resolve_root` 现在尊重 `CLAUDE_PROJECT_DIR`/`SUPER_DEV_PROJECT_DIR`(作为 hook 调用时之前选错 workspace)。
+
+### 文档 — 统一口径
+
+- 全仓后端数统一为 **23**(README / README_EN / Cargo.toml / CLAUDE.md / guide / examples / `--help` / host crate doc;CHANGELOG 历史条目保持原样)。
+- 版本号统一为 **4.6.0**(Cargo.toml + 8 个 path dep / 6 个 npm package.json / README / README_EN / docs/ARCHITECTURE)。
+
 ## [4.5.0] - 2026-05-25
 
 ### 新增 — 3 个主流 backend(13 个 worker 总覆盖)

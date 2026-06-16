@@ -5,10 +5,12 @@ Super Dev — common workflows
 -------------------------------
     super-dev init                            # scaffold workspace (design systems + templates)
     super-dev                                 # launch the chat TUI
-                                              # first time: pick from 11 workers
+                                              # first time: pick claude-code or codex
+                                              # (or /provider setup to connect a custom API)
                                               # then /design modern-minimal (optional)
                                               # type your requirement → pipeline runs
                                               # at each gate press 'c' (or /continue)
+                                              # /preview to see the frontend, /deploy to ship
                                               # done → release/proof-pack-*.zip
 
 ★ Inside the TUI — chat & slash commands
@@ -17,6 +19,9 @@ Super Dev — common workflows
                          gate is open)
     /claude /codex       switch the worker (saves to ~/.super-dev/config.toml)
     /offline             switch to deterministic templates (demo / CI)
+    /provider setup      connect a custom API (DeepSeek/OpenRouter/Ollama/…)
+    /preview             start the dev server + open the browser
+    /deploy              run the recorded deploy command to go live
     /continue            approve the active gate
     /revise <text>       stay at gate, request changes
     /spec                show the full SUPER_DEV_HOST_SPEC_V1 spec
@@ -61,28 +66,20 @@ Super Dev — common workflows
     # re-run last block, then:
     super-dev continue                        # once happy
 
-★ Switching the worker mid-conversation (TUI)
-----------------------------------------------
+★ Switching the worker / model mid-conversation (TUI)
+------------------------------------------------------
     /claude                                   # Anthropic Claude Code
     /codex                                    # OpenAI Codex
-    /gemini (or /antigravity)                 # Google Gemini / Antigravity
-    /droid                                    # Factory.ai Droid
-    /opencode                                 # OpenCode (open source)
-    /cursor                                   # Cursor Agent (headless)
-    /qwen                                     # Alibaba Qwen Code
-    /continue-cli                             # Continue (cn)
-    /copilot                                  # GitHub Copilot CLI
-    /aider                                    # Aider --message mode
-    /trae                                     # ByteDance Trae Agent
-    /plandex                                  # Plandex (2M token context)
-    /cody                                     # Sourcegraph Cody
-    /offline                                  # templates only
+    /offline                                  # templates only (demo / CI)
+    /provider setup                           # guided wizard for custom APIs
+    /provider <name>                          # switch to a configured provider
+    /model <id>                               # set the model id
 
 ★ Inspecting state (no TUI needed)
 -----------------------------------
     super-dev verify                          # workflow state + evidence chain
     super-dev doctor                          # binary / workspace self-test
-    super-dev spec --clauses                  # the 25-clause table
+    super-dev spec --clauses                  # the clause table
 
 ★ Environment overrides
 -----------------------
@@ -91,6 +88,8 @@ Super Dev — common workflows
     SUPER_DEV_CODEX_BIN           path to the `codex` binary        (default: codex)
     SUPER_DEV_CODEX_EXEC_SUBCMD   non-interactive sub-command       (default: exec)
     SUPER_DEV_VERIFY_TIMEOUT_SECS verify-loop per-call timeout      (default: 120)
+    SUPER_DEV_WORKER_TIMEOUT      per-call worker timeout seconds   (default: 300)
+    SUPER_DEV_RETRY_BASE_MS       retry backoff base ms             (default: 2000)
     XDG_CONFIG_HOME               base for super-dev/config.toml    (default: $HOME)
 
 For the full spec: super-dev spec

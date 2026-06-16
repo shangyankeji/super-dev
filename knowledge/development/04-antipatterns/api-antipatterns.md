@@ -1,3 +1,13 @@
+---
+id: api-antipatterns
+title: API 反模式指南
+domain: development
+category: 04-antipatterns
+difficulty: intermediate
+tags: [antipatterns, api, development, error, handling, limiting, naming, rate]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # API 反模式指南
 
 > 适用范围：RESTful API / GraphQL / gRPC

@@ -1,3 +1,13 @@
+---
+id: llm-application-complete
+title: LLM 应用开发完整指南
+domain: ai
+category: 01-standards
+difficulty: intermediate
+tags: [agent, ai, application, checklist, complete, engineering, llm, prompt]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # LLM 应用开发完整指南
 
 ## 概述

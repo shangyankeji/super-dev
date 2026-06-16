@@ -1,3 +1,13 @@
+---
+id: ai-agent-memory-context-management
+title: ai-agent-memory-context-management
+domain: ai
+category: ai-agent-memory-context-management.md
+difficulty: intermediate
+tags: [agent, agent上下文与记忆管理, ai, context, management, memory]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 开发：Excellent（11964948@qq.com）
 
 ## AI Agent上下文与记忆管理

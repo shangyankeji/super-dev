@@ -1,3 +1,13 @@
+---
+id: prompt-engineering-complete
+title: Prompt Engineering 完整指南
+domain: ai
+category: 01-standards
+difficulty: intermediate
+tags: [ai, complete, design, engineering, few-shot, prompt, system, 学习]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Prompt Engineering 完整指南
 
 ## 概述

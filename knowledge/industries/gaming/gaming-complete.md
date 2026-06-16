@@ -1,3 +1,13 @@
+---
+id: gaming-complete
+title: 游戏开发完整指南
+domain: industries
+category: gaming
+difficulty: intermediate
+tags: [complete, gaming, industries, 参考资料, 学习路径, 最佳实践, 核心概念, 概述]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 游戏开发完整指南
 
 ## 概述

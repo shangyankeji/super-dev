@@ -1,3 +1,13 @@
+---
+id: case-testing-transformation
+title: 测试转型案例：从无测试到 80% 覆盖率的团队转型实战
+domain: testing
+category: 05-cases
+difficulty: intermediate
+tags: [10-13, 14-16, agent, case, checklist, testing, transformation, 初始状态]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 测试转型案例：从无测试到 80% 覆盖率的团队转型实战
 
 ## 概述

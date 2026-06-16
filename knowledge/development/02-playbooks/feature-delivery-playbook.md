@@ -1,3 +1,13 @@
+---
+id: feature-delivery-playbook
+title: 功能交付作战手册 (Feature Delivery Playbook)
+domain: development
+category: 02-playbooks
+difficulty: intermediate
+tags: [checklist, code, delivery, development, feature, playbook, review, 前置条件]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 功能交付作战手册 (Feature Delivery Playbook)
 
 ## 概述

@@ -1,3 +1,13 @@
+---
+id: case-incident-mttr-reduction
+title: 案例研究：故障恢复时间（MTTR）从 45 分钟降到 5 分钟
+domain: development
+category: 05-cases
+difficulty: intermediate
+tags: [agent, case, checklist, development, incident, mttr, reduction, runbook]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 案例研究：故障恢复时间（MTTR）从 45 分钟降到 5 分钟
 
 ## 元数据

@@ -1,3 +1,13 @@
+---
+id: ecommerce-complete
+title: 电商系统完整知识体系
+domain: industries
+category: ecommerce
+difficulty: intermediate
+tags: [complete, ecommerce, industries, 参考资料, 学习路径, 性能优化, 最佳实践, 核心模块]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 电商系统完整知识体系
 
 ## 概述

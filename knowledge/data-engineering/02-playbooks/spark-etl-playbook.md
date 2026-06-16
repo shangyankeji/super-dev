@@ -1,3 +1,13 @@
+---
+id: spark-etl-playbook
+title: Spark ETL开发完整指南
+domain: data-engineering
+category: 02-playbooks
+difficulty: intermediate
+tags: [data-engineering, etl, etl流程, playbook, spark, 参考资料, 学习路径, 性能优化]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Spark ETL开发完整指南
 
 ## 概述

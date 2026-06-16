@@ -1,3 +1,13 @@
+---
+id: smart-contract-development
+title: 智能合约开发完整指南
+domain: blockchain
+category: 01-standards
+difficulty: intermediate
+tags: [blockchain, contract, development, near, rust, smart, solidity, 优化]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 智能合约开发完整指南
 
 ## 概述

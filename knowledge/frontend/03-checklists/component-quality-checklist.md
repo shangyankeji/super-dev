@@ -1,3 +1,13 @@
+---
+id: component-quality-checklist
+title: 组件质量检查清单
+domain: frontend
+category: 03-checklists
+difficulty: intermediate
+tags: [a11y, checklist, component, frontend, props, quality, 响应式设计, 性能优化]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 组件质量检查清单
 
 ## 概述

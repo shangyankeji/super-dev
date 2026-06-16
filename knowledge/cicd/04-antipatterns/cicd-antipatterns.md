@@ -1,3 +1,13 @@
+---
+id: cicd-antipatterns
+title: CI/CD 反模式 (CI/CD Anti-Patterns)
+domain: cicd
+category: 04-antipatterns
+difficulty: intermediate
+tags: [antipatterns, build, cicd, left, skipping, slow, tests, untreated]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # CI/CD 反模式 (CI/CD Anti-Patterns)
 
 ## 概述

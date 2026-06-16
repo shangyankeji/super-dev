@@ -1,3 +1,13 @@
+---
+id: case-mvp-to-scale
+title: 案例：产品从 MVP 到规模化
+domain: product
+category: 05-cases
+difficulty: intermediate
+tags: [15-18, 9-14, agent, case, checklist, mvp, product, scale]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 案例：产品从 MVP 到规模化
 
 ## 概述

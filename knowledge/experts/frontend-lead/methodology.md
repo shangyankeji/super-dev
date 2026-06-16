@@ -1,3 +1,13 @@
+---
+id: methodology
+title: Frontend Lead — Development Methodology
+domain: experts
+category: frontend-lead
+difficulty: intermediate
+tags: [architecture, client, component, error, experts, handling, management, methodology]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Frontend Lead — Development Methodology
 
 ## Component Architecture

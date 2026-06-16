@@ -1,3 +1,13 @@
+---
+id: product-glossary
+title: 产品管理术语表 (Product Management Glossary)
+domain: product
+category: 06-glossary
+difficulty: intermediate
+tags: [agent, checklist, glossary, product, 产品策略与方法论, 增长与商业指标, 数据分析方法, 用户研究与设计]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 产品管理术语表 (Product Management Glossary)
 
 > 收录 50+ 核心产品管理术语，覆盖产品策略、增长指标、用户研究、开发流程、数据分析等领域。

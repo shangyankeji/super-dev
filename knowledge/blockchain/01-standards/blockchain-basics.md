@@ -1,3 +1,13 @@
+---
+id: blockchain-basics
+title: 区块链基础知识完整指南
+domain: blockchain
+category: 01-standards
+difficulty: intermediate
+tags: [basics, blockchain, dapp开发, 主流平台, 共识机制, 学习路径, 常见陷阱, 智能合约开发]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 区块链基础知识完整指南
 
 ## 概述

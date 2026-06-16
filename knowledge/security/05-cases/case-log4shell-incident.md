@@ -1,3 +1,13 @@
+---
+id: case-log4shell-incident
+title: Log4Shell 安全事件案例分析 (CVE-2021-44228)
+domain: security
+category: 05-cases
+difficulty: intermediate
+tags: [case, incident, log4shell, security, 修复方案, 全球影响, 复盘教训, 对软件供应链安全的启示]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Log4Shell 安全事件案例分析 (CVE-2021-44228)
 
 > 事件级别：Critical（CVSS 10.0）

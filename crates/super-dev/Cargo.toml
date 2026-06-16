@@ -15,7 +15,7 @@ path = "src/main.rs"
 [dependencies]
 super-dev-spec = { workspace = true }
 super-dev-governance = { workspace = true }
-super-dev-agent = { workspace = true }
+super-dev-agent = { workspace = true, features = ["vector"] }
 super-dev-runtime = { workspace = true }
 super-dev-host = { workspace = true }
 super-dev-tui = { workspace = true }

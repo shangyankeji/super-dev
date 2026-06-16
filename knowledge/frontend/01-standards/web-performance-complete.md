@@ -1,3 +1,13 @@
+---
+id: web-performance-complete
+title: Web 性能优化完整指南
+domain: frontend
+category: 01-standards
+difficulty: intermediate
+tags: [complete, core, frontend, performance, vitals, web, 性能监控, 性能预算]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Web 性能优化完整指南
 
 ## 概述

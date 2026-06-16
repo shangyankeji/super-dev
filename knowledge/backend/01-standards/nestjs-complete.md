@@ -1,3 +1,13 @@
+---
+id: nestjs-complete
+title: NestJS 完整指南
+domain: backend
+category: 01-standards
+difficulty: intermediate
+tags: [backend, complete, nestjs, websocket, 依赖注入系统, 微服务, 快速开始, 数据库集成]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # NestJS 完整指南
 
 ## 概述

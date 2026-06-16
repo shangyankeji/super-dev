@@ -5,6 +5,9 @@ last_updated: 2026-03-28
 owner: architecture-team
 tags: [system-design, architecture, capacity-planning, availability, data-model, API-design]
 status: production
+domain: architecture
+difficulty: intermediate
+quality_score: 70
 ---
 
 # 开发：Excellent（11964948@qq.com）

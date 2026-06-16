@@ -1,3 +1,13 @@
+---
+id: case-gitops-transformation
+title: GitOps 转型实战案例
+domain: cicd
+category: 05-cases
+difficulty: intermediate
+tags: [agent, case, checklist, cicd, gitops, transformation, 实施步骤, 技术选型]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # GitOps 转型实战案例
 
 ## 概述

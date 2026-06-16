@@ -1,3 +1,13 @@
+---
+id: backend-engineering-complete
+title: backend-engineering-complete
+domain: development
+category: backend-engineering-complete.md
+difficulty: intermediate
+tags: [backend, complete, development, engineering, 后端工程完整知识库]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 开发：Excellent（11964948@qq.com）
 
 ## 后端工程完整知识库

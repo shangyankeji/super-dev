@@ -1,3 +1,13 @@
+---
+id: incident-response-complete
+title: 事故响应与复盘完整指南
+domain: incident
+category: 01-standards
+difficulty: intermediate
+tags: [complete, incident, response, 事故分级, 事故响应流程, 初始通知, 发现后5分钟内, 恢复通知]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 事故响应与复盘完整指南
 
 ## 概述

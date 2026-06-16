@@ -1,3 +1,13 @@
+---
+id: architecture-decision-checklist
+title: 架构决策检查清单
+domain: architecture
+category: 03-checklists
+difficulty: intermediate
+tags: [architecture, checklist, decision, 可扩展性, 可用性, 可观测性, 安全, 成本]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 架构决策检查清单
 
 > 适用场景：新系统设计、重大技术选型、架构评审会议、ADR 编写前的全面评估。

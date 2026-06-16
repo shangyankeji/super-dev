@@ -1,3 +1,13 @@
+---
+id: edge-iot-complete
+title: 边缘计算与IoT完整指南
+domain: edge-iot
+category: 01-standards
+difficulty: intermediate
+tags: [complete, edge, edge-iot, iot, 参考资料, 学习路径, 最佳实践, 核心概念]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 边缘计算与IoT完整指南
 
 ## 概述

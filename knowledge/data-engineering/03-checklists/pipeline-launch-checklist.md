@@ -1,3 +1,13 @@
+---
+id: pipeline-launch-checklist
+title: 数据管道上线检查清单
+domain: data-engineering
+category: 03-checklists
+difficulty: intermediate
+tags: [agent, alerting, checklist, data-engineering, launch, pipeline, quality, 上线前最终确认]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 数据管道上线检查清单
 
 ## 概述

@@ -1,3 +1,13 @@
+---
+id: design-review-checklist
+title: Design Review Checklist
+domain: design
+category: 03-checklists
+difficulty: intermediate
+tags: [agent, checklist, compliance, consistency, design, feedback, review, 概述]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Design Review Checklist
 
 ## 概述

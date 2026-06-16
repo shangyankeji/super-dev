@@ -1,3 +1,13 @@
+---
+id: cicd-pipeline-complete
+title: CI/CD流水线完整指南
+domain: devops
+category: 01-standards
+difficulty: intermediate
+tags: [cicd, complete, devops, pipeline, 学习路径, 最佳实践, 核心概念, 概述]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # CI/CD流水线完整指南
 
 ## 概述

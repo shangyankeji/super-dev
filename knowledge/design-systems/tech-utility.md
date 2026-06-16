@@ -1,3 +1,13 @@
+---
+id: tech-utility
+title: Tech Utility
+domain: design-systems
+category: tech-utility.md
+difficulty: intermediate
+tags: [color, component, design-systems, motion, palette, patterns, spacing, tech]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Tech Utility
 
 > Dense, monospace accents, dark-mode-native. Inspired by GitHub, Datadog, Grafana.

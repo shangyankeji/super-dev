@@ -1,3 +1,13 @@
+---
+id: ai-data-security-and-compliance-playbook
+title: ai-data-security-and-compliance-playbook
+domain: ai
+category: ai-data-security-and-compliance-playbook.md
+difficulty: intermediate
+tags: [ai, ai数据安全与合规作战手册, and, compliance, data, playbook, security]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 开发：Excellent（11964948@qq.com）
 
 ## AI数据安全与合规作战手册

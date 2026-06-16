@@ -1,3 +1,13 @@
+---
+id: case-bluegreen-rollback
+title: 案例研究：蓝绿发布与快速回滚体系建设
+domain: development
+category: 05-cases
+difficulty: intermediate
+tags: [agent, bluegreen, case, checklist, development, rollback, 元数据]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 案例研究：蓝绿发布与快速回滚体系建设
 
 ## 元数据

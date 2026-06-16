@@ -1,3 +1,13 @@
+---
+id: incident-command-system
+title: incident-command-system
+domain: operations
+category: incident-command-system.md
+difficulty: intermediate
+tags: [command, incident, operations, system]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 开发：Excellent（11964948@qq.com）
 
 ## 事故指挥体系（ICS）手册

@@ -1,3 +1,13 @@
+---
+id: frontend-antipatterns
+title: 前端反模式指南
+domain: development
+category: 04-antipatterns
+difficulty: intermediate
+tags: [antipatterns, bloat, budget, chaos, component, development, error, frontend]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 前端反模式指南
 
 > 适用范围：React / Vue / Angular / Next.js / Nuxt

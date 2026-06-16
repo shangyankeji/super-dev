@@ -32,15 +32,17 @@ pub mod audit;
 pub mod compliance;
 pub mod context;
 pub mod rules;
+pub mod tokenizer;
 
 pub use audit::{
     extract_api_urls, record_api_calls, record_tool_call, ApiCallRecord, ToolCallRecord,
 };
 pub use compliance::{
-    build_compliance_mapping, ClauseEvidence, ComplianceFrameworks, CLAUSE_COMPLIANCE,
+    build_compliance_mapping, content_sha256, file_sha256, ClauseEvidence, ComplianceFrameworks,
+    CLAUSE_COMPLIANCE,
 };
 pub use context::{compose_session_context, SessionContext};
-pub use rules::{check_ai_slop, check_color_tokens, check_emoji, Decision};
+pub use rules::{check_ai_slop, check_color_tokens, check_emoji, check_sensitive_path, Decision};
 
 /// Re-export the spec marker so downstream crates can pin against it.
 pub use super_dev_spec::SPEC_VERSION;

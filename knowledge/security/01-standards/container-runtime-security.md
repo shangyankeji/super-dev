@@ -1,3 +1,13 @@
+---
+id: container-runtime-security
+title: 容器运行时安全
+domain: security
+category: 01-standards
+difficulty: intermediate
+tags: [agent, checklist, container, runtime, security, 实战代码示例, 常见陷阱, 最佳实践]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 容器运行时安全
 
 ## 概述

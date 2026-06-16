@@ -1,3 +1,13 @@
+---
+id: operations-antipatterns
+title: 运维反模式 (Operations Anti-Patterns)
+domain: operations
+category: 04-antipatterns
+difficulty: intermediate
+tags: [alert, antipatterns, deployment, fatigue, manual, operations, server, snowflake]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 运维反模式 (Operations Anti-Patterns)
 
 ## 概述

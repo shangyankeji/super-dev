@@ -1,3 +1,13 @@
+---
+id: methodology
+title: DevOps — Methodology
+domain: experts
+category: devops
+difficulty: intermediate
+tags: [alerting, design, docker, environment, experts, methodology, monitoring, pipeline]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # DevOps — Methodology
 
 ## CI/CD Pipeline Design

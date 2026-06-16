@@ -1,3 +1,13 @@
+---
+id: nextjs-complete
+title: Next.js 完整指南
+domain: frontend
+category: 01-standards
+difficulty: intermediate
+tags: [complete, components, frontend, middleware, nextjs, react, router, server]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Next.js 完整指南
 
 ## 概述

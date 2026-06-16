@@ -1,3 +1,13 @@
+---
+id: incident-antipatterns
+title: 事故管理反模式指南 (Incident Management Anti-Patterns)
+domain: incident
+category: 04-antipatterns
+difficulty: intermediate
+tags: [alert, antipatterns, fatigue, heroism, incident, postmortem, 反模式, 告警疲劳]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 事故管理反模式指南 (Incident Management Anti-Patterns)
 
 > 适用范围：SRE / DevOps / 运维团队 / 研发团队

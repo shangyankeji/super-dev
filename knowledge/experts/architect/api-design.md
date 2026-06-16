@@ -1,3 +1,13 @@
+---
+id: api-design
+title: Architect — RESTful API Design Standards
+domain: experts
+category: architect
+difficulty: intermediate
+tags: [api, authentication, cors, design, experts, filtering, limiting, pagination]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Architect — RESTful API Design Standards
 
 ## URL Design

@@ -1,3 +1,13 @@
+---
+id: redis-complete
+title: Redis 数据领域完整指南
+domain: data
+category: 01-standards
+difficulty: intermediate
+tags: [complete, data, redis, 分布式锁, 持久化, 核心数据结构, 概述, 消息队列]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Redis 数据领域完整指南
 
 > 文档版本: v1.0 | 最后更新: 2026-03-28

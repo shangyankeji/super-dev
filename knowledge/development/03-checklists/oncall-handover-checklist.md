@@ -1,3 +1,13 @@
+---
+id: oncall-handover-checklist
+title: 值班交接检查清单 (On-Call Handover Checklist)
+domain: development
+category: 03-checklists
+difficulty: intermediate
+tags: [checklist, development, handover, oncall, 交接确认, 升级路径与联系人, 变更与发布, 已知风险与临时方案]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 值班交接检查清单 (On-Call Handover Checklist)
 
 > 适用场景：值班轮换交接、跨团队值班交接、重大事件期间的临时交接、假期前交接。

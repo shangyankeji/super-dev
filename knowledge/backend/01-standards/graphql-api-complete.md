@@ -1,3 +1,13 @@
+---
+id: graphql-api-complete
+title: GraphQL API 完整指南
+domain: backend
+category: 01-standards
+difficulty: intermediate
+tags: [api, backend, complete, dataloader, graphql, resolver, schema, subscription]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # GraphQL API 完整指南
 
 ## 概述

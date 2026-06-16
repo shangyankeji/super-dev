@@ -1,3 +1,13 @@
+---
+id: configuration-management
+title: 配置管理完全指南
+domain: architecture
+category: configuration-management.md
+difficulty: intermediate
+tags: [architecture, configuration, management, 参考资源, 核心需求, 概述, 选型建议, 配置中心对比]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 配置管理完全指南
 
 ## 概述

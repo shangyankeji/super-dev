@@ -1,3 +1,13 @@
+---
+id: cloud-native-patterns
+title: 云原生模式
+domain: architecture
+category: 01-standards
+difficulty: intermediate
+tags: [agent, architecture, checklist, cloud, native, patterns, 实战代码示例, 常见陷阱]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 云原生模式
 
 ## 概述

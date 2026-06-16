@@ -1,3 +1,13 @@
+---
+id: project-templates-collection
+title: Project Templates Collection - Comprehensive Lifecycle Templates
+domain: development
+category: 15-lifecycle-templates
+difficulty: intermediate
+tags: [architecture, catalog, collection, design, development, handoff, project, requirement]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Project Templates Collection - Comprehensive Lifecycle Templates
 
 > Consolidated collection of all lifecycle stage templates: requirement, design handoff, architecture ADR, implementation PR, testing report, security compliance, release change, operations runbook, postmortem, and lifecycle review board. Each template is ready-to-use with structured sections and guidance notes.

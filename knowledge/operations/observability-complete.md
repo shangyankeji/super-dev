@@ -1,3 +1,13 @@
+---
+id: observability-complete
+title: observability-complete
+domain: operations
+category: observability-complete.md
+difficulty: intermediate
+tags: [complete, dashboard, observability, operations, 告警设计, 实施清单, 常见失败模式, 技术选型]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 开发：Excellent（11964948@qq.com）
 # 功能：可观测性完整体系
 # 作用：提供日志、指标、追踪三大支柱的完整实施指南

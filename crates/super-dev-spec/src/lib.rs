@@ -146,6 +146,20 @@ impl Gate {
         }
     }
 
+    /// Inverse of [`Gate::id`]: parse a persisted gate id back into the
+    /// typed enum. Returns `None` for unknown ids (fail-open). Case-
+    /// insensitive so a workflow-state file written as `Docs_Confirm`
+    /// still resolves. Replaces the ad-hoc string matches the CLI
+    /// previously sprinkled across `main.rs` / `runner.rs`.
+    #[must_use]
+    pub fn from_id(id: &str) -> Option<Self> {
+        match id.trim().to_ascii_lowercase().as_str() {
+            "docs_confirm" => Some(Self::DocsConfirm),
+            "preview_confirm" => Some(Self::PreviewConfirm),
+            _ => None,
+        }
+    }
+
     /// User replies that count as explicit approval (per `SD-FLOW-002`).
     ///
     /// Hosts MAY extend this set but MUST NOT infer approval from
@@ -489,5 +503,21 @@ mod tests {
         .map(|r| r.id())
         .collect();
         assert_eq!(ids.len(), 3);
+    }
+
+    #[test]
+    fn gate_from_id_roundtrips_and_is_case_insensitive() {
+        for g in [Gate::DocsConfirm, Gate::PreviewConfirm] {
+            assert_eq!(Gate::from_id(g.id()), Some(g));
+        }
+        // Case-insensitive + whitespace tolerant.
+        assert_eq!(Gate::from_id("Docs_Confirm"), Some(Gate::DocsConfirm));
+        assert_eq!(
+            Gate::from_id("  preview_confirm  "),
+            Some(Gate::PreviewConfirm)
+        );
+        // Unknown → None (fail-open).
+        assert_eq!(Gate::from_id("nope"), None);
+        assert_eq!(Gate::from_id(""), None);
     }
 }

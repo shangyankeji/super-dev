@@ -1,3 +1,13 @@
+---
+id: development-scenarios-guide
+title: Development Scenarios Guide - Comprehensive Decision Reference
+domain: development
+category: 12-scenarios
+difficulty: intermediate
+tags: [consumer, development, enterprise, framework, growth, guide, multi-tenant, pack]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Development Scenarios Guide - Comprehensive Decision Reference
 
 > Consolidated reference covering 8 business scenario packs (B2B, B2C, Multi-tenant SaaS, Internationalization, Mobile Superapp, AI Application, Fintech Regulated, E-commerce Peak) plus scenario selection methodology.

@@ -1,3 +1,13 @@
+---
+id: ui-design-system-complete
+title: UI 设计系统完整指南
+domain: design
+category: 01-standards
+difficulty: intermediate
+tags: [accessibility, complete, design, system, tokens, 动效系统, 响应式设计, 无障碍]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # UI 设计系统完整指南
 
 ## 概述

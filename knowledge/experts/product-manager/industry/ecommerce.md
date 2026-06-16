@@ -1,3 +1,13 @@
+---
+id: ecommerce
+title: E-Commerce Product — Industry-Specific Knowledge
+domain: experts
+category: product-manager
+difficulty: intermediate
+tags: [architecture, considerations, e-commerce, e-commerce-specific, ecommerce, experts, metrics, patterns]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # E-Commerce Product — Industry-Specific Knowledge
 
 ## Key Metrics

@@ -1,3 +1,13 @@
+---
+id: redis-complete
+title: Redis完整指南
+domain: development
+category: 01-standards
+difficulty: intermediate
+tags: [complete, development, python客户端, redis, 学习路径, 最佳实践, 核心数据结构, 概述]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Redis完整指南
 
 ## 概述

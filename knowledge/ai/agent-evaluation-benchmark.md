@@ -1,3 +1,13 @@
+---
+id: agent-evaluation-benchmark
+title: agent-evaluation-benchmark
+domain: ai
+category: agent-evaluation-benchmark.md
+difficulty: intermediate
+tags: [agent, ai, benchmark, evaluation, 评测与基准体系]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 开发：Excellent（11964948@qq.com）
 
 ## Agent 评测与基准体系

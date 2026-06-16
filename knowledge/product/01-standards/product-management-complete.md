@@ -1,3 +1,13 @@
+---
+id: product-management-complete
+title: 产品管理完整指南
+domain: product
+category: 01-standards
+difficulty: intermediate
+tags: [complete, discovery, management, product, 产品发现, 概述, 用户故事, 用户画像]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 产品管理完整指南
 
 ## 概述

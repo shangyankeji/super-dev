@@ -1,3 +1,13 @@
+---
+id: methodology
+title: Backend Lead — Development Methodology
+domain: experts
+category: backend-lead
+difficulty: intermediate
+tags: [authentication, best, database, experts, implementation, logging, methodology, pattern]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Backend Lead — Development Methodology
 
 ## API Implementation Pattern

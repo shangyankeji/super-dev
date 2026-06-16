@@ -20,7 +20,7 @@ use super_dev_runtime::{
 
 use crate::{
     default_workspace, merge_prompt, run_subprocess, HostDriver, ProbeResult, PromptChannel,
-    SubprocessCall, DEFAULT_TIMEOUT,
+    SubprocessCall,
 };
 
 /// Drives the `claude` CLI as a subprocess.
@@ -37,7 +37,7 @@ impl Default for ClaudeCodeDriver {
             program: std::env::var("SUPER_DEV_CLAUDE_BIN").unwrap_or_else(|_| "claude".to_string()),
             print_flag: std::env::var("SUPER_DEV_CLAUDE_PRINT_FLAG")
                 .unwrap_or_else(|_| "--print".to_string()),
-            timeout: DEFAULT_TIMEOUT,
+            timeout: crate::worker_timeout_from_env(),
         }
     }
 }
@@ -100,7 +100,7 @@ impl Runtime for ClaudeCodeDriver {
             timeout: self.timeout,
         })
         .await
-        .map_err(RuntimeError::HostProcess)?;
+        .map_err(crate::map_subprocess_error)?;
 
         Ok(CompletionResponse {
             text: out.stdout,
@@ -193,6 +193,30 @@ mod tests {
         assert!(resp.text.contains("be terse"));
         assert!(resp.text.contains("ping"));
         assert_eq!(resp.model, "claude-sonnet-4-6");
+    }
+
+    #[tokio::test]
+    async fn complete_claude_response_contract_is_stable() {
+        // Pin the claude bespoke driver's complete() contract: response.id is
+        // "claude-code-cli", the model echoes the request model, and stdout
+        // (via echo) lands in text. This is the claude-code subprocess
+        // integration test (paired with codex's complete_drives_a_fake_codex_binary
+        // (Claude Code + Codex are both bespoke drivers.)
+        let d = ClaudeCodeDriver::with_program("echo");
+        let req = CompletionRequest {
+            model: "claude-opus-4-7".into(),
+            system: None,
+            messages: vec![super_dev_runtime::Message {
+                role: "user".into(),
+                content: "contract-probe".into(),
+            }],
+            max_tokens: None,
+            temperature: None,
+        };
+        let resp = d.complete(req).await.unwrap();
+        assert_eq!(resp.id, "claude-code-cli");
+        assert_eq!(resp.model, "claude-opus-4-7");
+        assert!(resp.text.contains("contract-probe"));
     }
 
     #[tokio::test]

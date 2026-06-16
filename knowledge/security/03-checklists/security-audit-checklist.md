@@ -1,3 +1,13 @@
+---
+id: security-audit-checklist
+title: 安全审计检查清单
+domain: security
+category: 03-checklists
+difficulty: intermediate
+tags: [audit, authentication, authorization, checklist, security, 依赖与供应链安全, 加密与密钥管理, 基础设施安全]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 安全审计检查清单
 
 > 适用范围：Web 应用、API 服务、微服务架构、云原生基础设施

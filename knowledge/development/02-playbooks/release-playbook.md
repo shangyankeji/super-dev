@@ -1,3 +1,13 @@
+---
+id: release-playbook
+title: 发布作战手册 (Release Playbook)
+domain: development
+category: 02-playbooks
+difficulty: intermediate
+tags: [2024-01-15, agent, checklist, development, playbook, release, 前置条件, 发布清单]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 发布作战手册 (Release Playbook)
 
 ## 概述

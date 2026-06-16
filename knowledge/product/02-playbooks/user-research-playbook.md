@@ -1,3 +1,13 @@
+---
+id: user-research-playbook
+title: 用户研究作战手册 (User Research Playbook)
+domain: product
+category: 02-playbooks
+difficulty: intermediate
+tags: [playbook, product, research, user, 交付物, 前置条件, 时间线, 概述]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 用户研究作战手册 (User Research Playbook)
 
 ## 概述

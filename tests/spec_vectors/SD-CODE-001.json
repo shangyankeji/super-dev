@@ -1,0 +1,55 @@
+{
+  "clause": "SD-CODE-001",
+  "title": "Emoji as functional icons",
+  "level": "MUST",
+  "section": "3.1",
+  "guarded_extensions": ["tsx","ts","jsx","js","mjs","cjs","vue","svelte","astro","html","htm","css","scss","sass","less","py","java","kt","go","rs","rb","php","cs","swift","md","mdx"],
+  "vectors": [
+    {
+      "file_path": "src/Button.tsx",
+      "content": "<button>🔍 Search</button>",
+      "expected_decision": "block",
+      "reason_fragment": "icon library"
+    },
+    {
+      "file_path": "src/Nav.jsx",
+      "content": "<nav>🚀 Launch</nav>",
+      "expected_decision": "block"
+    },
+    {
+      "file_path": "src/Card.tsx",
+      "content": "<div className=\"card\">Search</div>",
+      "expected_decision": "pass"
+    },
+    {
+      "file_path": "README.md",
+      "content": "# Project 🚀",
+      "expected_decision": "block",
+      "note": "4.6+: emoji prohibition extends to docs — no emoji as icons anywhere"
+    },
+    {
+      "file_path": "index.html",
+      "content": "<button>🔍 Search</button>",
+      "expected_decision": "block",
+      "note": "html now guarded"
+    },
+    {
+      "file_path": "app/main.py",
+      "content": "# TODO 🚀 ship it",
+      "expected_decision": "block",
+      "note": "python now guarded"
+    },
+    {
+      "file_path": "README.md",
+      "content": "# 项目说明",
+      "expected_decision": "pass",
+      "note": "CJK ideographs are NOT emoji"
+    },
+    {
+      "file_path": "src/Button.VUE",
+      "content": "<template>⚙️ Settings</template>",
+      "expected_decision": "block",
+      "note": "extension check is case-insensitive"
+    }
+  ]
+}

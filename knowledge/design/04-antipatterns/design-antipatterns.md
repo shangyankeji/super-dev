@@ -1,3 +1,13 @@
+---
+id: design-antipatterns
+title: Design Antipatterns
+domain: design
+category: 04-antipatterns
+difficulty: intermediate
+tags: [antipatterns, chaos, design, excess, look, neglect, overload, template]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Design Antipatterns
 
 ## 概述

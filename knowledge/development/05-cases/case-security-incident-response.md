@@ -1,3 +1,13 @@
+---
+id: case-security-incident-response
+title: 案例研究：SQL 注入攻击发现、响应、修复与复盘全流程
+domain: development
+category: 05-cases
+difficulty: intermediate
+tags: [agent, case, checklist, development, incident, response, security, 元数据]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 案例研究：SQL 注入攻击发现、响应、修复与复盘全流程
 
 ## 元数据

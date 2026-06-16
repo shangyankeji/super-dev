@@ -1,3 +1,13 @@
+---
+id: case-app-performance
+title: 案例：移动端性能优化 - 启动时间从 5s 降到 1.5s
+domain: mobile
+category: 05-cases
+difficulty: intermediate
+tags: [11-12, 7-10, agent, app, case, checklist, mobile, performance]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 案例：移动端性能优化 - 启动时间从 5s 降到 1.5s
 
 ## 概述

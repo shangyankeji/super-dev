@@ -1,3 +1,13 @@
+---
+id: api-gateway-deep-dive
+title: API网关深度指南
+domain: architecture
+category: api-gateway-deep-dive.md
+difficulty: intermediate
+tags: [api, architecture, deep, dive, gateway, 主流api网关对比, 安全防护, 性能优化]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # API网关深度指南
 
 ## 概述

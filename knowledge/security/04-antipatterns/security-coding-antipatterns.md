@@ -1,3 +1,13 @@
+---
+id: security-coding-antipatterns
+title: 安全编码反模式库
+domain: security
+category: 04-antipatterns
+difficulty: intermediate
+tags: [antipatterns, coding, concatenation, hardcoded, password, plaintext, secrets, security]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 安全编码反模式库
 
 > 覆盖 OWASP Top 10 高频漏洞对应的编码反模式，每个反模式包含描述、漏洞代码、修复代码和检测工具。

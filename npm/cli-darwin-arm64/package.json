@@ -1,6 +1,6 @@
 {
   "name": "@super-dev/cli-darwin-arm64",
-  "version": "4.4.0",
+  "version": "4.6.0",
   "description": "super-dev prebuilt binary for macOS (Apple Silicon / aarch64).",
   "homepage": "https://github.com/shangyankeji/super-dev",
   "repository": {

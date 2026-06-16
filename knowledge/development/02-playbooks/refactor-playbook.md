@@ -1,3 +1,13 @@
+---
+id: refactor-playbook
+title: 重构作战手册 (Refactoring Playbook)
+domain: development
+category: 02-playbooks
+difficulty: intermediate
+tags: [agent, checklist, development, playbook, refactor, 前置条件, 回滚方案, 概述]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 重构作战手册 (Refactoring Playbook)
 
 ## 概述

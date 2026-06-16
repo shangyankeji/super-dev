@@ -1,3 +1,13 @@
+---
+id: authentication-patterns-complete
+title: 认证模式完整指南
+domain: development
+category: 01-standards
+difficulty: intermediate
+tags: [agent, authentication, checklist, complete, development, patterns, 实战代码示例, 常见陷阱]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 认证模式完整指南
 
 ## 概述

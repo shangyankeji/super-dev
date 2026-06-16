@@ -154,6 +154,11 @@ pub struct ClauseEvidence {
     pub eu_ai_act_article: Vec<String>,
     /// Evidence file paths (workspace-relative).
     pub evidence: Vec<String>,
+    /// SHA-256 hashes of key artifact contents, for tamper-evident audit
+    /// (`"<workspace-relative-path>:<sha256>"`). Empty for clauses that
+    /// don't attach content hashes. Backwards-compatible: old JSON loads fine.
+    #[serde(default)]
+    pub content_hashes: Vec<String>,
 }
 
 impl ClauseEvidence {
@@ -167,6 +172,7 @@ impl ClauseEvidence {
             iso27001_annex_a: fw.iso27001_annex_a,
             eu_ai_act_article: fw.eu_ai_act_article,
             evidence: Vec::new(),
+            content_hashes: Vec::new(),
         }
     }
 
@@ -180,6 +186,35 @@ impl ClauseEvidence {
             self.evidence.push(path.to_string());
         }
     }
+
+    /// Attach a content SHA-256 for a key artifact, for tamper-evident audit.
+    /// Format: `"<path>:<hex-sha256>"`.
+    fn add_content_hash(&mut self, path: &str, sha: &str) {
+        let entry = format!("{path}:{sha}");
+        if !self.content_hashes.iter().any(|e| e == &entry) {
+            self.content_hashes.push(entry);
+        }
+    }
+}
+
+/// Compute the SHA-256 hex digest of a file's bytes. Returns `None` when the
+/// file is unreadable (fail-open — the hash is evidence enrichment, not a gate).
+#[must_use]
+pub fn file_sha256(path: &std::path::Path) -> Option<String> {
+    use sha2::{Digest, Sha256};
+    let bytes = std::fs::read(path).ok()?;
+    let mut hasher = Sha256::new();
+    hasher.update(&bytes);
+    Some(format!("{:x}", hasher.finalize()))
+}
+
+/// Compute the SHA-256 hex digest of an in-memory string.
+#[must_use]
+pub fn content_sha256(content: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(content.as_bytes());
+    format!("{:x}", hasher.finalize())
 }
 
 /// Inputs to `build_compliance_mapping` — pre-parsed evidence.
@@ -197,6 +232,11 @@ pub struct ComplianceInputs<'a> {
     pub generated_at: Option<String>,
     /// Optional `declared_by` string, e.g. `super-dev@4.4.0`.
     pub declared_by: Option<String>,
+    /// Optional project root — when set, content SHA-256 hashes are computed
+    /// for the key artifacts (quality gate, architecture, contract) and
+    /// attached to the relevant clauses for tamper-evident audit. `None`
+    /// skips hashing (tests / offline).
+    pub project_root: Option<&'a std::path::Path>,
 }
 
 /// The final mapping document.
@@ -291,6 +331,32 @@ pub fn build_compliance_mapping(inputs: &ComplianceInputs<'_>) -> ComplianceMapp
         entry.ensure_evidence(&format!("output/{}-quality-gate.md", inputs.slug));
     }
 
+    // Content-hash enrichment: compute SHA-256 of key artifacts for
+    // tamper-evident audit. Best-effort — unreadable files are skipped.
+    if let Some(root) = inputs.project_root {
+        // Quality gate → SD-EVID-003
+        let qg_path = format!("output/{}-quality-gate.json", inputs.slug);
+        if let Some(sha) = file_sha256(&root.join(&qg_path)) {
+            if let Some(entry) = evidence.get_mut("SD-EVID-003") {
+                entry.add_content_hash(&qg_path, &sha);
+            }
+        }
+        // Architecture doc → SD-CODE-003 (API alignment source of truth)
+        let arch_path = format!("output/{}-architecture.md", inputs.slug);
+        if let Some(sha) = file_sha256(&root.join(&arch_path)) {
+            if let Some(entry) = evidence.get_mut("SD-CODE-003") {
+                entry.add_content_hash(&arch_path, &sha);
+            }
+        }
+        // Tool-call audit → SD-EVID-002
+        let tc = ".super-dev/audit/tool-calls.jsonl";
+        if let Some(sha) = file_sha256(&root.join(tc)) {
+            if let Some(entry) = evidence.get_mut("SD-EVID-002") {
+                entry.add_content_hash(tc, &sha);
+            }
+        }
+    }
+
     let clauses: Vec<ClauseEvidence> = evidence.into_values().collect();
     let total_clauses_fired = clauses.len();
 
@@ -328,47 +394,99 @@ pub fn write_compliance_mapping(
     project_root: &Path,
     slug: &str,
 ) -> Option<(PathBuf, ComplianceMapping)> {
+    // Sanitize the slug before it's interpolated into a filename — a slug
+    // containing `..` or path separators would otherwise write outside
+    // `output/` (path traversal). The slug derives from the workspace dir
+    // name or `--slug`, which we don't fully control.
+    let safe_slug = sanitize_slug(slug);
     let quality_path = project_root
         .join("output")
-        .join(format!("{slug}-quality-gate.json"));
+        .join(format!("{safe_slug}-quality-gate.json"));
     let quality_raw = fs::read_to_string(&quality_path).ok();
     let quality_value: Option<serde_json::Value> = quality_raw
         .as_deref()
         .and_then(|s| serde_json::from_str(s).ok());
 
-    let tool_calls = read_jsonl::<ToolCallRecord>(
+    let mut tool_calls = read_jsonl::<ToolCallRecord>(
         &project_root
             .join(".super-dev")
             .join("audit")
             .join("tool-calls.jsonl"),
     );
-    let api_calls = read_jsonl::<ApiCallRecord>(
+    let mut api_calls = read_jsonl::<ApiCallRecord>(
         &project_root
             .join(".super-dev")
             .join("audit")
             .join("frontend-api-calls.jsonl"),
     );
+    // Sort by ts_ms (then ts) so two calls sharing a second still order
+    // deterministically by sub-second arrival. Old rows without ts_ms (0)
+    // fall back to their second-granularity ts.
+    tool_calls.sort_by_key(|r| (r.ts_ms, r.ts));
+    api_calls.sort_by_key(|r| (r.ts_ms, r.ts));
 
     if quality_value.is_none() && tool_calls.is_empty() && api_calls.is_empty() {
         return None;
     }
 
     let doc = build_compliance_mapping(&ComplianceInputs {
-        slug,
+        slug: &safe_slug,
         quality_report: quality_value.as_ref(),
         tool_calls: &tool_calls,
         api_calls: &api_calls,
         generated_at: None,
         declared_by: None,
+        project_root: Some(project_root),
     });
 
     let out_dir = project_root.join("output");
     let _ = fs::create_dir_all(&out_dir);
-    let out_path = out_dir.join(format!("{slug}-compliance-mapping.json"));
+    let out_path = out_dir.join(format!("{safe_slug}-compliance-mapping.json"));
     if let Ok(text) = serde_json::to_string_pretty(&doc) {
-        let _ = fs::write(&out_path, text);
+        atomic_write(&out_path, &text);
     }
     Some((out_path, doc))
+}
+
+/// Reduce a project slug to a filename-safe component: strip path
+/// separators, `..` traversal segments, and other shell/path metacharacters.
+/// Used wherever a slug is interpolated into a filesystem path so a hostile
+/// oraccidental slug can't escape the output directory.
+fn sanitize_slug(slug: &str) -> String {
+    let cleaned: String = slug
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' || c == '.' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    // Collapse any `..` (even dot-underscore-separated) that could traverse.
+    let no_traversal = cleaned.replace("..", "_");
+    if no_traversal.is_empty() || no_traversal.chars().all(|c| c == '_' || c == '.') {
+        "project".to_string()
+    } else {
+        no_traversal
+    }
+}
+
+/// Atomically write `content` to `path` (write to a temp file in the same
+/// dir, then rename). Same-filesystem rename is atomic on POSIX, so a
+/// concurrent reader never sees a half-written compliance-mapping file.
+/// Falls back to a direct write on cross-filesystem rename failure.
+fn atomic_write(path: &Path, content: &str) {
+    let tmp = path.with_extension("tmp-write");
+    if fs::write(&tmp, content).is_err() {
+        // Can't even write the temp — fall back to direct write.
+        let _ = fs::write(path, content);
+        return;
+    }
+    if fs::rename(&tmp, path).is_err() {
+        let _ = fs::remove_file(&tmp);
+        let _ = fs::write(path, content);
+    }
 }
 
 fn read_jsonl<T>(path: &Path) -> Vec<T>
@@ -393,6 +511,7 @@ mod tests {
     fn fake_tool_call(clause: &str, decision: &str) -> ToolCallRecord {
         ToolCallRecord {
             ts: 1,
+            ts_ms: 1000,
             tool: "Write".into(),
             file: "x.tsx".into(),
             decision: decision.into(),
@@ -432,6 +551,7 @@ mod tests {
             api_calls: &[],
             generated_at: Some("2026-05-20T00:00:00Z".into()),
             declared_by: Some("super-dev@4.4.0".into()),
+            project_root: None,
         });
         assert_eq!(doc.summary.total_clauses_fired, 2);
         let by_id: BTreeMap<_, _> = doc.clauses.iter().map(|c| (c.id.as_str(), c)).collect();
@@ -444,6 +564,7 @@ mod tests {
     fn build_includes_api_audit_against_two_clauses() {
         let api = vec![ApiCallRecord {
             ts: 1,
+            ts_ms: 1000,
             file: "src/U.tsx".into(),
             tool: "Write".into(),
             urls: vec!["/api/users".into(), "/api/orders".into()],
@@ -456,6 +577,7 @@ mod tests {
             api_calls: &api,
             generated_at: Some("t".into()),
             declared_by: None,
+            project_root: None,
         });
         let ids: Vec<_> = doc.clauses.iter().map(|c| c.id.clone()).collect();
         assert!(ids.contains(&"SD-CODE-003".to_string()));
@@ -481,6 +603,7 @@ mod tests {
             api_calls: &[],
             generated_at: Some("t".into()),
             declared_by: None,
+            project_root: None,
         });
         assert_eq!(doc.quality_gate_passed, Some(true));
         let evid3 = doc.clauses.iter().find(|c| c.id == "SD-EVID-003").unwrap();
@@ -498,7 +621,111 @@ mod tests {
             api_calls: &[],
             generated_at: Some("t".into()),
             declared_by: None,
+            project_root: None,
         });
         assert!(doc.clauses.is_empty());
+    }
+
+    #[test]
+    fn content_sha256_is_deterministic() {
+        let a = content_sha256("hello world");
+        let b = content_sha256("hello world");
+        let c = content_sha256("hello earth");
+        assert_eq!(a, b);
+        assert_ne!(a, c);
+        assert_eq!(a.len(), 64); // 32 bytes hex = 64 chars
+    }
+
+    #[test]
+    fn file_sha256_returns_none_for_missing() {
+        assert!(file_sha256(std::path::Path::new("/nonexistent/x.json")).is_none());
+    }
+
+    #[test]
+    fn build_attaches_content_hashes_when_root_set() {
+        use std::fs;
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = tmp.path();
+        fs::create_dir_all(root.join("output")).unwrap();
+        fs::create_dir_all(root.join(".super-dev/audit")).unwrap();
+        fs::write(
+            root.join("output/demo-quality-gate.json"),
+            r#"{"passed":true,"total_score":95}"#,
+        )
+        .unwrap();
+        fs::write(
+            root.join("output/demo-architecture.md"),
+            "# Arch\n\n## API\n\n| GET | /api/users |",
+        )
+        .unwrap();
+        fs::write(root.join(".super-dev/audit/tool-calls.jsonl"), "").unwrap();
+
+        let q = serde_json::json!({"passed": true, "total_score": 95});
+        let doc = build_compliance_mapping(&ComplianceInputs {
+            slug: "demo",
+            quality_report: Some(&q),
+            tool_calls: &[],
+            api_calls: &[],
+            generated_at: Some("t".into()),
+            declared_by: None,
+            project_root: Some(root),
+        });
+        // SD-EVID-003 must carry a content hash for the quality gate file.
+        let evid3 = doc.clauses.iter().find(|c| c.id == "SD-EVID-003").unwrap();
+        assert!(
+            evid3
+                .content_hashes
+                .iter()
+                .any(|h| h.starts_with("output/demo-quality-gate.json:")),
+            "expected quality-gate content hash, got {:?}",
+            evid3.content_hashes
+        );
+    }
+
+    #[test]
+    fn sanitize_slug_strips_path_traversal() {
+        // A slug with path separators / traversal must collapse to a safe
+        // filename component so write_compliance_mapping can't escape output/.
+        use super::sanitize_slug;
+        assert_eq!(sanitize_slug("demo"), "demo");
+        assert_eq!(sanitize_slug("my-app_2"), "my-app_2");
+        // `..` traversal collapsed.
+        assert!(!sanitize_slug("..").contains(".."));
+        assert!(!sanitize_slug("../etc/passwd").contains(".."));
+        assert!(!sanitize_slug("..").contains('/'));
+        // Path separators replaced.
+        assert!(!sanitize_slug("a/b\\c").contains('/') && !sanitize_slug("a/b\\c").contains('\\'));
+        // Empty / all-junk → fallback.
+        assert_eq!(sanitize_slug(""), "project");
+        assert_eq!(sanitize_slug("   "), "project");
+        assert_eq!(sanitize_slug("...."), "project");
+    }
+
+    #[test]
+    fn write_compliance_mapping_cannot_escape_output_dir() {
+        // A hostile slug must NOT let the file land outside output/.
+        use std::fs;
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = tmp.path();
+        fs::create_dir_all(root.join("output")).unwrap();
+        fs::create_dir_all(root.join(".super-dev/audit")).unwrap();
+        fs::write(
+            root.join("output/demo-quality-gate.json"),
+            r#"{"passed":true,"total_score":95}"#,
+        )
+        .unwrap();
+        fs::write(
+            root.join(".super-dev/audit/tool-calls.jsonl"),
+            r#"{"ts":0,"tool":"x","target":"y","decision":"allow","clause":"SD-CODE-001","reason":"r","detail":""}"#,
+        )
+        .unwrap();
+        let (path, _doc) = write_compliance_mapping(root, "../../etc/evil").unwrap();
+        // The written path must be inside <root>/output/.
+        let out_dir = root.join("output");
+        assert!(
+            path.starts_with(&out_dir),
+            "compliance mapping escaped output dir: {}",
+            path.display()
+        );
     }
 }

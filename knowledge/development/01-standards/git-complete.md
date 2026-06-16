@@ -1,3 +1,13 @@
+---
+id: git-complete
+title: Git完整指南
+domain: development
+category: 01-standards
+difficulty: intermediate
+tags: [complete, development, git, 学习路径, 最佳实践, 核心概念, 概述]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # Git完整指南
 
 ## 概述

@@ -1,3 +1,13 @@
+---
+id: ai-glossary
+title: AI/ML 术语表 (AI/ML Glossary)
+domain: ai
+category: 06-glossary
+difficulty: intermediate
+tags: [ai, glossary, prompt, transformer, 与注意力机制, 基础概念, 大语言模型, 工程]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # AI/ML 术语表 (AI/ML Glossary)
 
 > 适用场景：AI 项目沟通对齐、新成员 Onboarding、技术方案评审中的概念统一。

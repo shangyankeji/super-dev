@@ -1,3 +1,13 @@
+---
+id: design-review-playbook
+title: 设计评审作战手册 (Design Review Playbook)
+domain: design
+category: 02-playbooks
+difficulty: intermediate
+tags: [design, issue, playbook, review, 严重程度, 列表, 前置条件, 搜索结果页缺少空状态设计]
+quality_score: 70
+last_updated: 2026-06-15
+---
 # 设计评审作战手册 (Design Review Playbook)
 
 ## 概述
